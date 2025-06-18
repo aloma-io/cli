@@ -1,0 +1,11 @@
+{
+  "name": "My Custom Connector",
+  "namespace": "custom",
+  "tags": ["production", "api", "custom"],
+  "shared_in_realm": false,
+  "config": {
+    "username": "userJJ",
+    "password": "passwordJJ",
+    "domain": "https://api.example.com"
+  }
+}

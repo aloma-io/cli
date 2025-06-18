@@ -1,0 +1,35 @@
+{
+  "version": "1.0.0",
+  "connectors": {
+    "email": {
+      "enabled": true,
+      "cost_per_use": 0.5,
+      "credits_available": 1000,
+      "description": "Email automation connector for sending automated emails"
+    },
+    "figma": {
+      "enabled": true,
+      "cost_per_use": 1.0,
+      "credits_available": 500,
+      "description": "Figma integration for design automation"
+    },
+    "openid": {
+      "enabled": true,
+      "cost_per_use": 0.1,
+      "credits_available": 2000,
+      "description": "OpenID authentication connector"
+    }
+  },
+  "billing": {
+    "currency": "USD",
+    "auto_recharge": true,
+    "low_credit_threshold": 100
+  },
+  "settings": {
+    "default_connector": "email",
+    "notifications": {
+      "low_credits": true,
+      "connector_status": true
+    }
+  }
+}

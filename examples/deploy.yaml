@@ -1,0 +1,23 @@
+# Company to switch to (optional)
+company: "testing"
+
+# List of workspaces to create and configure
+workspaces:
+  - name: "production"
+    tags: ["prod", "main"]
+    
+    # Steps configuration
+    # steps:
+    #   - name: "template2"
+    #     file: "examples/step/step1.js"
+    
+    # Tasks configuration
+    tasks:
+      - name: "template-task"
+        data: {"cliStep": true, "Step": 1}
+      - name: "template-task2"
+        file: "examples/task/task1.json"
+
+    # # Webhooks configuration
+    # webhooks:
+    #   - name: "data-update"
