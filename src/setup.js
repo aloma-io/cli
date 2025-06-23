@@ -1,8 +1,10 @@
-import fs from 'fs';
-import path from 'path';
-import chalk from 'chalk';
-import { execSync } from 'child_process';
-import ora from 'ora';
+import fs from "fs";
+import path from "path";
+import { homedir } from "os";
+import chalk from "chalk";
+import { execSync } from "child_process";
+import ora from "ora";
+import { CONFIG_DIR, CONFIG_FILE, KEYS_FILE } from "./config.js";
 
 /**
  * Creates a new Aloma automation project
@@ -19,17 +21,25 @@ export async function createProject(name, options = {}) {
   // Create full path
   const projectPath = path.resolve(process.cwd(), directory);
 
-  console.log(chalk.blue(`\n🚀 Creating new Aloma automation project: ${chalk.bold(name)}\n`));
+  console.log(
+    chalk.blue(
+      `\n🚀 Creating new Aloma automation project: ${chalk.bold(name)}\n`,
+    ),
+  );
 
   // Check if directory exists
   if (fs.existsSync(projectPath)) {
     if (!overwrite) {
       console.error(
-        chalk.red(`Error: Directory ${projectPath} already exists. Use --force to overwrite.`)
+        chalk.red(
+          `Error: Directory ${projectPath} already exists. Use --force to overwrite.`,
+        ),
       );
       process.exit(1);
     }
-    console.warn(chalk.yellow(`Warning: Overwriting existing directory ${projectPath}`));
+    console.warn(
+      chalk.yellow(`Warning: Overwriting existing directory ${projectPath}`),
+    );
   }
 
   try {
@@ -48,7 +58,9 @@ export async function createProject(name, options = {}) {
     await createTemplateFiles(name);
 
     // Success message
-    console.log(chalk.green(`\n✅ Project created successfully in ${projectPath}`));
+    console.log(
+      chalk.green(`\n✅ Project created successfully in ${projectPath}`),
+    );
     console.log(chalk.white(`\nNext steps:`));
     console.log(chalk.white(`  1. cd ${directory}`));
     console.log(chalk.white(`  2. npm install (if needed)`));
@@ -66,37 +78,37 @@ export async function createProject(name, options = {}) {
  * @returns {Promise<void>}
  */
 async function initializeProject(name) {
-  const spinner = ora('Initializing project').start();
+  const spinner = ora("Initializing project").start();
 
   try {
     // Create package.json if it doesn't exist
-    if (!fs.existsSync('package.json')) {
+    if (!fs.existsSync("package.json")) {
       const packageJson = {
         name,
-        version: '1.0.0',
-        description: 'Aloma automation project',
-        main: 'index.js',
-        type: 'module',
+        version: "1.0.0",
+        description: "Aloma automation project",
+        main: "index.js",
+        type: "module",
         scripts: {
-          start: 'node index.js',
+          start: "node index.js",
           test: 'echo "Error: no test specified" && exit 1',
         },
-        keywords: ['aloma', 'automation'],
-        author: '',
-        license: 'ISC',
+        keywords: ["aloma", "automation"],
+        author: "",
+        license: "ISC",
         dependencies: {
-          aloma: '^1.0.0',
+          aloma: "^1.0.0",
         },
       };
 
-      fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2));
+      fs.writeFileSync("package.json", JSON.stringify(packageJson, null, 2));
 
       // Install dependencies
-      spinner.text = 'Installing dependencies...';
-      execSync('npm install', { stdio: 'ignore' });
+      spinner.text = "Installing dependencies...";
+      execSync("npm install", { stdio: "ignore" });
     }
 
-    spinner.succeed('Project initialized');
+    spinner.succeed("Project initialized");
   } catch (error) {
     spinner.fail(`Failed to initialize project: ${error.message}`);
     throw error;
@@ -110,11 +122,11 @@ async function initializeProject(name) {
  * @returns {Promise<void>}
  */
 async function createTemplateFiles(name) {
-  const spinner = ora('Creating template files').start();
+  const spinner = ora("Creating template files").start();
 
   try {
     // Create directories
-    const directories = ['automations', 'config', 'logs'];
+    const directories = ["automations", "config", "logs"];
     directories.forEach((dir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -145,7 +157,7 @@ aloma.start()
     process.exit(1);
   });
 `;
-    fs.writeFileSync('index.js', indexContent);
+    fs.writeFileSync("index.js", indexContent);
 
     // Create example automation
     const exampleAutomationContent = `// Example automation
@@ -175,7 +187,7 @@ export default {
   }
 };
 `;
-    fs.writeFileSync('automations/example.js', exampleAutomationContent);
+    fs.writeFileSync("automations/example.js", exampleAutomationContent);
 
     // Create config file
     const configContent = `// Configuration for ${name}
@@ -197,7 +209,7 @@ export default {
   }
 };
 `;
-    fs.writeFileSync('config/config.js', configContent);
+    fs.writeFileSync("config/config.js", configContent);
 
     // Create .gitignore
     const gitignoreContent = `# Node.js
@@ -227,7 +239,7 @@ logs/
 .DS_Store
 Thumbs.db
 `;
-    fs.writeFileSync('.gitignore', gitignoreContent);
+    fs.writeFileSync(".gitignore", gitignoreContent);
 
     // Create README.md
     const readmeContent = `# ${name}
@@ -280,11 +292,220 @@ export default {
 };
 \`\`\`
 `;
-    fs.writeFileSync('README.md', readmeContent);
+    fs.writeFileSync("README.md", readmeContent);
 
-    spinner.succeed('Template files created');
+    spinner.succeed("Template files created");
   } catch (error) {
     spinner.fail(`Failed to create template files: ${error.message}`);
     throw error;
+  }
+}
+
+/**
+ * Setup CLI configuration
+ * This function should be called during npm install via postinstall script
+ * or when user runs "aloma setup"
+ *
+ * @param {Object} options - Setup options
+ * @param {boolean} options.force - Force overwrite existing config
+ * @returns {Promise<void>}
+ */
+export async function setupCLIConfig(options = {}) {
+  const { force = false } = options;
+
+  console.log(chalk.blue("\n🔧 Setting up Aloma CLI configuration...\n"));
+
+  const spinner = ora("Creating configuration directory").start();
+
+  try {
+    // Create config directory
+    if (!fs.existsSync(CONFIG_DIR)) {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+      spinner.text = "Configuration directory created";
+    } else {
+      spinner.text = "Configuration directory exists";
+    }
+
+    // Download/setup configuration files
+    await setupConfigFiles(force);
+
+    spinner.succeed("CLI configuration setup completed");
+
+    console.log(chalk.green("\n✅ Aloma CLI is now configured!"));
+    console.log(chalk.white("\nConfiguration stored in:"));
+    console.log(chalk.gray(`  Config: ${CONFIG_FILE}`));
+    console.log(chalk.gray(`  Keys: ${KEYS_FILE}`));
+    console.log(chalk.white("\nYou can now use: aloma auth\n"));
+  } catch (error) {
+    spinner.fail(`Setup failed: ${error.message}`);
+    console.error(
+      chalk.red(
+        "\n❌ CLI setup failed. Please check your internet connection and try again.",
+      ),
+    );
+    throw error;
+  }
+}
+
+/**
+ * Setup configuration files by downloading from remote or using defaults
+ *
+ * @param {boolean} force - Force overwrite existing files
+ * @returns {Promise<void>}
+ */
+async function setupConfigFiles(force) {
+  // Check if config files already exist
+  const configExists = fs.existsSync(CONFIG_FILE);
+  const keysExist = fs.existsSync(KEYS_FILE);
+
+  if ((configExists || keysExist) && !force) {
+    console.log(
+      chalk.yellow(
+        "Configuration files already exist. Use --force to overwrite.",
+      ),
+    );
+    return;
+  }
+
+  // Detect environment
+  const environment =
+    process.env.ALOMA_ENV || process.env.NODE_ENV || "production";
+
+  try {
+    // Try to fetch configuration from remote endpoint
+    const configData = await fetchRemoteConfig(environment);
+    const keysData = await fetchRemoteKeys(environment);
+
+    // Write configuration files
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(configData, null, 2));
+    fs.writeFileSync(KEYS_FILE, JSON.stringify(keysData, null, 2));
+
+    console.log(
+      chalk.green(
+        `\n✅ Configuration loaded from template for ${environment} environment`,
+      ),
+    );
+
+    if (configData.setupMethod === "template") {
+      console.log(
+        chalk.yellow(
+          "\n⚠️  Using template configuration with placeholder secrets.",
+        ),
+      );
+      console.log(
+        chalk.white("Please set the following environment variables:"),
+      );
+      console.log(
+        chalk.gray('  export ALOMA_CLIENT_SECRET="your-client-secret"'),
+      );
+      console.log(
+        chalk.gray('  export ALOMA_AUTH_PUBLIC_KEY="your-auth-public-key"'),
+      );
+
+      if (environment === "development") {
+        console.log(chalk.white("\nOr to use production environment:"));
+        console.log(chalk.gray('  export ALOMA_ENV="production"'));
+      }
+    }
+  } catch (error) {
+    console.warn(chalk.red(`\nError during setup: ${error.message}`));
+    throw error;
+  }
+}
+
+/**
+ * Load configuration template based on environment
+ *
+ * @param {string} environment - Environment name (production, development)
+ * @returns {Object}
+ */
+function loadConfigTemplate(environment) {
+  const templatePath = path.join(
+    path.dirname(process.argv[1] || import.meta.url.replace("file://", "")),
+    "..",
+    "config",
+    `${environment}.json`,
+  );
+
+  try {
+    const templateData = fs.readFileSync(templatePath, "utf8");
+    return JSON.parse(templateData);
+  } catch (error) {
+    console.warn(
+      `Could not load template for ${environment}. Using minimal defaults.`,
+    );
+    return {
+      environment,
+      keycloakRealmUrl:
+        environment === "development"
+          ? "https://accounts-dev.aloma.io/realms/master"
+          : "https://accounts.aloma.io/realms/master",
+      clientId: "graph",
+      redirectUri: "http://localhost:8989",
+      scope: "openid profile email groups",
+      graphqlUrl:
+        environment === "development"
+          ? "https://test.graph.aloma.io/graphql"
+          : "https://graph.aloma.io/graphql",
+      graphqlHost:
+        environment === "development"
+          ? "test.graph.aloma.io"
+          : "graph.aloma.io",
+    };
+  }
+}
+
+/**
+ * Fetch configuration from remote endpoint
+ * Replace this URL with your actual configuration endpoint
+ *
+ * @param {string} environment - Environment name
+ * @returns {Promise<Object>}
+ */
+async function fetchRemoteConfig(environment = "production") {
+  try {
+    // This is a placeholder - replace with your actual configuration endpoint
+    // const response = await fetch(`https://api.aloma.io/cli/config/${environment}`);
+    // if (!response.ok) throw new Error('Failed to fetch config');
+    // const remoteConfig = await response.json();
+    // return remoteConfig;
+
+    // For now, throw error to use fallback
+    throw new Error("Remote configuration not available");
+  } catch (error) {
+    // Fallback to template configuration
+    const templateConfig = loadConfigTemplate(environment);
+
+    // Add setup metadata
+    templateConfig.setupTime = new Date().toISOString();
+    templateConfig.setupMethod = "template";
+
+    return templateConfig;
+  }
+}
+
+/**
+ * Fetch keys from remote endpoint
+ * Replace this URL with your actual keys endpoint
+ *
+ * @param {string} environment - Environment name
+ * @returns {Promise<Object>}
+ */
+async function fetchRemoteKeys(environment = "production") {
+  try {
+    // This is a placeholder - replace with your actual keys endpoint
+    // const response = await fetch(`https://api.aloma.io/cli/keys/${environment}`);
+    // if (!response.ok) throw new Error('Failed to fetch keys');
+    // const remoteKeys = await response.json();
+    // return remoteKeys;
+
+    // For now, throw error to use fallback
+    throw new Error("Remote keys not available");
+  } catch (error) {
+    // Return empty keys that will be populated by environment variables or manual setup
+    return {
+      setupTime: new Date().toISOString(),
+      setupMethod: "template",
+    };
   }
 }

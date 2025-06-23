@@ -1,5 +1,5 @@
-import chalk from 'chalk';
-import { graphQuery } from '../../utils.js';
+import chalk from "chalk";
+import { graphQuery } from "../../utils.js";
 import {
   CREATE_TASK_MUTATION,
   LIST_TASKS_QUERY,
@@ -7,18 +7,23 @@ import {
   CLONE_TASK_MUTATION,
   STOP_TASK_MUTATION,
   RESUME_TASK_MUTATION,
-} from './query.js';
-import { color } from './utils.js';
-import { getSelectedWorkspace } from '../workspace/index.js';
-import fs from 'fs/promises';
+} from "./query.js";
+import { color } from "./utils.js";
+import { getSelectedWorkspace } from "../workspace/index.js";
+import fs from "fs/promises";
 
-export async function listTasks(page = 1, workspaceIdentifier) {
+export async function listTasks(
+  page = 1,
+  workspaceIdentifier,
+  state = null,
+  name = null,
+) {
   try {
     let workspaceId = workspaceIdentifier;
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
@@ -28,6 +33,8 @@ export async function listTasks(page = 1, workspaceIdentifier) {
 
     const response = await graphQuery(LIST_TASKS_QUERY, {
       id: workspaceId,
+      state,
+      name,
       offset,
       limit,
     });
@@ -35,40 +42,43 @@ export async function listTasks(page = 1, workspaceIdentifier) {
     const tasks = response.listAutomationEnvironmentTasks;
 
     if (!tasks || tasks.length === 0) {
-      console.log(chalk.yellow('No tasks found in current workspace.'));
+      console.log(chalk.yellow("No tasks found in current workspace."));
       return;
     }
 
-    console.log(chalk.blue('\n📊 Tasks in Current Workspace\n'));
+    console.log(chalk.blue("\n📊 Tasks in Current Workspace\n"));
     tasks.forEach((task) => {
       // Map task state to status
       let taskStatus = task.state.toLowerCase();
-      if (taskStatus === 'completed') taskStatus = 'done';
-      if (taskStatus === 'running') taskStatus = 'processing';
+      if (taskStatus === "completed") taskStatus = "done";
+      if (taskStatus === "running") taskStatus = "processing";
 
       // Get status color
-      const statusColor = color[taskStatus] || '#ccc';
-      const statusText = taskStatus.charAt(0).toUpperCase() + taskStatus.slice(1);
+      const statusColor = color[taskStatus] || "#ccc";
+      const statusText =
+        taskStatus.charAt(0).toUpperCase() + taskStatus.slice(1);
 
       console.log(`${chalk.bold(task.name)}`);
       console.log(`   ID: ${task.id}`);
       console.log(`   Status: ${chalk.hex(statusColor)(`● ${statusText}`)}`);
-      console.log(`   Duration: ${task.duration ? `${task.duration}ms` : 'N/A'}`);
+      console.log(
+        `   Duration: ${task.duration ? `${task.duration}ms` : "N/A"}`,
+      );
       console.log(`   Steps: ${task.steps}`);
       if (task.tags && task.tags.length > 0) {
-        console.log(`   Tags: ${task.tags.join(', ')}`);
+        console.log(`   Tags: ${task.tags.join(", ")}`);
       }
       console.log(`   Created: ${new Date(task.createdAt).toLocaleString()}\n`);
     });
   } catch (error) {
-    console.error(chalk.red('Error listing tasks:'), error.message);
+    console.error(chalk.red("Error listing tasks:"), error.message);
   }
 }
 
 export async function showTask(taskId) {
   try {
     if (!taskId) {
-      console.log(chalk.yellow('⚠ Please provide a task ID'));
+      console.log(chalk.yellow("⚠ Please provide a task ID"));
       return;
     }
 
@@ -86,41 +96,49 @@ export async function showTask(taskId) {
 
     // Map task state to status
     let taskStatus = task.state.toLowerCase();
-    if (taskStatus === 'completed') taskStatus = 'done';
-    if (taskStatus === 'running') taskStatus = 'processing';
+    if (taskStatus === "completed") taskStatus = "done";
+    if (taskStatus === "running") taskStatus = "processing";
 
     // Get status color
-    const statusColor = color[taskStatus] || '#ccc';
+    const statusColor = color[taskStatus] || "#ccc";
     const statusText = taskStatus.charAt(0).toUpperCase() + taskStatus.slice(1);
 
-    console.log(chalk.blue('\n📊 Task Details\n'));
-    console.log(`${chalk.bold('Name:')} ${task.name}`);
-    console.log(`${chalk.bold('ID:')} ${task.id}`);
-    console.log(`${chalk.bold('Status:')} ${chalk.hex(statusColor)(`● ${statusText}`)}`);
-    console.log(`${chalk.bold('Created:')} ${new Date(task.createdAt).toLocaleString()}`);
-    console.log(`${chalk.bold('Updated:')} ${new Date(task.updatedAt).toLocaleString()}`);
-    console.log(`${chalk.bold('Duration:')} ${task.duration ? `${task.duration}ms` : 'N/A'}`);
-    console.log(`${chalk.bold('Steps:')} ${task.steps}`);
+    console.log(chalk.blue("\n📊 Task Details\n"));
+    console.log(`${chalk.bold("Name:")} ${task.name}`);
+    console.log(`${chalk.bold("ID:")} ${task.id}`);
+    console.log(
+      `${chalk.bold("Status:")} ${chalk.hex(statusColor)(`● ${statusText}`)}`,
+    );
+    console.log(
+      `${chalk.bold("Created:")} ${new Date(task.createdAt).toLocaleString()}`,
+    );
+    console.log(
+      `${chalk.bold("Updated:")} ${new Date(task.updatedAt).toLocaleString()}`,
+    );
+    console.log(
+      `${chalk.bold("Duration:")} ${task.duration ? `${task.duration}ms` : "N/A"}`,
+    );
+    console.log(`${chalk.bold("Steps:")} ${task.steps}`);
     if (task.tags && task.tags.length > 0) {
-      console.log(`${chalk.bold('Tags:')} ${task.tags.join(', ')}`);
+      console.log(`${chalk.bold("Tags:")} ${task.tags.join(", ")}`);
     }
 
     if (task.content) {
-      console.log(`\n${chalk.bold('Content:')}`);
+      console.log(`\n${chalk.bold("Content:")}`);
       console.log(JSON.stringify(task.content, null, 2));
     }
 
     if (history && history.length > 0) {
       // Add created event if not present
-      if (!history.find((item) => item.state === 'created')) {
+      if (!history.find((item) => item.state === "created")) {
         history.unshift({
           context: { timestamp: new Date(task.createdAt).getTime() },
           updatedAt: task.createdAt,
           error: task.error,
           task_id: task.id,
-          id: 'created',
-          title: 'created',
-          state: 'created',
+          id: "created",
+          title: "created",
+          state: "created",
         });
       }
 
@@ -132,13 +150,17 @@ export async function showTask(taskId) {
           const context = item.context;
           const content = context?.content || {};
           const date = new Date(
-            context?.snapshot?.timestamp || context?.timestamp || item.updatedAt
+            context?.snapshot?.timestamp ||
+              context?.timestamp ||
+              item.updatedAt,
           ).getTime();
 
           let executionTime;
           if (item.rule && context?.content?.context?.appliedRules) {
             const ruleId = item.rule.id;
-            const found = context.content.context.appliedRules.find((r) => r.id === ruleId);
+            const found = context.content.context.appliedRules.find(
+              (r) => r.id === ruleId,
+            );
             if (found && found.executionDuration !== undefined) {
               executionTime = found.executionDuration;
             }
@@ -149,58 +171,75 @@ export async function showTask(taskId) {
             taskId: item.task_id,
             title: item.event,
             state: item.state,
-            cardTitle: item.rule?.name ? item.rule.name : item.event || item.state,
+            cardTitle: item.rule?.name
+              ? item.rule.name
+              : item.event || item.state,
             error: item.error || context?.error,
             date: new Date(date).toLocaleTimeString(),
             rule: item.rule,
-            console: context?.content?._currentConsoleLog || item.context?.consoleLog || [],
-            audit: context?.content?._currentAuditLog || item.context?.auditLog || [],
-            visualize: content?._currentVisualize || context?.visualization || [],
+            console:
+              context?.content?._currentConsoleLog ||
+              item.context?.consoleLog ||
+              [],
+            audit:
+              context?.content?._currentAuditLog ||
+              item.context?.auditLog ||
+              [],
+            visualize:
+              content?._currentVisualize || context?.visualization || [],
             executionTime,
             integrations: (
-              (isV3 ? Object.values(content?._currentIntegration || {}) : context?.integrations) ||
-              []
+              (isV3
+                ? Object.values(content?._currentIntegration || {})
+                : context?.integrations) || []
             ).sort((a, b) => (a.alias > b.alias ? 1 : -1)),
-            startedSubtasks: content?._startedSubtasks || context?.startedSubtasks || [],
-            finishedSubtasks: context?._finishedSubtasks || context?.finishedSubtasks || [],
-            isApplying: item.event === 'applying',
-            isCurrentlyRunning: idx === history.length - 1 && item.event === 'applying',
+            startedSubtasks:
+              content?._startedSubtasks || context?.startedSubtasks || [],
+            finishedSubtasks:
+              context?._finishedSubtasks || context?.finishedSubtasks || [],
+            isApplying: item.event === "applying",
+            isCurrentlyRunning:
+              idx === history.length - 1 && item.event === "applying",
           };
         })
         .filter((item, idx) => {
           if (item.isApplying && !item.isCurrentlyRunning) return false;
           if (item.audit.length) return true;
-          return item.rule != null || item.state === 'created' || idx === history.length - 1;
+          return (
+            item.rule != null ||
+            item.state === "created" ||
+            idx === history.length - 1
+          );
         });
 
-      console.log(`\n${chalk.bold('Execution History')}`);
+      console.log(`\n${chalk.bold("Execution History")}`);
       console.log(
         chalk.gray(
-          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-        )
+          "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        ),
       );
 
       normalized.forEach((entry, idx) => {
         // Get status color for each event
         let eventStatus = entry.state?.toLowerCase() || entry.event;
-        if (eventStatus === 'completed') eventStatus = 'done';
-        if (eventStatus === 'running') eventStatus = 'processing';
-        const eventColor = color[eventStatus] || '#ccc';
+        if (eventStatus === "completed") eventStatus = "done";
+        if (eventStatus === "running") eventStatus = "processing";
+        const eventColor = color[eventStatus] || "#ccc";
 
         console.log(`\n${chalk.bold(entry.cardTitle)}`);
-        console.log(`${chalk.gray('Time:')} ${entry.date}`);
+        console.log(`${chalk.gray("Time:")} ${entry.date}`);
         console.log(
-          `${chalk.gray('State:')} ${chalk.hex(eventColor)(`● ${entry.state || entry.event}`)}`
+          `${chalk.gray("State:")} ${chalk.hex(eventColor)(`● ${entry.state || entry.event}`)}`,
         );
 
         // Add execution time if available
         if (entry.executionTime) {
-          console.log(`${chalk.gray('Duration:')} ${entry.executionTime}ms`);
+          console.log(`${chalk.gray("Duration:")} ${entry.executionTime}ms`);
         }
 
         // Show console logs if available
         if (entry.console.length > 0) {
-          console.log(`\n${chalk.gray('Console Log:')}`);
+          console.log(`\n${chalk.gray("Console Log:")}`);
           entry.console.forEach((log) => {
             const timestamp = new Date(log.ts).toLocaleTimeString();
             console.log(`${chalk.gray(`[${timestamp}]`)} ${log.msg}`);
@@ -209,88 +248,106 @@ export async function showTask(taskId) {
 
         // Show integrations if available
         if (entry.integrations.length > 0) {
-          console.log(`\n${chalk.gray('Connector Log:')}`);
+          console.log(`\n${chalk.gray("Connector Log:")}`);
           entry.integrations.forEach((log) => {
             const timestamp = new Date(log.ts).toLocaleTimeString();
             const avgDuration = (
-              log.durations.reduce((acc, curr) => acc + curr, 0) / log.durations.length
+              log.durations.reduce((acc, curr) => acc + curr, 0) /
+              log.durations.length
             ).toFixed(0);
             console.log(
-              `${chalk.gray(`[${timestamp}]`)} ${chalk.bold(log.alias)}: ${log.count} calls, ${avgDuration}ms avg`
+              `${chalk.gray(`[${timestamp}]`)} ${chalk.bold(log.alias)}: ${log.count} calls, ${avgDuration}ms avg`,
             );
           });
         }
 
         // Show audit logs
         if (entry.audit.length > 0) {
-          console.log(`\n${chalk.gray('Audit Log:')}`);
+          console.log(`\n${chalk.gray("Audit Log:")}`);
           entry.audit.forEach((audit) => {
-            if (audit.type === 'message') {
+            if (audit.type === "message") {
               console.log(audit.msg);
-            } else if (audit.type === 'subtask') {
-              if (audit.action === 'add') {
-                console.log(`${audit.name} ${chalk.hex(color.created)(`● created`)}`);
-                console.log(`    ${chalk.gray('ID:')} ${audit.id}`);
-              } else if (audit.action === 'resolve') {
-                console.log(`${audit.name} ${chalk.hex(color.done)(`● completed`)}`);
-                console.log(`    ${chalk.gray('ID:')} ${audit.id}`);
+            } else if (audit.type === "subtask") {
+              if (audit.action === "add") {
+                console.log(
+                  `${audit.name} ${chalk.hex(color.created)(`● created`)}`,
+                );
+                console.log(`    ${chalk.gray("ID:")} ${audit.id}`);
+              } else if (audit.action === "resolve") {
+                console.log(
+                  `${audit.name} ${chalk.hex(color.done)(`● completed`)}`,
+                );
+                console.log(`    ${chalk.gray("ID:")} ${audit.id}`);
               }
-            } else if (audit.type === 'reference') {
+            } else if (audit.type === "reference") {
               if (audit.url) {
-                console.log(`Reference: ${audit.name || audit.role} - ${audit.url}`);
+                console.log(
+                  `Reference: ${audit.name || audit.role} - ${audit.url}`,
+                );
               } else if (audit.id) {
-                console.log(`Reference: ${audit.name || audit.role} - ${audit.id}`);
+                console.log(
+                  `Reference: ${audit.name || audit.role} - ${audit.id}`,
+                );
               }
             }
           });
         }
 
         if (entry.error) {
-          console.log(`\n${chalk.red('Error:')} ${entry.error}`);
+          console.log(`\n${chalk.red("Error:")} ${entry.error}`);
         }
 
         if (entry.executionTime !== undefined) {
-          console.log(`${chalk.gray('Step execution time:')} ${entry.executionTime}ms`);
+          console.log(
+            `${chalk.gray("Step execution time:")} ${entry.executionTime}ms`,
+          );
         }
 
         console.log(
-          chalk.gray('──────────────────────────────────────────────────────────────────────────')
+          chalk.gray(
+            "──────────────────────────────────────────────────────────────────────────",
+          ),
         );
       });
     }
   } catch (error) {
-    console.error(chalk.red('Error showing task:'), error.message);
+    console.error(chalk.red("Error showing task:"), error.message);
   }
 }
 
-export async function createTask(name, taskData, taskFile, workspaceIdentifier) {
+export async function createTask(
+  name,
+  taskData,
+  taskFile,
+  workspaceIdentifier,
+) {
   try {
     let workspaceId = workspaceIdentifier;
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
 
     if (!name) {
-      console.log(chalk.yellow('⚠ Please provide a task name'));
+      console.log(chalk.yellow("⚠ Please provide a task name"));
       return;
     }
 
     let data = null;
     try {
       if (taskData) {
-        data = typeof taskData === 'string' ? JSON.parse(taskData) : taskData;
+        data = typeof taskData === "string" ? JSON.parse(taskData) : taskData;
       } else if (taskFile) {
-        data = JSON.parse(await fs.readFile(taskFile, 'utf8'));
+        data = JSON.parse(await fs.readFile(taskFile, "utf8"));
       } else {
-        console.log(chalk.yellow('⚠ No data provided'));
+        console.log(chalk.yellow("⚠ No data provided"));
         return;
       }
     } catch (e) {
-      console.error(chalk.red('Error parsing JSON data:'), e.message);
+      console.error(chalk.red("Error parsing JSON data:"), e.message);
       return;
     }
 
@@ -306,14 +363,14 @@ export async function createTask(name, taskData, taskFile, workspaceIdentifier) 
     // // Show the newly created task
     // await showTask(taskId);
   } catch (error) {
-    console.error(chalk.red('Error creating task:'), error.message);
+    console.error(chalk.red("Error creating task:"), error.message);
   }
 }
 
 export async function cloneTask(taskId) {
   try {
     if (!taskId) {
-      console.log(chalk.yellow('⚠ Please provide a task ID'));
+      console.log(chalk.yellow("⚠ Please provide a task ID"));
       return;
     }
 
@@ -322,19 +379,21 @@ export async function cloneTask(taskId) {
     });
 
     const newTaskId = response.createAutomationTaskFromTask;
-    console.log(chalk.green(`✓ Task cloned successfully with ID: ${newTaskId}`));
+    console.log(
+      chalk.green(`✓ Task cloned successfully with ID: ${newTaskId}`),
+    );
 
     // // Show the newly cloned task
     // await showTask(newTaskId);
   } catch (error) {
-    console.error(chalk.red('Error cloning task:'), error.message);
+    console.error(chalk.red("Error cloning task:"), error.message);
   }
 }
 
 export async function stopTask(taskId) {
   try {
     if (!taskId) {
-      console.log(chalk.yellow('⚠ Please provide a task ID'));
+      console.log(chalk.yellow("⚠ Please provide a task ID"));
       return;
     }
 
@@ -348,14 +407,14 @@ export async function stopTask(taskId) {
       console.log(chalk.yellow(`⚠ Task ${taskId} could not be stopped`));
     }
   } catch (error) {
-    console.error(chalk.red('Error stopping task:'), error.message);
+    console.error(chalk.red("Error stopping task:"), error.message);
   }
 }
 
 export async function resumeTask(taskId) {
   try {
     if (!taskId) {
-      console.log(chalk.yellow('⚠ Please provide a task ID'));
+      console.log(chalk.yellow("⚠ Please provide a task ID"));
       return;
     }
 
@@ -369,6 +428,6 @@ export async function resumeTask(taskId) {
       console.log(chalk.yellow(`⚠ Task ${taskId} could not be resumed`));
     }
   } catch (error) {
-    console.error(chalk.red('Error resuming task:'), error.message);
+    console.error(chalk.red("Error resuming task:"), error.message);
   }
 }

@@ -1,15 +1,15 @@
-import os from 'os';
-import path from 'path';
-import { promises as fs } from 'fs';
-import fetch from 'node-fetch';
-import { GRAPHQL_URL } from './config.js';
-import chalk from 'chalk';
-import { execSync } from 'child_process';
+import os from "os";
+import path from "path";
+import { promises as fs } from "fs";
+import fetch from "node-fetch";
+import { GRAPHQL_URL } from "./config.js";
+import chalk from "chalk";
+import { execSync } from "child_process";
 
 // Get the package root directory
 export const getPackageRoot = async () => {
   // First check local node_modules
-  const localPath = path.join(process.cwd(), 'node_modules', 'aloma');
+  const localPath = path.join(process.cwd(), "node_modules", "aloma");
   try {
     const stats = await fs.stat(localPath);
     if (stats.isDirectory()) {
@@ -22,8 +22,8 @@ export const getPackageRoot = async () => {
 
   // Try global installation using npm root -g
   try {
-    const globalRoot = execSync('npm root -g').toString().trim();
-    const globalPath = path.join(globalRoot, 'aloma');
+    const globalRoot = execSync("npm root -g").toString().trim();
+    const globalPath = path.join(globalRoot, "aloma");
     const stats = await fs.stat(globalPath);
     if (stats.isDirectory()) {
       //   console.log('Using global aloma directory:', globalPath);
@@ -34,20 +34,20 @@ export const getPackageRoot = async () => {
   }
 
   throw new Error(
-    'Could not find aloma package in local or global node_modules'
+    "Could not find aloma package in local or global node_modules",
   );
 };
 
 // Get the storage path
 export const getStoragePath = async (folder) => {
   const packageRoot = await getPackageRoot();
-  const cachePath = path.join(packageRoot, '.cache');
+  const cachePath = path.join(packageRoot, ".cache");
 
   // Create .cache directory if it doesn't exist
   try {
     await fs.mkdir(cachePath, { recursive: true });
   } catch (e) {
-    if (e.code !== 'EEXIST') {
+    if (e.code !== "EEXIST") {
       throw e;
     }
   }
@@ -57,16 +57,18 @@ export const getStoragePath = async (folder) => {
 
 // Execute a GraphQL query
 export const graphQuery = async (query, variables = {}) => {
-  const token = await getSessionData('token');
+  const token = await getSessionData("token");
   if (!token) {
-    throw new Error('Not authenticated: No token found. Run `aloma auth` to login.');
+    throw new Error(
+      "Not authenticated: No token found. Run `aloma auth` to login.",
+    );
   }
 
   try {
     const response = await fetch(GRAPHQL_URL, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
@@ -83,7 +85,7 @@ export const graphQuery = async (query, variables = {}) => {
 
     return data.data;
   } catch (error) {
-    console.error(chalk.red('GraphQL Error:'), error.message);
+    console.error(chalk.red("GraphQL Error:"), error.message);
     throw error;
   }
 };
@@ -91,16 +93,16 @@ export const graphQuery = async (query, variables = {}) => {
 // Manage session data
 export const updateSessionData = async (prop, value) => {
   try {
-    const cachePath = await getStoragePath('session');
-    const sessionPath = path.join(cachePath, 'session.json');
+    const cachePath = await getStoragePath("session");
+    const sessionPath = path.join(cachePath, "session.json");
     let sessionData = {};
 
     // Try to read existing session data
     try {
-      const existingData = await fs.readFile(sessionPath, 'utf-8');
+      const existingData = await fs.readFile(sessionPath, "utf-8");
       sessionData = JSON.parse(existingData);
     } catch (error) {
-      if (error.code !== 'ENOENT') {
+      if (error.code !== "ENOENT") {
         throw error;
       }
       // If file doesn't exist, we'll create it with the new data
@@ -110,10 +112,14 @@ export const updateSessionData = async (prop, value) => {
     sessionData[prop] = value;
 
     // Write back to file
-    await fs.writeFile(sessionPath, JSON.stringify(sessionData, null, 2), 'utf-8');
+    await fs.writeFile(
+      sessionPath,
+      JSON.stringify(sessionData, null, 2),
+      "utf-8",
+    );
     return true;
   } catch (error) {
-    console.error(chalk.red('Failed to update session data:'), error.message);
+    console.error(chalk.red("Failed to update session data:"), error.message);
     throw error;
   }
 };
@@ -121,9 +127,9 @@ export const updateSessionData = async (prop, value) => {
 // Get session data
 export const getSessionData = async (prop = null) => {
   try {
-    const cachePath = await getStoragePath('session');
-    const sessionPath = path.join(cachePath, 'session.json');
-    const sessionData = await fs.readFile(sessionPath, 'utf-8');
+    const cachePath = await getStoragePath("session");
+    const sessionPath = path.join(cachePath, "session.json");
+    const sessionData = await fs.readFile(sessionPath, "utf-8");
     const parsedData = JSON.parse(sessionData);
 
     // If prop is specified, return only that property
@@ -134,16 +140,16 @@ export const getSessionData = async (prop = null) => {
     // Otherwise return all session data
     return parsedData;
   } catch (error) {
-    if (error.code === 'ENOENT') {
+    if (error.code === "ENOENT") {
       return null;
     }
-    console.error(chalk.red('Failed to read session data:'), error.message);
+    console.error(chalk.red("Failed to read session data:"), error.message);
     throw error;
   }
 };
 
 export const urlForRegion = async (url) => {
-  const user = await getSessionData('user');
+  const user = await getSessionData("user");
   const region = user.realm.region;
   if (region && !url.startsWith(`https://${region}.`)) {
     url = url.replace(/https:\/\//, `https://${region}.`);

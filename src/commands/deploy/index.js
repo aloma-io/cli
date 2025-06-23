@@ -1,21 +1,21 @@
-import fs from 'fs';
-import yaml from 'js-yaml';
-import chalk from 'chalk';
-import { switchCompany } from '../company/index.js';
+import fs from "fs";
+import yaml from "js-yaml";
+import chalk from "chalk";
+import { switchCompany } from "../company/index.js";
 import {
   createWorkspace,
   getWorkspaceId,
   getSelectedWorkspace,
-} from '../workspace/index.js';
-import { addStep } from '../step/index.js';
-import { createTask } from '../task/index.js';
-import { addWebhook } from '../webhook/index.js';
+} from "../workspace/index.js";
+import { addStep } from "../step/index.js";
+import { createTask } from "../task/index.js";
+import { addWebhook } from "../webhook/index.js";
 
 export async function deployFromYaml(yamlPath, options = {}) {
   // Read and parse YAML file
-  const config = yaml.load(fs.readFileSync(yamlPath, 'utf8'));
+  const config = yaml.load(fs.readFileSync(yamlPath, "utf8"));
 
-  console.log(chalk.blue('🚀 Starting deployment...\n'));
+  console.log(chalk.blue("🚀 Starting deployment...\n"));
 
   // Switch to specified company
   if (config.company) {
@@ -32,13 +32,13 @@ export async function deployFromYaml(yamlPath, options = {}) {
       let workspaceId = await getWorkspaceId(workspace.name);
       if (!workspaceId) {
         // Create workspace if it doesn't exist
-        await createWorkspace(workspace.name, workspace.tags.join(','));
+        await createWorkspace(workspace.name, workspace.tags.join(","));
         workspaceId = await getSelectedWorkspace();
       }
 
       // Process steps
       if (workspace.steps) {
-        console.log(chalk.blue('\nDeploying steps...'));
+        console.log(chalk.blue("\nDeploying steps..."));
         for (const step of workspace.steps) {
           console.log(chalk.gray(`  - ${step.name}`));
           await addStep(step.name, workspaceId, step.type, step.file);
@@ -47,7 +47,7 @@ export async function deployFromYaml(yamlPath, options = {}) {
 
       // Process tasks
       if (workspace.tasks) {
-        console.log(chalk.blue('\nDeploying tasks...'));
+        console.log(chalk.blue("\nDeploying tasks..."));
         for (const task of workspace.tasks) {
           console.log(chalk.gray(`  - ${task.name}`));
           await createTask(task.name, task.data, task.file, workspaceId);
@@ -56,7 +56,7 @@ export async function deployFromYaml(yamlPath, options = {}) {
 
       // Process webhooks
       if (workspace.webhooks) {
-        console.log(chalk.blue('\nDeploying webhooks...'));
+        console.log(chalk.blue("\nDeploying webhooks..."));
         for (const webhook of workspace.webhooks) {
           console.log(chalk.gray(`  - ${webhook.name}`));
           await addWebhook(webhook.name, workspaceId);
@@ -65,5 +65,5 @@ export async function deployFromYaml(yamlPath, options = {}) {
     }
   }
 
-  console.log(chalk.green('\n✅ Deployment completed successfully!'));
+  console.log(chalk.green("\n✅ Deployment completed successfully!"));
 }

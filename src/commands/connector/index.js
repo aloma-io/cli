@@ -1,4 +1,4 @@
-import { graphQuery } from '../../utils.js';
+import { graphQuery } from "../../utils.js";
 import {
   LIST_AVAILABLE_CONNECTOR_QUERY,
   LIST_CONNECTORS_QUERY,
@@ -9,11 +9,11 @@ import {
   UPDATE_CONNECTOR_MUTATION,
   GET_CONNECTOR_LOGS_QUERY,
   START_CONNECTOR_OAUTH_MUTATION,
-} from './query.js';
-import chalk from 'chalk';
-import { getSelectedWorkspace } from '../workspace/index.js';
-import fs from 'fs/promises';
-import open from 'open';
+} from "./query.js";
+import chalk from "chalk";
+import { getSelectedWorkspace } from "../workspace/index.js";
+import fs from "fs/promises";
+import open from "open";
 
 export async function listAvailableConnectors(workspaceIdentifier, filterName) {
   try {
@@ -21,25 +21,25 @@ export async function listAvailableConnectors(workspaceIdentifier, filterName) {
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
     const data = await graphQuery(LIST_AVAILABLE_CONNECTOR_QUERY, {
       id: workspaceId,
       mine: false,
-      name: filterName || '',
+      name: filterName || "",
     });
 
     if (
       !data.listAutomationAvailableConnectors ||
       data.listAutomationAvailableConnectors.length === 0
     ) {
-      console.log(chalk.yellow('No connectors found.'));
+      console.log(chalk.yellow("No connectors found."));
       return;
     }
 
-    console.log(chalk.blue('\nAvailable Connectors:'));
+    console.log(chalk.blue("\nAvailable Connectors:"));
     data.listAutomationAvailableConnectors.forEach((connector) => {
       console.log(chalk.green(`\nID: ${connector.id}`));
       console.log(`Name: ${connector.name}`);
@@ -50,7 +50,7 @@ export async function listAvailableConnectors(workspaceIdentifier, filterName) {
       console.log(`Expose Service: ${connector.expose_service}`);
     });
   } catch (error) {
-    console.error(chalk.red('Error listing connectors:'), error.message);
+    console.error(chalk.red("Error listing connectors:"), error.message);
     throw error;
   }
 }
@@ -61,24 +61,29 @@ export async function getConnector(id, workspaceIdentifier) {
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
-    const data = await graphQuery(GET_CONNECTOR_QUERY, { id: workspaceId, connectorId: id });
+    const data = await graphQuery(GET_CONNECTOR_QUERY, {
+      id: workspaceId,
+      connectorId: id,
+    });
 
     const connector = data.getAutomationConnector;
-    console.log(chalk.blue('\nConnector Details:'));
+    console.log(chalk.blue("\nConnector Details:"));
     console.log(chalk.green(`\nID: ${connector.id}`));
     console.log(`Name: ${connector.name}`);
     console.log(`Namespace: ${connector.namespace}`);
     console.log(`Shared in Realm: ${connector.shared_in_realm}`);
-    console.log(`Health: ${connector.health.healthy ? 'Healthy' : 'Unhealthy'}`);
+    console.log(
+      `Health: ${connector.health.healthy ? "Healthy" : "Unhealthy"}`,
+    );
 
     const connector_schema = data.getAutomationConnectorConfigSchema;
     printConnectorSchema(connector_schema);
   } catch (error) {
-    console.error(chalk.red('Error showing connector:'), error.message);
+    console.error(chalk.red("Error showing connector:"), error.message);
     throw error;
   }
 }
@@ -86,44 +91,49 @@ export async function getConnector(id, workspaceIdentifier) {
 function printConnectorSchema(schema) {
   // Print summary
   if (schema.summary) {
-    console.log(chalk.bold('Summary'));
+    console.log(chalk.bold("Summary"));
     console.log(schema.summary);
     console.log();
   }
 
   // Print description if present
   if (schema.description) {
-    console.log(chalk.bold('Description'));
+    console.log(chalk.bold("Description"));
     console.log(schema.description);
     console.log();
   }
 
   // Print fields
   if (schema.fields && Object.keys(schema.fields).length > 0) {
-    console.log(chalk.bold('Fields'));
+    console.log(chalk.bold("Fields"));
     Object.entries(schema.fields).forEach(([key, field]) => {
       console.log(`  Key: ${key}`);
       console.log(`  Name: ${field.name}`);
-      console.log(`  Value: ${field.placeholder || ''}`);
-      console.log(`  Optional: ${field.optional ? 'Yes' : 'No'}`);
+      console.log(`  Value: ${field.placeholder || ""}`);
+      console.log(`  Optional: ${field.optional ? "Yes" : "No"}`);
       console.log();
     });
   }
 }
 
-export async function addConnector(connectorId, workspaceIdentifier, name, namespace) {
+export async function addConnector(
+  connectorId,
+  workspaceIdentifier,
+  name,
+  namespace,
+) {
   try {
     let workspaceId = workspaceIdentifier;
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
 
     if (!connectorId) {
-      console.log(chalk.yellow('⚠ Connector ID is required'));
+      console.log(chalk.yellow("⚠ Connector ID is required"));
       return;
     }
 
@@ -138,7 +148,7 @@ export async function addConnector(connectorId, workspaceIdentifier, name, names
       });
 
       if (!connectorData.getAutomationConnector) {
-        console.log(chalk.red('Error: Connector not found'));
+        console.log(chalk.red("Error: Connector not found"));
         return;
       }
 
@@ -154,12 +164,12 @@ export async function addConnector(connectorId, workspaceIdentifier, name, names
     });
 
     if (response.addAutomationMarketConnectorToEnvironment) {
-      console.log(chalk.green('\nConnector added successfully!'));
+      console.log(chalk.green("\nConnector added successfully!"));
     } else {
-      console.log(chalk.red('Error: Failed to add connector'));
+      console.log(chalk.red("Error: Failed to add connector"));
     }
   } catch (error) {
-    console.error(chalk.red('Error creating connector:'), error.message);
+    console.error(chalk.red("Error creating connector:"), error.message);
     throw error;
   }
 }
@@ -170,14 +180,17 @@ export async function removeConnector(id, workspaceIdentifier) {
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
-    await graphQuery(REMOVE_CONNECTOR_MUTATION, { id, environmentId: workspaceId });
+    await graphQuery(REMOVE_CONNECTOR_MUTATION, {
+      id,
+      environmentId: workspaceId,
+    });
     console.log(chalk.green(`\nConnector ${id} deleted successfully!`));
   } catch (error) {
-    console.error(chalk.red('Error deleting connector:'), error.message);
+    console.error(chalk.red("Error deleting connector:"), error.message);
     throw error;
   }
 }
@@ -188,18 +201,21 @@ export async function listConnectors(workspaceIdentifier) {
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
     const data = await graphQuery(LIST_CONNECTORS_QUERY, { id: workspaceId });
 
-    if (!data.listAutomationConnectors || data.listAutomationConnectors.length === 0) {
-      console.log(chalk.yellow('No available connector types found.'));
+    if (
+      !data.listAutomationConnectors ||
+      data.listAutomationConnectors.length === 0
+    ) {
+      console.log(chalk.yellow("No available connector types found."));
       return;
     }
 
-    console.log(chalk.blue('\nConnectors:'));
+    console.log(chalk.blue("\nConnectors:"));
     data.listAutomationConnectors.forEach((connector) => {
       console.log(chalk.green(`\nID: ${connector.id}`));
       console.log(`Name: ${connector.name}`);
@@ -207,11 +223,14 @@ export async function listConnectors(workspaceIdentifier) {
       console.log(`Namespace: ${connector.namespace}`);
       console.log(`Last Used At: ${connector.last_used_at}`);
       console.log(
-        `Health: ${connector.health[0].healthy ? chalk.green('Healthy') : chalk.red('Unhealthy')}`
+        `Health: ${connector.health[0].healthy ? chalk.green("Healthy") : chalk.red("Unhealthy")}`,
       );
     });
   } catch (error) {
-    console.error(chalk.red('Error listing available connectors:'), error.message);
+    console.error(
+      chalk.red("Error listing available connectors:"),
+      error.message,
+    );
     throw error;
   }
 }
@@ -224,14 +243,14 @@ export async function updateConnector(
   tags,
   shared_in_realm,
   config,
-  file
+  file,
 ) {
   try {
     let workspaceId = workspaceIdentifier;
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
@@ -243,12 +262,12 @@ export async function updateConnector(
     let connectorConfig = config;
 
     if (!connectorId) {
-      console.log(chalk.yellow('⚠ Connector ID is required'));
+      console.log(chalk.yellow("⚠ Connector ID is required"));
       return;
     }
 
     if (file) {
-      let fileContent = await fs.readFile(file, 'utf8');
+      let fileContent = await fs.readFile(file, "utf8");
       fileContent = JSON.parse(fileContent);
       // Set properties from file content
       connectorName = fileContent.name || connectorName;
@@ -274,7 +293,7 @@ export async function updateConnector(
         });
 
         if (!connectorData.getAutomationConnector) {
-          console.log(chalk.red('Error: Connector not found'));
+          console.log(chalk.red("Error: Connector not found"));
           return;
         }
 
@@ -283,35 +302,42 @@ export async function updateConnector(
       const response = await graphQuery(UPDATE_CONNECTOR_MUTATION, {
         connectorId,
         name: connectorName,
-        namespace: connectorNamespace || '',
+        namespace: connectorNamespace || "",
         tags: connectorTags || [],
         shared_in_realm: connectorSharedInRealm,
       });
 
       if (response.updateAutomationConnector) {
-        console.log(chalk.green('\nConnector updated successfully!'));
+        console.log(chalk.green("\nConnector updated successfully!"));
       } else {
-        console.log(chalk.red('Error: Failed to update connector'));
+        console.log(chalk.red("Error: Failed to update connector"));
         return;
       }
     }
 
     // Update connector config if provided
     if (connectorConfig) {
-      const response = await graphQuery(UPDATE_CONNECTOR_CONFIG_SCHEMA_MUTATION, {
-        environmentId: workspaceId,
-        connectorId,
-        content: connectorConfig,
-      });
+      const response = await graphQuery(
+        UPDATE_CONNECTOR_CONFIG_SCHEMA_MUTATION,
+        {
+          environmentId: workspaceId,
+          connectorId,
+          content: connectorConfig,
+        },
+      );
 
       if (response.updateAutomationConnectorConfigSchema) {
-        console.log(chalk.green('\nConnector configuration updated successfully!'));
+        console.log(
+          chalk.green("\nConnector configuration updated successfully!"),
+        );
       } else {
-        console.log(chalk.red('Error: Failed to update connector configuration'));
+        console.log(
+          chalk.red("Error: Failed to update connector configuration"),
+        );
       }
     }
   } catch (error) {
-    console.error(chalk.red('Error updating connector:'), error.message);
+    console.error(chalk.red("Error updating connector:"), error.message);
     throw error;
   }
 }
@@ -322,13 +348,13 @@ export async function getConnectorLogs(id, workspaceIdentifier) {
     if (!workspaceIdentifier) {
       workspaceId = await getSelectedWorkspace();
       if (!workspaceId) {
-        console.log(chalk.yellow('⚠ Workspace ID is required'));
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
     }
 
     if (!id) {
-      console.log(chalk.yellow('⚠ Connector ID is required'));
+      console.log(chalk.yellow("⚠ Connector ID is required"));
       return;
     }
 
@@ -338,57 +364,64 @@ export async function getConnectorLogs(id, workspaceIdentifier) {
     });
 
     if (!data.getAutomationConnectorLogs) {
-      console.log(chalk.yellow('No logs found for this connector.'));
+      console.log(chalk.yellow("No logs found for this connector."));
       return;
     }
 
-    console.log(chalk.blue('\nConnector Logs:'));
+    console.log(chalk.blue("\nConnector Logs:"));
     console.log(data.getAutomationConnectorLogs);
   } catch (error) {
-    console.error(chalk.red('Error getting connector logs:'), error.message);
+    console.error(chalk.red("Error getting connector logs:"), error.message);
     throw error;
   }
 }
 
-export async function startConnectorOAuth(id, workspaceIdentifier, isDevelopment = false) {
-    try {
-      let workspaceId = workspaceIdentifier;
-      if (!workspaceIdentifier) {
-        workspaceId = await getSelectedWorkspace();
-        if (!workspaceId) {
-          console.log(chalk.yellow('⚠ Workspace ID is required'));
-          return;
-        }
-      }
-
-      if (!id) {
-        console.log(chalk.yellow('⚠ Connector ID is required'));
+export async function startConnectorOAuth(
+  id,
+  workspaceIdentifier,
+  isDevelopment = false,
+) {
+  try {
+    let workspaceId = workspaceIdentifier;
+    if (!workspaceIdentifier) {
+      workspaceId = await getSelectedWorkspace();
+      if (!workspaceId) {
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
         return;
       }
-
-      const response = await graphQuery(START_CONNECTOR_OAUTH_MUTATION, {
-        environmentConnectorId: id,
-        environmentId: workspaceId,
-        isDevelopment,
-      });
-
-      if (response.startAutomationConnectorOAuth) {
-        console.log(chalk.green('\nOAuth process started successfully!'));
-        
-        // Parse the OAuth URL
-        const oauthUrl = new URL(response.startAutomationConnectorOAuth);
-
-        try {
-          await open(oauthUrl.toString());
-        } catch (error) {
-          console.log(chalk.yellow('\nCould not open browser automatically. Please open this URL manually:'));
-          console.log(oauthUrl.toString());
-        }
-
-      } else {
-        console.log(chalk.red('Error: Failed to start OAuth process'));
-      }
-    } catch (error) {
-      console.error(chalk.red('Error starting OAuth process:'), error);
     }
+
+    if (!id) {
+      console.log(chalk.yellow("⚠ Connector ID is required"));
+      return;
+    }
+
+    const response = await graphQuery(START_CONNECTOR_OAUTH_MUTATION, {
+      environmentConnectorId: id,
+      environmentId: workspaceId,
+      isDevelopment,
+    });
+
+    if (response.startAutomationConnectorOAuth) {
+      console.log(chalk.green("\nOAuth process started successfully!"));
+
+      // Parse the OAuth URL
+      const oauthUrl = new URL(response.startAutomationConnectorOAuth);
+
+      try {
+        await open(oauthUrl.toString());
+      } catch (error) {
+        console.log(
+          chalk.yellow(
+            "\nCould not open browser automatically. Please open this URL manually:",
+          ),
+        );
+        console.log(oauthUrl.toString());
+      }
+    } else {
+      console.log(chalk.red("Error: Failed to start OAuth process"));
+    }
+  } catch (error) {
+    console.error(chalk.red("Error starting OAuth process:"), error);
+  }
 }

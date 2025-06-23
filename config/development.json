@@ -1,0 +1,11 @@
+{
+  "environment": "development",
+  "keycloakRealmUrl": "https://accounts-dev.aloma.io/realms/master",
+  "clientId": "graph",
+  "clientSecret": "YOUR_DEVELOPMENT_CLIENT_SECRET",
+  "redirectUri": "http://localhost:8989",
+  "scope": "openid profile email groups",
+  "graphqlUrl": "https://test.graph.aloma.io/graphql",
+  "graphqlHost": "test.graph.aloma.io",
+  "authPublicKey": "YOUR_DEVELOPMENT_AUTH_PUBLIC_KEY"
+}

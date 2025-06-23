@@ -46,3 +46,45 @@ export const CREATE_WORKSPACE_MUTATION = `
     }
   }
 `;
+
+export const GET_WORKSPACE_QUERY = `
+  query ($id: ID!) {
+    getAutomationEnvironment(id: $id) {
+      id
+      name
+      tags
+      type
+      autoclean
+      clean_interval
+      archived
+      deleting
+      deleting_at
+      health_enabled
+    }
+  }
+`;
+
+export const GET_WORKSPACE_STATS_QUERY = `
+  query ($id: ID!) {
+    getAutomationEnvironmentWithStats(id: $id) {
+      id
+      name
+      tags
+      type
+      connectors
+      engines
+      webhooks
+      tasks
+      tasks7
+      tasks30
+      rate7
+      rate30
+      steps
+      steps7
+      steps30
+      testPercentage7
+      health
+      connectorIssues
+    }
+  }
+`;

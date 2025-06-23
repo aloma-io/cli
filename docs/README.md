@@ -5,152 +5,464 @@ This document outlines the structure and decisions for the `aloma` package. This
 ## Project Structure
 
 - `/src/cli.js`: The entry point for the `aloma` command-line interface.
-- `/src/auth.js`: Contains the logic for Keycloak OAuth authentication and secure token storage.
+- `/src/commands/`: Directory containing all command implementations organized by feature:
+  - `/auth/`: Authentication commands (login, logout)
+  - `/workspace/`: Workspace management commands
+  - `/company/`: Company management commands
+  - `/step/`: Step management commands
+  - `/task/`: Task management commands
+  - `/webhook/`: Webhook management commands
+  - `/connector/`: Connector management commands
+  - `/user/`: User management commands
+  - `/deploy/`: Deployment commands
+- `/src/config.js`: Configuration settings for Keycloak, GraphQL, and other services.
+- `/src/utils.js`: Shared utility functions.
 - `/src/metrics.js`: Contains mock task data and functions to display formatted metrics tables in the console.
 - `/src/logs.js`: Implements a log tailing system with random log generation for simulating real-time task logs.
 - `/src/setup.js`: Implements project creation functionality for generating new Aloma automation projects.
 - `/index.js`: The main entry point for using the package as a Node.js module.
 - `/package.json`: NPM package configuration, including dependencies and CLI definition.
-- `/node_modules/`: Directory where dependencies are installed.
+- `/examples/`: Directory containing example configurations and files:
+  - `/deploy.yaml`: Example deployment configuration
+  - `/step/`: Example step definitions
+  - `/task/`: Example task configurations
+  - `/connector/`: Example connector configurations
 - `/docs/README.md`: This documentation file.
 - `/tests/`: Directory containing test files.
 
 ## Files
 
-- **src/cli.js**: Implements the command-line interface using `commander`. Defines `auth`, `logout`, `status`, `metrics`, `logs`, and `create` commands, delegating logic to respective files.
-- **src/auth.js**: Handles the OAuth 2.0 Authorization Code flow with PKCE:
-    - Uses `openid-client@4.9.1` to discover Keycloak endpoints and handle the protocol.
-    - Starts a temporary local HTTP server to receive the callback from Keycloak.
-    - Uses `open` to launch the user's browser for login.
-    - Uses `keytar` to securely store the obtained token (currently access token) in the system keychain.
-    - Implements a fallback mechanism to store the token in `~/.aloma/token` if keychain access fails.
-    - Configured to use the development Keycloak instance at `accounts-dev.aloma.io`.
-    - Contains placeholders for `CLIENT_ID` that **can be configured** if needed.
+- **src/cli.js**: Implements the command-line interface using `commander`. Defines all available commands organized by feature areas.
+- **src/commands/**: Modular command implementations:
+  - **auth/index.js**: Handles the OAuth 2.0 Authorization Code flow with PKCE using Keycloak.
+  - **workspace/index.js**: Manages workspace operations (list, show, switch, add).
+  - **company/index.js**: Manages company operations (list, switch, add).
+  - **step/index.js**: Manages step operations (list, show, add, delete, edit, clone).
+  - **task/index.js**: Manages task operations (list, log, new, clone, stop, resume).
+  - **webhook/index.js**: Manages webhook operations (list, show, add, delete).
+  - **connector/index.js**: Manages connector operations (list, show, add, delete, update, logs, oauth).
+  - **user/index.js**: Manages user operations (list, invite, update, remove).
+  - **deploy/index.js**: Handles deployment from YAML configuration files.
+- **src/config.js**: Contains configuration for Keycloak authentication, GraphQL endpoints, and encryption keys.
 - **src/metrics.js**: Contains mock task data and functions to display formatted metrics tables in the console.
 - **src/logs.js**: Implements a log tailing system with random log generation for simulating real-time task logs.
-- **src/setup.js**: Handles the creation of new Aloma automation projects:
-    - Creates a project directory with a predefined structure.
-    - Initializes a new npm project with the necessary dependencies.
-    - Generates template files including example automations, configuration, and documentation.
-    - Uses `ora` for displaying progress spinners during project creation.
-    - Uses `chalk` for colorized console output.
-- **index.js**: Contains exported functions for programmatic use (currently placeholder `helloAloma`).
-- **package.json**: Defines metadata, dependencies (`commander`, `open`, `openid-client@4.9.1`, `keytar`, `chalk`, `ora`), the `bin` entry (`aloma`), and `setup` script.
-- **tests/test-openid.js**: Test script to verify that the `openid-client` module loads correctly.
+- **src/setup.js**: Handles the creation of new Aloma automation projects with predefined structure and templates.
+- **index.js**: Contains exported functions for programmatic use.
+- **package.json**: Defines metadata, dependencies, the `bin` entry (`aloma`), and scripts.
+- **examples/**: Contains example configurations and files for various Aloma features.
 
 ## CLI Usage
 
 Running `aloma` with no arguments (or with `-h` or `--help`) displays the main help message.
 
-### Authentication (`aloma auth` or `aloma login`)
+### Authentication
+
+#### `aloma auth` or `aloma login`
 
 Initiates the browser-based OAuth 2.0 Authorization Code flow with Keycloak.
-1.  Starts a local server on `http://localhost:8989` (defined in `auth.js`).
-2.  Displays the authentication URL in the console and attempts to open your default browser automatically. If automatic opening fails, you can copy and paste the URL manually.
-3.  After successful login, Keycloak redirects back to the local server.
-4.  The server receives the authorization code, exchanges it for tokens.
-5.  The access token (or other configured token) is stored securely. It first attempts to use the system keychain (`keytar`). If that fails, it falls back to storing the token in a file at `~/.aloma/token`.
-6.  A success message is printed, and the local server shuts down.
+1. Starts a local server on `http://localhost:8989`.
+2. Displays the authentication URL in the console and attempts to open your default browser automatically.
+3. After successful login, Keycloak redirects back to the local server.
+4. The server receives the authorization code, exchanges it for tokens.
+5. The access token is stored securely using the system keychain with fallback to `~/.aloma/token`.
+6. A success message is printed, and the local server shuts down.
 
-**Requires Configuration:**
--   The Keycloak Realm URL is pre-configured to use the development environment at `accounts-dev.aloma.io/realms/master`.
--   The CLIENT_ID is set to `graph` but can be changed if needed.
--   The Keycloak client specified by `CLIENT_ID` **must** have `http://localhost:8989` listed as a valid Redirect URI.
--   The Keycloak client should ideally be configured as 'public' (no client secret required). The code assumes this by default but can be adjusted if a `CLIENT_SECRET` is provided in `src/auth.js`.
+#### `aloma logout`
 
-### Logout (`aloma logout`)
+Removes the stored Aloma token from both the system keychain and the fallback file.
 
-Removes the stored Aloma token from both the system keychain (`keytar`) and the fallback file (`~/.aloma/token`).
+### Workspace Management
 
-### Status (`aloma status` or `aloma whoami`)
+#### `aloma workspace list`
 
-Checks if a token is currently stored, first checking the system keychain (`keytar`) and then the fallback file (`~/.aloma/token`). Prints the status (Authenticated or Not authenticated).
+Lists all automation workspaces available to the authenticated user.
 
-Additionally, displays a comprehensive overview of your automation tasks and their metrics including:
-- Task status table showing ID, name, status, type, last run time, next run time, and success rate
-- Detailed metrics showing task performance, durations, error counts, and data processed
-- System overview with aggregate statistics
+#### `aloma workspace show`
+
+Shows details of the current active workspace.
+
+#### `aloma workspace switch <identifier>`
+
+Switches to a different workspace by name or ID.
+
+#### `aloma workspace add <name>`
+
+Creates a new workspace with the specified name.
+
+Options:
+- `-t, --tags <tags>`: Comma-separated list of tags for the workspace
+
+### Company Management
+
+#### `aloma company list`
+
+Lists all available companies.
+
+#### `aloma company switch <identifier>`
+
+Switches to a different company by name or ID.
+
+#### `aloma company add <name>`
+
+Creates a new company (admin only).
+
+Options:
+- `-e, --emails <emails>`: Comma-separated list of emails to invite
+
+### Step Management
+
+#### `aloma step list`
+
+Lists all steps in the current workspace.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma step show <id>`
+
+Shows detailed information about a specific step.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma step add <name>`
+
+Adds a new step with the specified name.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+- `-t, --type <type>`: Step type
+- `-f, --file <path>`: Path to file containing step condition and content
+
+#### `aloma step delete <id>`
+
+Deletes a step by ID.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma step edit <id>`
+
+Opens an editor to modify a step.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma step clone <id>`
+
+Creates a copy of an existing step.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+### Task Management
+
+#### `aloma task list`
+
+Lists all tasks in the current workspace.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma task log <id>`
+
+Shows detailed logs for a specific task.
+
+#### `aloma task new <name>`
+
+Creates a new task with the specified name.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+- `-d, --data <json>`: JSON data to send with the task
+- `-f, --file <path>`: Path to JSON file containing task data
+
+#### `aloma task clone <id>`
+
+Creates a copy of an existing task.
+
+#### `aloma task stop <id>`
+
+Stops a running task.
+
+#### `aloma task resume <id>`
+
+Resumes a stopped task.
+
+### Webhook Management
+
+#### `aloma webhook list`
+
+Lists all webhooks in the current workspace.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma webhook show <id>`
+
+Shows detailed information about a specific webhook.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma webhook add <name>`
+
+Adds a new webhook with the specified name.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma webhook delete <id>`
+
+Deletes a webhook by ID.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+### Connector Management
+
+#### `aloma connector list`
+
+Lists all connectors in the current workspace.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma connector list-available`
+
+Lists all available connector types and their configurations.
+
+Options:
+- `-f, --filter-name <name>`: Filter connectors by name
+
+#### `aloma connector show <id>`
+
+Shows detailed information about a specific connector.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma connector add <connectorId>`
+
+Adds a new connector.
+
+Options:
+- `-n, --name <name>`: Connector name
+- `-ns, --namespace <namespace>`: Connector namespace
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma connector delete <id>`
+
+Deletes a connector by ID.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma connector update <id>`
+
+Updates a connector's configuration.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+- `-n, --name <name>`: Connector name
+- `-ns, --namespace <namespace>`: Connector namespace
+- `-t, --tags <tags>`: Comma-separated list of tags
+- `-s, --shared`: Share connector in realm
+- `-c, --config <json>`: JSON configuration for the connector
+- `-f, --file <path>`: Path to JSON file containing connector configuration
+
+#### `aloma connector logs <id>`
+
+Views logs for a specific connector.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+
+#### `aloma connector oauth <id>`
+
+Starts OAuth process for a connector.
+
+Options:
+- `-w, --workspace <id>`: Specify workspace ID
+- `-d, --development`: Start OAuth in development mode
+
+### User Management
+
+#### `aloma user list`
+
+Lists all users in the current company.
+
+#### `aloma user invite <emails>`
+
+Invites new users to the current company.
+
+Options:
+- `-r, --roles <roles>`: Comma-separated list of roles to invite the user with
+
+#### `aloma user update <id>`
+
+Updates a user's information.
+
+Options:
+- `-r, --roles <roles>`: Comma-separated list of roles to update the user with
+
+#### `aloma user remove <id>`
+
+Removes a user from the current company.
+
+### Deployment
+
+#### `aloma deploy <yamlPath>`
+
+Deploys resources from a YAML configuration file.
+
+The YAML file can define:
+- Company to switch to
+- Workspaces to create and configure
+- Steps to create
+- Tasks to create
+- Webhooks to create
+
+Example YAML structure:
+```yaml
+# Company to switch to (optional)
+company: "testing"
+
+# List of workspaces to create and configure
+workspaces:
+  - name: "production"
+    tags: ["prod", "main"]
+    
+    # Steps configuration
+    steps:
+      - name: "template2"
+        file: "examples/step/step1.js"
+    
+    # Tasks configuration
+    tasks:
+      - name: "template-task"
+        data: {"cliStep": true, "Step": 1}
+      - name: "template-task2"
+        file: "examples/task/task1.json"
+
+    # Webhooks configuration
+    webhooks:
+      - name: "data-update"
+```
+
+### Legacy Commands
+
+The following commands from the original implementation are still available but may be deprecated:
+
+#### `aloma status` or `aloma whoami`
+
+Checks authentication status and displays task metrics.
 
 Options:
 - `-m, --metrics-only`: Display only metrics without checking authentication
 - `-a, --auth-only`: Display only authentication status without metrics
 
-### Metrics (`aloma metrics`)
+#### `aloma metrics`
 
-Dedicated command to display task metrics and system overview without checking authentication status. Shows the same metrics tables as the `status` command with the metrics-only option.
+Displays task metrics and system overview.
 
-### Logs (`aloma logs [taskId]`)
+#### `aloma logs [taskId]`
 
-Displays and tails logs for a specific task in real-time with simulated random log generation.
-
-When run with a task ID:
-- Shows a continuous stream of simulated logs for the specified task
-- Each log has a timestamp, level indicator (with emoji), colored log level, task ID, and message
-- The log content is contextually related to the task type
-- Logs will continue to stream until interrupted with Ctrl+C
-
-When run without a task ID, lists all available tasks and their IDs.
+Displays and tails logs for tasks.
 
 Options:
 - `-i, --interval <ms>`: Set the interval between log entries in milliseconds (default: 1000ms)
 - `-l, --limit <number>`: Limit the number of log entries to display (default: unlimited)
 - `-f, --filter <level>`: Filter logs by level (INFO, DEBUG, WARN, ERROR, SUCCESS)
 
-Examples:
-```
-aloma logs                    # List all available tasks
-aloma logs task1              # Tail logs for task1
-aloma logs task2 --interval 500   # Tail logs for task2 with faster output
-aloma logs task3 --limit 20       # Show only 20 log entries
-aloma logs task4 --filter ERROR   # Show only ERROR level logs
-```
+#### `aloma create <name>`
 
-### Create (`aloma create <name>`)
-
-Creates a new Aloma automation project with a predefined structure and template files.
-
-When run with a project name:
-- Creates a directory with the specified project name (or custom directory with `--directory` option)
-- Initializes a new npm project with the Aloma dependency
-- Generates template files including example automations, configuration, and a README
-- Creates a standard project structure with directories for automations, config, and logs
+Creates a new Aloma automation project.
 
 Options:
-- `-d, --directory <path>`: Set a custom directory path for the project (default: project name)
+- `-d, --directory <path>`: Set a custom directory path for the project
 - `-f, --force`: Overwrite existing directory if it already exists
 
-Examples:
+## Configuration
+
+The CLI uses the following configuration in `src/config.js`:
+
+- **Keycloak Configuration**: OAuth 2.0 authentication settings
+- **GraphQL Configuration**: API endpoint settings
+- **Encryption Configuration**: Public key for token verification
+
+## Dependencies
+
+- **commander**: CLI framework
+- **axios**: HTTP client for API requests
+- **chalk**: Terminal colorization
+- **cli-table3**: Formatted table display
+- **jose**: JWT handling
+- **js-yaml**: YAML file parsing
+- **keytar**: Secure credential storage
+- **open**: Browser opening
+- **openid-client**: OAuth 2.0 client
+- **ora**: Terminal spinners
+
+## Examples
+
+### Step Definition Example
+
+```javascript
+// examples/step/step1.js
+export const condition = {
+  "cliStep": true,
+  "Step": 1
+};
+
+export const content = () => {
+  console.log("running a cli updated step");
+  const message = "This is a test message ";
+  console.log(message);
+  task.complete();
+};
 ```
-aloma create my-automation          # Create a new project in ./my-automation
-aloma create tasks --directory ./projects/tasks   # Create in a custom directory
-aloma create backup --force         # Overwrite existing directory
+
+### Task Configuration Example
+
+```json
+// examples/task/task1.json
+{
+  "test": true
+}
 ```
 
-The project structure created includes:
-- `/automations/`: Directory for automation task definitions with an example task
-- `/config/`: Directory for configuration files with a default config
-- `/logs/`: Directory for log files (created automatically)
-- `index.js`: Main entry point that initializes the Aloma engine
-- `package.json`: NPM package configuration with Aloma dependency
-- `.gitignore`: Default git ignore file
-- `README.md`: Documentation with usage instructions
+### Connector Configuration Example
 
-### Local Development Testing
+```json
+// examples/connector/connector-config.json
+{
+  "name": "My Custom Connector",
+  "namespace": "custom",
+  "tags": ["production", "api", "custom"],
+  "shared_in_realm": false,
+  "config": {
+    "username": "userJJ",
+    "password": "passwordJJ",
+    "domain": "https://api.example.com"
+  }
+}
+```
 
-1.  Navigate to the `aloma-io` directory.
-2.  Configure `KEYCLOAK_REALM_URL` and `CLIENT_ID` in `auth.js`.
-3.  Run `npm run link-global` (or `npm link`).
-4.  Run commands like `aloma auth`, `aloma status`, `aloma logout`.
-5.  To remove the link: `npm unlink aloma`.
+## Local Development Testing
+
+1. Navigate to the `aloma-io` directory.
+2. Run `npm run setup` to link the package globally.
+3. Run commands like `aloma auth`, `aloma workspace list`, `aloma step list`.
+4. To remove the link: `npm unlink aloma`.
 
 ## Decisions
 
 - **Package Name**: `aloma`.
-- **CLI Implementation**: Using `commander`.
-- **Authentication Strategy**: OAuth 2.0 Authorization Code flow with PKCE via a local HTTP server callback. This is a standard and secure method for CLI apps.
-    - Dependencies: `openid-client@4.9.1` for robust OIDC handling, `open` for browser interaction.
-- **Token Storage**: Using `keytar` to leverage secure system credential storage (Keychain on macOS, Credential Manager on Windows, etc.). Implemented a fallback to storing the token in `~/.aloma/token` if keychain access fails, similar to the strategy mentioned in the WorkOS blog post. Service name: `aloma-cli`.
-- **Modularity**: Separated authentication logic into `auth.js`.
-- **Metrics Display**: Implemented colorful, formatted tables to show task metrics with intuitive status colors.
-- **Log Tailing**: Created a simulated log tailing system with contextual log messages for each task type.
-- **Project Creation**: Implemented a scaffolding system in `setup.js` to generate new Aloma automation projects with a standardized structure and example code, improving the developer experience for new users.
+- **CLI Implementation**: Using `commander` with modular command structure.
+- **Authentication Strategy**: OAuth 2.0 Authorization Code flow with PKCE via Keycloak.
+- **Token Storage**: Using `keytar` with fallback to file storage.
+- **Modularity**: Commands organized by feature in separate modules.
+- **Configuration**: Centralized configuration in `config.js`.
+- **Examples**: Comprehensive examples for all major features.
+- **Deployment**: YAML-based deployment configuration for infrastructure as code. 
