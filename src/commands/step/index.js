@@ -264,8 +264,7 @@ export async function editStep(stepId, workspaceIdentifier) {
     const tempDir = os.tmpdir();
     const fileName = `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`;
     const tempFilePath = path.join(tempDir, fileName);
-    console.log(tempFilePath);
-    console.log(step);
+
     // Prepare the file content
     const fileContent = `/**
  * Step: ${step.name}
