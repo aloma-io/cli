@@ -226,8 +226,10 @@ program
     new Command("list")
       .description("List all steps")
       .option("-w, --workspace <id>", "Workspace ID")
+      .option("-n, --name <name>", "Filter steps by name")
+      .option("-d, --include-disabled", "Include disabled steps")
       .action(async (options) => {
-        await listSteps(false, options.workspace);
+        await listSteps(options.includeDisabled, options.workspace, options.name);
       }),
   )
   .addCommand(

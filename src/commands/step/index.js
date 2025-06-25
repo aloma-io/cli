@@ -112,7 +112,7 @@ export async function addStep(
   }
 }
 
-export async function listSteps(includeDisabled = false, workspaceIdentifier) {
+export async function listSteps(includeDisabled = false, workspaceIdentifier, name = null) {
   let workspaceId = workspaceIdentifier;
   if (!workspaceIdentifier) {
     workspaceId = await getSelectedWorkspace();
@@ -126,6 +126,7 @@ export async function listSteps(includeDisabled = false, workspaceIdentifier) {
     const data = await graphQuery(LIST_STEPS_QUERY, {
       id: workspaceId,
       includeDisabled,
+      name,
     });
     const steps = data.listAutomationSteps;
 
@@ -263,7 +264,8 @@ export async function editStep(stepId, workspaceIdentifier) {
     const tempDir = os.tmpdir();
     const fileName = `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`;
     const tempFilePath = path.join(tempDir, fileName);
-
+    console.log(tempFilePath);
+    console.log(step);
     // Prepare the file content
     const fileContent = `/**
  * Step: ${step.name}
@@ -285,9 +287,21 @@ export async function editStep(stepId, workspaceIdentifier) {
  * };
  */
 
-export const condition = ${JSON.stringify(step.content?.if ? JSON.parse(step.content.if) : {}, null, 2)};
+export const condition = ${(() => {
+  try {
+    if (step.content?.if) {
+      // Use Function constructor to safely evaluate the JavaScript object
+      const conditionObj = new Function(`return ${step.content.if}`)();
+      return JSON.stringify(conditionObj, null, 2);
+    }
+    return JSON.stringify({}, null, 2);
+  } catch (error) {
+    console.warn(chalk.yellow(`Warning: Could not parse condition: ${error.message}`));
+    return JSON.stringify({}, null, 2);
+  }
+})()};
 
-export const content = () => {
+export const content = async () => {
 ${step.content?.do || ""}
 };
 `;
@@ -309,7 +323,7 @@ ${step.content?.do || ""}
         /export const condition = ([\s\S]*?);/,
       );
       const contentMatch = modifiedContent.match(
-        /export const content = \(\) => \{([\s\S]*?)\};/,
+        /export const content = async \(\) => \{([\s\S]*?)\};/,
       );
 
       if (!conditionMatch || !contentMatch) {
