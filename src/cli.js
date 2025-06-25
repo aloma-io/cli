@@ -7,6 +7,9 @@ import {
   createWorkspace,
   showWorkspace,
   switchWorkspace,
+  deleteWorkspace,
+  archiveWorkspace,
+  updateWorkspace,
 } from "./commands/workspace/index.js";
 import {
   addCompany,
@@ -137,6 +140,49 @@ program
       )
       .action(async (name, options) => {
         await createWorkspace(name, options.tags);
+      }),
+  )
+  .addCommand(
+    new Command("delete")
+      .description("Delete a workspace or cancel deletion")
+      .argument("[workspace]", "Workspace ID or name (uses current if not specified)")
+      .option("-c, --cancel", "Cancel workspace deletion")
+      .option("-d, --days <days>", "Days until permanent deletion", "30")
+      .action(async (workspace, options) => {
+        const deletionDays = options.days ? parseInt(options.days) : undefined;
+        await deleteWorkspace(workspace, options.cancel, deletionDays);
+      }),
+  )
+  .addCommand(
+    new Command("archive")
+      .description("Archive or unarchive a workspace")
+      .argument("[workspace]", "Workspace ID or name (uses current if not specified)")
+      .option("-u, --unarchive", "Unarchive workspace")
+      .action(async (workspace, options) => {
+        await archiveWorkspace(workspace, options.unarchive);
+      }),
+  )
+  .addCommand(
+    new Command("update")
+      .description("Update workspace settings")
+      .argument("[workspace]", "Workspace ID or name (uses current if not specified)")
+      .option("-n, --name <name>", "New workspace name")
+      .option("-t, --tags <tags>", "Comma-separated list of tags")
+      .option("-h, --health-enabled <boolean>", "Enable/disable health checks (true/false)")
+      .option("-g, --notification-groups <groups>", "Comma-separated list of notification groups")
+      .action(async (workspace, options) => {
+        // Parse health_enabled boolean
+        let healthEnabled;
+        if (options.healthEnabled !== undefined) {
+          healthEnabled = options.healthEnabled.toLowerCase() === 'true';
+        }
+        
+        await updateWorkspace(workspace, {
+          name: options.name,
+          tags: options.tags,
+          health_enabled: healthEnabled,
+          notification_groups: options.notificationGroups
+        });
       }),
   );
 

@@ -60,6 +60,7 @@ export const GET_WORKSPACE_QUERY = `
       deleting
       deleting_at
       health_enabled
+      task_notification_groups
     }
   }
 `;
@@ -86,5 +87,35 @@ export const GET_WORKSPACE_STATS_QUERY = `
       health
       connectorIssues
     }
+  }
+`;
+
+export const SAVE_WORKSPACE_MUTATION = `
+  mutation (
+    $id: ID!
+    $name: NonEmptyString!
+    $tags: [String!]!
+    $health_enabled: Boolean!
+    $task_notification_groups: [String]
+  ) {
+    saveAutomationEnvironment(
+      id: $id
+      name: $name
+      tags: $tags
+      health_enabled: $health_enabled
+      task_notification_groups: $task_notification_groups
+    )
+  }
+`;
+
+export const ARCHIVE_WORKSPACE_MUTATION = `
+  mutation ($id: ID!, $archive: Boolean!) {
+    archiveAutomationEnvironment(id: $id, archive: $archive)
+  }
+`;
+
+export const DELETE_WORKSPACE_MUTATION = `
+  mutation ($id: ID!, $delete: Boolean!, $deletionDays: Int) {
+    deleteAutomationEnvironment(id: $id, delete: $delete, deletionDays: $deletionDays)
   }
 `;

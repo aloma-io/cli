@@ -6,6 +6,9 @@ import {
   LIST_WORKSPACES_QUERY,
   GET_WORKSPACE_QUERY,
   GET_WORKSPACE_STATS_QUERY,
+  DELETE_WORKSPACE_MUTATION,
+  ARCHIVE_WORKSPACE_MUTATION,
+  SAVE_WORKSPACE_MUTATION,
 } from "./query.js";
 
 // Global variable to store the selected workspace ID
@@ -321,7 +324,185 @@ export async function showWorkspace(workspaceIdentifier, stats) {
           (ws.health_enabled ? chalk.green("Enabled") : chalk.red("Disabled")),
       );
     }
-    // Add any other fields you want to display here
+    if (ws.task_notification_groups && ws.task_notification_groups.length > 0) {
+      console.log(chalk.gray("Task Notification Groups: ") + chalk.yellow(ws.task_notification_groups.join(", ")));
+    } else {
+      console.log(chalk.gray("Task Notification Groups: ") + chalk.gray("Disabled"));
+    }
+  }
+}
+
+export async function deleteWorkspace(workspaceIdentifier, cancel = false, deletionDays) {
+  let workspaceId = workspaceIdentifier;
+  if (!workspaceIdentifier) {
+    workspaceId = await getSelectedWorkspace();
+    if (!workspaceId) {
+      console.log(
+        chalk.yellow(
+          "No workspace selected. Use `aloma workspace switch` to select one.",
+        ),
+      );
+      return;
+    }
+  } else {
+    // Try to resolve workspace name to ID
+    const resolvedId = await getWorkspaceId(workspaceIdentifier);
+    if (resolvedId) {
+      workspaceId = resolvedId;
+    }
+  }
+
+  try {
+    // First, get the current workspace to check if it's already being deleted
+    const data = await graphQuery(GET_WORKSPACE_QUERY, {
+      id: workspaceId,
+    });
+    const ws = data.getAutomationEnvironment;
+    
+    if (!ws) {
+      console.log(chalk.red("Workspace not found."));
+      return;
+    }
+
+    if (cancel) {
+      if (!ws.deleting) {
+        console.log(chalk.yellow("Workspace is not being deleted."));
+        return;
+      }
+      // Cancel deletion
+      await graphQuery(DELETE_WORKSPACE_MUTATION, {
+        id: workspaceId,
+        delete: false,
+      });
+      console.log(chalk.green(`Deletion cancelled for workspace [${ws.name}]`));
+    } else {
+      if (ws.deleting) {
+        console.log(chalk.yellow("Workspace is already being deleted."));
+        console.log(chalk.yellow("Use --cancel to cancel the deletion."));
+        return;
+      }
+      // Start deletion
+      await graphQuery(DELETE_WORKSPACE_MUTATION, {
+        id: workspaceId,
+        delete: true,
+        deletionDays: deletionDays,
+      });
+      console.log(chalk.green(`Deletion started for workspace [${ws.name}]`));
+      if (deletionDays) {
+        console.log(chalk.gray(`Workspace will be permanently deleted in ${deletionDays} days.`));
+      }
+    }
+  } catch (error) {
+    console.error(chalk.red("Error managing workspace deletion:"), error.message);
+  }
+}
+
+export async function archiveWorkspace(workspaceIdentifier, unarchive = false) {
+  let workspaceId = workspaceIdentifier;
+  if (!workspaceIdentifier) {
+    workspaceId = await getSelectedWorkspace();
+    if (!workspaceId) {
+      console.log(
+        chalk.yellow(
+          "No workspace selected. Use `aloma workspace switch` to select one.",
+        ),
+      );
+      return;
+    }
+  } else {
+    // Try to resolve workspace name to ID
+    const resolvedId = await getWorkspaceId(workspaceIdentifier);
+    if (resolvedId) {
+      workspaceId = resolvedId;
+    }
+  }
+
+  try {
+    // First, get the current workspace to check its archive status
+    const data = await graphQuery(GET_WORKSPACE_QUERY, {
+      id: workspaceId,
+    });
+    const ws = data.getAutomationEnvironment;
+    
+    if (!ws) {
+      console.log(chalk.red("Workspace not found."));
+      return;
+    }
+
+    if (unarchive) {
+      if (!ws.archived) {
+        console.log(chalk.yellow("Workspace is not archived."));
+        return;
+      }
+      // Unarchive workspace
+      await graphQuery(ARCHIVE_WORKSPACE_MUTATION, {
+        id: workspaceId,
+        archive: false,
+      });
+      console.log(chalk.green(`Workspace [${ws.name}] unarchived successfully.`));
+    } else {
+      if (ws.archived) {
+        console.log(chalk.yellow("Workspace is already archived."));
+        return;
+      }
+      // Archive workspace
+      await graphQuery(ARCHIVE_WORKSPACE_MUTATION, {
+        id: workspaceId,
+        archive: true,
+      });
+      console.log(chalk.green(`Workspace [${ws.name}] archived successfully.`));
+    }
+  } catch (error) {
+    console.error(chalk.red("Error managing workspace archive:"), error.message);
+  }
+}
+
+export async function updateWorkspace(workspaceIdentifier, options) {
+  let workspaceId = workspaceIdentifier;
+  if (!workspaceIdentifier) {
+    workspaceId = await getSelectedWorkspace();
+    if (!workspaceId) {
+      console.log(
+        chalk.yellow(
+          "No workspace selected. Use `aloma workspace switch` to select one.",
+        ),
+      );
+      return;
+    }
+  } else {
+    // Try to resolve workspace name to ID
+    const resolvedId = await getWorkspaceId(workspaceIdentifier);
+    if (resolvedId) {
+      workspaceId = resolvedId;
+    }
+  }
+
+  try {
+    // First, get the current workspace to get existing values
+    const data = await graphQuery(GET_WORKSPACE_QUERY, {
+      id: workspaceId,
+    });
+    const ws = data.getAutomationEnvironment;
+    
+    if (!ws) {
+      console.log(chalk.red("Workspace not found."));
+      return;
+    }
+
+    // Prepare update data with existing values as defaults
+    const updateData = {
+      id: workspaceId,
+      name: options.name || ws.name,
+      tags: options.tags !== undefined ? (options.tags.trim() === "" ? [] : options.tags.split(",").map(tag => tag.trim())) : ws.tags || [],
+      health_enabled: options.health_enabled !== undefined ? options.health_enabled : ws.health_enabled,
+      task_notification_groups: options.notification_groups !== undefined ? (options.notification_groups.trim() === "" ? null : options.notification_groups.split(",").map(group => group.trim())) : ws.task_notification_groups || null
+    };
+
+    // Update workspace
+    await graphQuery(SAVE_WORKSPACE_MUTATION, updateData);
+    console.log(chalk.green(`Workspace [${ws.name}] updated successfully.`));
+  } catch (error) {
+    console.error(chalk.red("Error updating workspace:"), error.message);
   }
 }
 
