@@ -35,6 +35,11 @@ import {
   deleteWebhook,
   showWebhook,
 } from "./commands/webhook/index.js";
+import {
+  listSecrets,
+  addSecret,
+  deleteSecret,
+} from "./commands/secret/index.js";
 import { deployFromYaml } from "./commands/deploy/index.js";
 import {
   listConnectors,
@@ -331,6 +336,50 @@ program
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await deleteWebhook(id, options.workspace);
+      }),
+  );
+
+// Secret commands
+program
+  .command("secret")
+  .description("Manage secrets")
+  .addCommand(
+    new Command("list")
+      .description("List all secrets")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .action(async (options) => {
+        await listSecrets(options.workspace);
+      }),
+  )
+  .addCommand(
+    new Command("add")
+      .description("Add a new secret")
+      .argument("<name>", "Secret name")
+      .argument("<value>", "Secret value")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option("-d, --description <description>", "Secret description")
+      .option("-e, --encrypted", "Mark secret as encrypted")
+      .option("-o, --options <json>", "JSON options for the secret")
+      .action(async (name, value, options) => {
+        let secretOptions = {};
+        if (options.options) {
+          try {
+            secretOptions = JSON.parse(options.options);
+          } catch (error) {
+            console.error(chalk.red("Invalid JSON in options:"), error.message);
+            return;
+          }
+        }
+        await addSecret(name, value, options.description, options.encrypted, secretOptions, options.workspace);
+      }),
+  )
+  .addCommand(
+    new Command("delete")
+      .description("Delete a secret")
+      .argument("<name>", "Secret name")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .action(async (name, options) => {
+        await deleteSecret(name, options.workspace);
       }),
   );
 
