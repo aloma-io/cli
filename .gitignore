@@ -132,7 +132,4 @@ Thumbs.db
 .aloma/
 *.token
 config.json
-keys.json
-secrets/
-# Note: config/ directory IS included in git for templates
-# but actual secrets are in placeholders
+

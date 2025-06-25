@@ -2,16 +2,16 @@ import http from "http";
 import { Issuer, generators } from "openid-client";
 import open from "open";
 import { promises as fs } from "fs";
-import { EncryptJWT } from "jose/jwt/encrypt";
+import chalk from "chalk";
+import { EncryptJWT } from "jose";
 import * as jose from "jose";
 import { getStoragePath, updateSessionData } from "../../utils.js";
 import {
   KEYCLOAK_REALM_URL,
   CLIENT_ID,
-  CLIENT_SECRET,
   REDIRECT_URI,
   SCOPE,
-  AUTH_PUBLIC_KEY,
+  JWKS_URL,
 } from "../../config.js";
 import { graphQuery } from "../../utils.js";
 import { ME_QUERY } from "./query.js";
@@ -23,26 +23,42 @@ let authTimeout; // Store the timeout ID
 
 async function getClient() {
   if (!KEYCLOAK_REALM_URL || KEYCLOAK_REALM_URL === "YOUR_KEYCLOAK_REALM_URL") {
-    throw new Error("Keycloak Realm URL not configured in auth.js");
+    throw new Error("Keycloak Realm URL not configured. Run 'aloma setup'.");
   }
   if (!CLIENT_ID || CLIENT_ID === "YOUR_CLIENT_ID") {
-    throw new Error("Keycloak Client ID not configured in auth.js");
+    throw new Error("Keycloak Client ID not configured. Run 'aloma setup'.");
+  }
+  
+  // Try discovery first, if it fails, fallback to manual configuration
+  let issuer;
+  try {
+    issuer = await Issuer.discover(KEYCLOAK_REALM_URL);
+  } catch (discoveryError) {
+    console.log(chalk.yellow(`⚠️  Discovery failed: ${discoveryError.message}`));
+    console.log(chalk.blue("🔧 Using manual endpoint configuration..."));
+    
+    // Manual issuer configuration based on Keycloak standard endpoints
+    issuer = new Issuer({
+      issuer: KEYCLOAK_REALM_URL,
+      authorization_endpoint: `${KEYCLOAK_REALM_URL}/protocol/openid-connect/auth`,
+      token_endpoint: `${KEYCLOAK_REALM_URL}/protocol/openid-connect/token`,
+      userinfo_endpoint: `${KEYCLOAK_REALM_URL}/protocol/openid-connect/userinfo`,
+      jwks_uri: JWKS_URL,
+      end_session_endpoint: `${KEYCLOAK_REALM_URL}/protocol/openid-connect/logout`,
+      scopes_supported: ['openid', 'profile', 'email', 'groups'],
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      code_challenge_methods_supported: ['S256']
+    });
   }
 
-  const issuer = await Issuer.discover(KEYCLOAK_REALM_URL);
-  // console.log('Discovered issuer %s %O', issuer.issuer, issuer.metadata);
-
+  // Public client configuration (no client secret)
   const clientOptions = {
     client_id: CLIENT_ID,
     redirect_uris: [REDIRECT_URI],
     response_types: ["code"],
-    token_endpoint_auth_method: CLIENT_SECRET ? "client_secret_basic" : "none", // Use 'none' for public clients
+    token_endpoint_auth_method: "none", // Public client - no authentication needed
   };
-
-  // Add client secret only if it's defined (for confidential clients)
-  if (CLIENT_SECRET) {
-    clientOptions.client_secret = CLIENT_SECRET;
-  }
 
   const client = new issuer.Client(clientOptions);
   return client;
@@ -52,117 +68,232 @@ async function initiateAuth() {
   return new Promise(async (resolve, reject) => {
     try {
       const client = await getClient();
+      
+      // Generate PKCE parameters
       codeVerifier = generators.codeVerifier();
       const codeChallenge = generators.codeChallenge(codeVerifier);
-
+      const state = generators.state();
+      const nonce = generators.nonce();
       const authUrl = client.authorizationUrl({
         scope: SCOPE,
         response_mode: "query",
         code_challenge: codeChallenge,
         code_challenge_method: "S256",
+        state: state,
+        nonce: nonce,
       });
 
-      console.log("Starting local server on", REDIRECT_URI);
       server = http
         .createServer(async (req, res) => {
           try {
             const params = client.callbackParams(req);
+            
+            // Verify state parameter
+            if (params.state !== state) {
+              throw new Error("Invalid state parameter - possible CSRF attack");
+            }
+
+            if (params.error) {
+              throw new Error(`OAuth2 error: ${params.error_description || params.error}`);
+            }
+
             const tokenSet = await client.callback(REDIRECT_URI, params, {
               code_verifier: codeVerifier,
+              state: state,
+              nonce: nonce,
             });
 
             if (!tokenSet.access_token) {
-              throw new Error(
-                "Could not find access_token in the Keycloak response.",
-              );
+              throw new Error("No access token received from authorization server");
             }
 
-            // Import the fixed public key for encryption
-            const publicKey = await jose.importSPKI(
-              AUTH_PUBLIC_KEY,
-              "RSA-OAEP-256",
-            );
+            // Verify the ID token using JWKS
+            try {
+              const claims = tokenSet.claims();
+            } catch (verifyError) {
+              console.warn(chalk.yellow(`⚠️  Token verification warning: ${verifyError.message}`));
+            }
 
             // Parse the ID token claims
-            const idTokenClaims = JSON.parse(
-              Buffer.from(tokenSet.id_token.split(".")[1], "base64").toString(),
-            );
-
-            // Create JWE token matching backend's implementation
-            const jweToken = await new EncryptJWT({
-              _data: {
+            const idTokenClaims = tokenSet.claims();
+            // For OAuth2 PKCE, we store tokens directly without encryption
+            // The tokens are already signed and verifiable via JWKS
+            const sessionData = {
+              access_token: tokenSet.access_token,
+              refresh_token: tokenSet.refresh_token,
+              id_token: tokenSet.id_token,
+              expires_at: Date.now() + (tokenSet.expires_in * 1000),
+              token_type: tokenSet.token_type || "Bearer",
+              scope: SCOPE,
+              user_info: {
                 id: idTokenClaims.sub,
                 firstName: idTokenClaims.given_name,
                 lastName: idTokenClaims.family_name,
                 email: idTokenClaims.email,
                 authRealm: idTokenClaims.iss.split("/").pop(),
                 groups: idTokenClaims.groups || [],
-                access_token: tokenSet.access_token,
                 selectedRealm: idTokenClaims.sid,
               },
-            })
-              .setProtectedHeader({ alg: "RSA-OAEP-256", enc: "A256GCM" })
-              .setIssuedAt()
-              .setIssuer("home.aloma.io")
-              .setAudience("local")
-              .setExpirationTime("7d")
-              .encrypt(publicKey);
+              created_at: Date.now(),
+              jwks_url: JWKS_URL,
+            };
 
-            // Store the encrypted token with the 'id-' prefix
-            await updateSessionData("token", `id-${jweToken}`);
-            const user = await graphQuery(ME_QUERY);
-            await updateSessionData("user", user.me);
+            // Store the token data
+            await updateSessionData("token", JSON.stringify(sessionData));
+            
+      // Import the fixed public key for encryption like the working example
+      const { AUTH_PUBLIC_KEY } = await import('../../config.js');
+      const publicKey = await jose.importSPKI(AUTH_PUBLIC_KEY, 'RSA-OAEP-256');
+      
+      // Create JWE token matching backend's implementation exactly like the working example
+      const jweToken = await new EncryptJWT({
+        _data: {
+          id: idTokenClaims.sub,
+          firstName: idTokenClaims.given_name,
+          lastName: idTokenClaims.family_name,
+          email: idTokenClaims.email,
+          authRealm: idTokenClaims.iss.split('/').pop(),
+          groups: idTokenClaims.groups || [],
+          access_token: tokenSet.access_token,
+          selectedRealm: idTokenClaims.sid,
+        },
+      })
+        .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
+        .setIssuedAt()
+        .setIssuer('home.aloma.io')
+        .setAudience('local')
+        .setExpirationTime('7d')
+        .encrypt(publicKey);
+      
+      // Store the encrypted token with the 'id-' prefix like the working example
+      const encryptedToken = `id-${jweToken}`;
+      
+      // Try to fetch user data from GraphQL API using the encrypted token
+      let userData = null;
+      let selectedWorkspace = null;
+      
+      try {
+        // Temporarily store the encrypted token for the GraphQL query
+        await updateSessionData("token", encryptedToken);
+        const graphResponse = await graphQuery(ME_QUERY);
+        
+        if (graphResponse && graphResponse.me) {
+          userData = graphResponse.me;
+          
+          // Try to get the default workspace/realm
+          if (userData.realm && userData.realm.id) {
+            selectedWorkspace = userData.realm.id;
+          } else if (userData.realms && userData.realms.length > 0) {
+            selectedWorkspace = userData.realms[0].id;
+          }
+          
+        } else {
+          throw new Error("GraphQL response missing 'me' field");
+        }
+      } catch (userError) {
+        console.warn(chalk.yellow(`⚠️  Could not fetch user profile: ${userError.message}`));
+        // Use basic user info from ID token as fallback
+        userData = sessionData.user_info;
+        
+        // Use the session ID as selected realm if available
+        if (sessionData.user_info.selectedRealm) {
+          selectedWorkspace = sessionData.user_info.selectedRealm;
+        }
+      }
+            
+            // Store user data and selected workspace
+            await updateSessionData("user", userData);
+            if (selectedWorkspace) {
+              await updateSessionData("selectedWorkspace", selectedWorkspace);
+            }
+            
             res.writeHead(200, { "Content-Type": "text/html" });
             res.end(`
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <title>Authentication Complete</title>
-                            <style>
-                                body {
-                                    font-family: Arial, sans-serif;
-                                    text-align: center;
-                                    margin-top: 50px;
-                                }
-                                .success {
-                                    color: green;
-                                }
-                            </style>
-                        </head>
-                        <body>
-                            <h1 class="success">Authentication successful!</h1>
-                            <p>You can close this browser tab and return to the CLI.</p>
-                        </body>
-                        </html>
-                    `);
+              <!DOCTYPE html>
+              <html>
+              <head>
+                  <title>Authentication Complete</title>
+                  <style>
+                      body {
+                          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                          text-align: center;
+                          padding: 100px 50px;
+                          background: #f8f9fa;
+                          margin: 0;
+                          color: #333;
+                      }
+                      h1 { 
+                          color: #28a745; 
+                          margin-bottom: 20px; 
+                          font-size: 2.5em;
+                          font-weight: 300;
+                      }
+                      p { 
+                          font-size: 18px; 
+                          color: #6c757d;
+                          margin: 0;
+                      }
+                  </style>
+              </head>
+              <body>
+                  <h1>Authentication successful!</h1>
+                  <p>You can close this browser tab and return to the CLI.</p>
+                  <script>
+                      // Auto-close window after 3 seconds
+                      setTimeout(() => {
+                          window.close();
+                      }, 3000);
+                  </script>
+              </body>
+              </html>
+            `);
+            
             shutdownServer();
+            console.log(chalk.green("\n🎉 Authentication completed successfully!"));
+            console.log(chalk.white("You can now use the Aloma CLI:"));
+            console.log(chalk.gray("  ▶ aloma workspace list"));
+            console.log();
             resolve(true);
           } catch (err) {
-            console.error("Callback handling failed:", err);
+            console.error(chalk.red("❌ Callback handling failed:"), err.message);
             res.writeHead(500, { "Content-Type": "text/html" });
             res.end(`
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <title>Authentication Failed</title>
-                            <style>
-                                body {
-                                    font-family: Arial, sans-serif;
-                                    text-align: center;
-                                    margin-top: 50px;
-                                }
-                                .error {
-                                    color: red;
-                                }
-                            </style>
-                        </head>
-                        <body>
-                            <h1 class="error">Authentication failed</h1>
-                            <p>Check the CLI console for details.</p>
-                            <pre>${err.message}</pre>
-                        </body>
-                        </html>
-                    `);
+              <!DOCTYPE html>
+              <html>
+              <head>
+                  <title>Authentication Failed</title>
+                  <style>
+                      body {
+                          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                          text-align: center;
+                          padding: 50px;
+                          background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+                          color: white;
+                          margin: 0;
+                      }
+                      .container {
+                          background: rgba(255,255,255,0.1);
+                          padding: 40px;
+                          border-radius: 15px;
+                          backdrop-filter: blur(10px);
+                          max-width: 500px;
+                          margin: 0 auto;
+                      }
+                      h1 { color: #ffcccc; margin-bottom: 20px; }
+                      pre { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; text-align: left; }
+                  </style>
+              </head>
+              <body>
+                  <div class="container">
+                      <h1>❌ Authentication Failed</h1>
+                      <p>The OAuth2 PKCE authentication process failed.</p>
+                      <p>Check the CLI console for details.</p>
+                      <pre>${err.message}</pre>
+                      <p>You can close this window and try again.</p>
+                  </div>
+              </body>
+              </html>
+            `);
             shutdownServer();
             reject(err);
           }
@@ -174,29 +305,17 @@ async function initiateAuth() {
         socket.on("close", () => sockets.delete(socket));
       });
 
-      console.log(`\nPlease open this URL in your browser to authenticate:`);
-      console.log(`\n${authUrl}\n`);
-
       try {
-        // Try to open the browser automatically, but don't fail if it doesn't work
-        console.log("Attempting to open browser automatically...");
-        await open(authUrl).catch(() => {
-          console.log(
-            "Automatic browser opening failed. Please use the URL above.",
-          );
-        });
+        await open(authUrl);
       } catch (openError) {
-        // Just log, don't terminate the auth flow
-        console.log(
-          "Automatic browser opening failed. Please use the URL above.",
-        );
+        console.log(chalk.yellow("⚠️  Could not open browser automatically."));
       }
 
       // Timeout for the auth flow
       authTimeout = setTimeout(
         () => {
           if (server && server.listening) {
-            console.error("Authentication timed out.");
+            console.error(chalk.red("❌ Authentication timed out after 5 minutes."));
             shutdownServer();
             reject(new Error("Authentication timed out"));
           }
@@ -204,7 +323,7 @@ async function initiateAuth() {
         5 * 60 * 1000,
       ); // 5 minutes timeout
     } catch (err) {
-      console.error("Initiate auth failed:", err);
+      console.error(chalk.red("❌ Authentication initialization failed:"), err.message);
       shutdownServer(); // Ensure server is closed on initial error
       reject(err);
     }

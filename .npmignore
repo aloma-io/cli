@@ -1,0 +1,27 @@
+# Exclude development files
+secrets/
+.env*
+*.token
+config.json
+keys.json
+.aloma/
+
+# Development tools
+.vscode/
+.idea/
+tests/
+*.test.js
+.nyc_output/
+coverage/
+
+# Build files
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

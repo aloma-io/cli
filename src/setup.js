@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { homedir } from "os";
 import chalk from "chalk";
 import { execSync } from "child_process";
 import ora from "ora";
@@ -332,9 +331,6 @@ export async function setupCLIConfig(options = {}) {
     spinner.succeed("CLI configuration setup completed");
 
     console.log(chalk.green("\n✅ Aloma CLI is now configured!"));
-    console.log(chalk.white("\nConfiguration stored in:"));
-    console.log(chalk.gray(`  Config: ${CONFIG_FILE}`));
-    console.log(chalk.gray(`  Keys: ${KEYS_FILE}`));
     console.log(chalk.white("\nYou can now use: aloma auth\n"));
   } catch (error) {
     spinner.fail(`Setup failed: ${error.message}`);
@@ -356,9 +352,8 @@ export async function setupCLIConfig(options = {}) {
 async function setupConfigFiles(force) {
   // Check if config files already exist
   const configExists = fs.existsSync(CONFIG_FILE);
-  const keysExist = fs.existsSync(KEYS_FILE);
 
-  if ((configExists || keysExist) && !force) {
+  if (configExists && !force) {
     console.log(
       chalk.yellow(
         "Configuration files already exist. Use --force to overwrite.",
@@ -372,41 +367,27 @@ async function setupConfigFiles(force) {
     process.env.ALOMA_ENV || process.env.NODE_ENV || "production";
 
   try {
-    // Try to fetch configuration from remote endpoint
-    const configData = await fetchRemoteConfig(environment);
-    const keysData = await fetchRemoteKeys(environment);
-
-    // Write configuration files
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(configData, null, 2));
-    fs.writeFileSync(KEYS_FILE, JSON.stringify(keysData, null, 2));
-
-    console.log(
-      chalk.green(
-        `\n✅ Configuration loaded from template for ${environment} environment`,
-      ),
-    );
-
-    if (configData.setupMethod === "template") {
-      console.log(
-        chalk.yellow(
-          "\n⚠️  Using template configuration with placeholder secrets.",
-        ),
-      );
-      console.log(
-        chalk.white("Please set the following environment variables:"),
-      );
-      console.log(
-        chalk.gray('  export ALOMA_CLIENT_SECRET="your-client-secret"'),
-      );
-      console.log(
-        chalk.gray('  export ALOMA_AUTH_PUBLIC_KEY="your-auth-public-key"'),
-      );
-
-      if (environment === "development") {
-        console.log(chalk.white("\nOr to use production environment:"));
-        console.log(chalk.gray('  export ALOMA_ENV="production"'));
-      }
+    // Load configuration from template files
+    const configData = loadConfigTemplate(environment);
+    
+    if (!configData) {
+      throw new Error(`Configuration template not found for environment: ${environment}`);
     }
+    
+    // Write the configuration to config.json
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(configData, null, 2));
+    
+    // Create keys.json with setup metadata
+    const keysData = {
+      setupTime: new Date().toISOString(),
+      setupMethod: "template",
+      environment: environment
+    };
+    fs.writeFileSync(KEYS_FILE, JSON.stringify(keysData, null, 2));
+    
+    console.log(chalk.green("Using built-in configuration templates."));
+    console.log(chalk.green(`Configuration written to ${CONFIG_FILE}`));
+    console.log(chalk.green(`Keys file written to ${KEYS_FILE}`));
   } catch (error) {
     console.warn(chalk.red(`\nError during setup: ${error.message}`));
     throw error;
@@ -420,8 +401,13 @@ async function setupConfigFiles(force) {
  * @returns {Object}
  */
 function loadConfigTemplate(environment) {
+  // Get the directory of this setup.js file
+  const __filename = import.meta.url.replace("file://", "");
+  const __dirname = path.dirname(__filename);
+  
+  // Build path to config templates relative to this file
   const templatePath = path.join(
-    path.dirname(process.argv[1] || import.meta.url.replace("file://", "")),
+    __dirname,
     "..",
     "config",
     `${environment}.json`,
@@ -432,80 +418,8 @@ function loadConfigTemplate(environment) {
     return JSON.parse(templateData);
   } catch (error) {
     console.warn(
-      `Could not load template for ${environment}. Using minimal defaults.`,
+      `Could not load template for ${environment} from ${templatePath}. Error: ${error.message}`,
     );
-    return {
-      environment,
-      keycloakRealmUrl:
-        environment === "development"
-          ? "https://accounts-dev.aloma.io/realms/master"
-          : "https://accounts.aloma.io/realms/master",
-      clientId: "graph",
-      redirectUri: "http://localhost:8989",
-      scope: "openid profile email groups",
-      graphqlUrl:
-        environment === "development"
-          ? "https://test.graph.aloma.io/graphql"
-          : "https://graph.aloma.io/graphql",
-      graphqlHost:
-        environment === "development"
-          ? "test.graph.aloma.io"
-          : "graph.aloma.io",
-    };
-  }
-}
-
-/**
- * Fetch configuration from remote endpoint
- * Replace this URL with your actual configuration endpoint
- *
- * @param {string} environment - Environment name
- * @returns {Promise<Object>}
- */
-async function fetchRemoteConfig(environment = "production") {
-  try {
-    // This is a placeholder - replace with your actual configuration endpoint
-    // const response = await fetch(`https://api.aloma.io/cli/config/${environment}`);
-    // if (!response.ok) throw new Error('Failed to fetch config');
-    // const remoteConfig = await response.json();
-    // return remoteConfig;
-
-    // For now, throw error to use fallback
-    throw new Error("Remote configuration not available");
-  } catch (error) {
-    // Fallback to template configuration
-    const templateConfig = loadConfigTemplate(environment);
-
-    // Add setup metadata
-    templateConfig.setupTime = new Date().toISOString();
-    templateConfig.setupMethod = "template";
-
-    return templateConfig;
-  }
-}
-
-/**
- * Fetch keys from remote endpoint
- * Replace this URL with your actual keys endpoint
- *
- * @param {string} environment - Environment name
- * @returns {Promise<Object>}
- */
-async function fetchRemoteKeys(environment = "production") {
-  try {
-    // This is a placeholder - replace with your actual keys endpoint
-    // const response = await fetch(`https://api.aloma.io/cli/keys/${environment}`);
-    // if (!response.ok) throw new Error('Failed to fetch keys');
-    // const remoteKeys = await response.json();
-    // return remoteKeys;
-
-    // For now, throw error to use fallback
-    throw new Error("Remote keys not available");
-  } catch (error) {
-    // Return empty keys that will be populated by environment variables or manual setup
-    return {
-      setupTime: new Date().toISOString(),
-      setupMethod: "template",
-    };
+    return null;
   }
 }

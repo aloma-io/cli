@@ -8,33 +8,38 @@ A command-line interface for interacting with Aloma services and utilities.
 npm install -g aloma
 ```
 
-### Security Configuration
+### Quick Setup
 
-The Aloma CLI requires sensitive configuration (API keys, secrets) to function. For security reasons, these are **not included** in the published package. Instead, they are configured locally on your machine during setup.
+The Aloma CLI uses secure OAuth2 with PKCE (Proof Key for Code Exchange) - no client secrets needed!
 
 #### Automatic Setup
-When you install the package, it will attempt to set up configuration automatically:
+Installation automatically configures the CLI:
 ```bash
-npm install -g aloma  # Runs setup automatically
+npm install -g aloma  # OAuth2 PKCE configured automatically
 ```
 
 #### Manual Setup
-If automatic setup fails or you need to reconfigure:
+If you need to reconfigure or troubleshoot:
 ```bash
 aloma setup
 ```
 
-#### Configuration Files
+#### Configuration
 Configuration is stored securely in your home directory:
-- `~/.aloma/config.json` - General configuration
-- `~/.aloma/keys.json` - Security keys
+- `~/.aloma/config.json` - OAuth2 configuration
+- `~/.aloma/keys.json` - Session keys
 
-#### Environment Variables
-For advanced users or CI/CD environments, you can use environment variables:
+#### Security Features
+- 🔒 **OAuth2 + PKCE**: Industry-standard secure authentication
+- 🛡️ **No Client Secrets**: No credentials embedded in the package
+- 🔍 **JWKS Verification**: Tokens verified using public keys
+- 🌐 **Browser-based Auth**: Secure browser-based login flow
+
+#### Environment Selection
+By default, the CLI uses the production environment. For development:
 ```bash
-export ALOMA_CLIENT_SECRET="your-client-secret"
-export ALOMA_AUTH_PUBLIC_KEY="your-auth-public-key"
-export ALOMA_ENV="production"  # or "development"
+export ALOMA_ENV="development"
+aloma setup
 ```
 
 ## Quick Start

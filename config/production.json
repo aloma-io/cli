@@ -1,11 +1,11 @@
 {
   "environment": "production",
   "keycloakRealmUrl": "https://accounts.aloma.io/realms/master",
-  "clientId": "graph",
-  "clientSecret": "YOUR_PRODUCTION_CLIENT_SECRET",
+  "clientId": "graph-cli",
   "redirectUri": "http://localhost:8989",
   "scope": "openid profile email groups",
   "graphqlUrl": "https://graph.aloma.io/graphql",
   "graphqlHost": "graph.aloma.io",
-  "authPublicKey": "YOUR_PRODUCTION_AUTH_PUBLIC_KEY"
+  "jwksUrl": "https://accounts.aloma.io/realms/master/protocol/openid-connect/certs",
+  "authMethod": "oauth2_pkce_jwks"
 }
