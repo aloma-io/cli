@@ -1,12 +1,10 @@
-import os from "os";
 import path from "path";
 import { promises as fs } from "fs";
 import fetch from "node-fetch";
 import { GRAPHQL_URL } from "./config.js";
 import chalk from "chalk";
 import { execSync } from "child_process";
-import { EncryptJWT } from "jose";
-import { importJWK } from "jose";
+import { ME_QUERY } from "./commands/auth/query.js";
 
 // Get the package root directory
 export const getPackageRoot = async () => {
@@ -15,7 +13,6 @@ export const getPackageRoot = async () => {
   try {
     const stats = await fs.stat(localPath);
     if (stats.isDirectory()) {
-      //   console.log('Using local aloma directory:', localPath);
       return localPath;
     }
   } catch (e) {
@@ -28,7 +25,6 @@ export const getPackageRoot = async () => {
     const globalPath = path.join(globalRoot, "aloma");
     const stats = await fs.stat(globalPath);
     if (stats.isDirectory()) {
-      //   console.log('Using global aloma directory:', globalPath);
       return globalPath;
     }
   } catch (e) {
@@ -66,56 +62,14 @@ export const graphQuery = async (query, variables = {}) => {
     );
   }
 
-  let accessToken;
-  try {
-    // Check if this is an encrypted token (starts with 'id-')
-    if (typeof tokenData === "string" && tokenData.startsWith("id-")) {
-      // This is already an encrypted JWE token, use it directly
-      accessToken = tokenData;
-    } else {
-      // Parse the stored token data for raw JWT tokens
-      let parsedToken;
-      if (typeof tokenData === "string") {
-        parsedToken = JSON.parse(tokenData);
-      } else {
-        parsedToken = tokenData; // Already parsed
-      }
-
-      accessToken = parsedToken.access_token;
-
-      if (!accessToken) {
-        throw new Error("No access token found in session data.");
-      }
-
-      // Check if token is expired
-      if (parsedToken.expires_at && parsedToken.expires_at < Date.now()) {
-        throw new Error(
-          "Access token has expired. Please run `aloma auth` to re-authenticate.",
-        );
-      }
-    }
-  } catch (parseError) {
-    console.error(chalk.red("Token parse error:"), parseError.message);
-    throw new Error(
-      `Invalid token data stored: ${parseError.message}. Please run 'aloma auth' to re-authenticate.`,
-    );
-  }
-
   try {
     // Set up headers based on token type
     const headers = {
       "Content-Type": "application/json",
     };
 
-    if (accessToken.startsWith("id-")) {
-      // For encrypted JWE tokens, send with Bearer prefix (backend strips it)
-      headers.Authorization = `Bearer ${accessToken}`;
-      headers.Cookie = `Authorization=Bearer%20${encodeURIComponent(accessToken)}`;
-    } else {
-      // For raw JWT tokens, use Bearer prefix
-      headers.Authorization = `Bearer ${accessToken}`;
-      headers.Cookie = `Authorization=Bearer%20${encodeURIComponent(accessToken)}`;
-    }
+    headers.Authorization = `Bearer ${tokenData}`;
+    headers.Cookie = `Authorization=Bearer%20${encodeURIComponent(tokenData)}`;
 
     const response = await fetch(GRAPHQL_URL, {
       method: "POST",
@@ -199,8 +153,8 @@ export const getSessionData = async (prop = null) => {
 };
 
 export const urlForRegion = async (url) => {
-  const user = await getSessionData("user");
-  const region = user.realm.region;
+  const user = await graphQuery(ME_QUERY);
+  const region = user.me.realm.region;
   if (region && !url.startsWith(`https://${region}.`)) {
     url = url.replace(/https:\/\//, `https://${region}.`);
   }

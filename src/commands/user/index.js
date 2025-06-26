@@ -1,19 +1,27 @@
 import chalk from "chalk";
-import { graphQuery, getSessionData } from "../../utils.js";
+import { graphQuery } from "../../utils.js";
 import {
   FIND_COMPANY_MEMBERS_QUERY,
   INVITE_TO_COMPANY_MUTATION,
   UPDATE_COMPANY_MEMBER_MUTATION,
 } from "./query.js";
 import { rolesToGroups } from "./utils.js";
+import { ME_QUERY } from "../auth/query.js";
+
+async function checkAdminOrOwnerPermission(action) {
+  const user = await graphQuery(ME_QUERY);
+  if (!user?.me?.groups?.some((g) => g === "admin" || g === "owner")) {
+    console.log(
+      chalk.red(`Error: Only administrators or owners can ${action}`),
+    );
+    return false;
+  }
+  return true;
+}
 
 export async function listUsers() {
   try {
-    const user = await getSessionData("user");
-    if (!user?.groups?.some((g) => g === "admin" || g === "owner")) {
-      console.log(
-        chalk.red("Error: Only administrators or owners can list users"),
-      );
+    if (!(await checkAdminOrOwnerPermission("list users"))) {
       return;
     }
 
@@ -50,11 +58,7 @@ export async function listUsers() {
 
 export async function inviteUsers(emails, roles = "developer") {
   try {
-    const user = await getSessionData("user");
-    if (!user?.groups?.some((g) => g === "admin" || g === "owner")) {
-      console.log(
-        chalk.red("Error: Only administrators or owners can invite users"),
-      );
+    if (!(await checkAdminOrOwnerPermission("invite users"))) {
       return;
     }
 
@@ -97,11 +101,7 @@ export async function inviteUsers(emails, roles = "developer") {
 
 export async function updateUser(userId, roles) {
   try {
-    const user = await getSessionData("user");
-    if (!user?.groups?.some((g) => g === "admin" || g === "owner")) {
-      console.log(
-        chalk.red("Error: Only administrators or owners can update users"),
-      );
+    if (!(await checkAdminOrOwnerPermission("update users"))) {
       return;
     }
 
@@ -131,11 +131,7 @@ export async function updateUser(userId, roles) {
 
 export async function removeUser(userId) {
   try {
-    const user = await getSessionData("user");
-    if (!user?.groups?.some((g) => g === "admin" || g === "owner")) {
-      console.log(
-        chalk.red("Error: Only administrators or owners can update users"),
-      );
+    if (!(await checkAdminOrOwnerPermission("remove users"))) {
       return;
     }
 

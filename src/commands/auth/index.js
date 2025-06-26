@@ -217,8 +217,6 @@ async function initiateAuth() {
               }
             }
 
-            // Store user data and selected workspace
-            await updateSessionData("user", userData);
             if (selectedWorkspace) {
               await updateSessionData("selectedWorkspace", selectedWorkspace);
             }

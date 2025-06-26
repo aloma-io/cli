@@ -7,8 +7,8 @@ import { ME_QUERY } from "../auth/query.js";
 import { saveSelectedWorkspace } from "../workspace/index.js";
 
 export const addCompany = async (name, emails) => {
-  const user = await getSessionData("user");
-  if (!user?.groups?.includes("company-manager")) {
+  const user = await graphQuery(ME_QUERY);
+  if (!user?.me?.groups?.includes("company-manager")) {
     console.log(chalk.red("Error: Only administrators can add companies"));
     return;
   }
@@ -26,9 +26,9 @@ export const addCompany = async (name, emails) => {
 };
 
 export const listCompanies = async () => {
-  const user = await getSessionData("user");
-  const realms = user?.realms || [];
-  const currentCompany = user?.realm?.id;
+  const user = await graphQuery(ME_QUERY);
+  const realms = user?.me?.realms || [];
+  const currentCompany = user?.me?.realm?.id;
 
   if (realms.length === 0) {
     console.log(chalk.yellow("No companies found"));
@@ -46,8 +46,8 @@ export const listCompanies = async () => {
 export const switchCompany = async (identifier) => {
   try {
     let companyId = "";
-    const user = await getSessionData("user");
-    const realms = user?.realms || [];
+    const user = await graphQuery(ME_QUERY);
+    const realms = user?.me?.realms || [];
 
     // select the company by name or id
     const company = realms.find(
@@ -83,9 +83,6 @@ export const switchCompany = async (identifier) => {
           .replace("Bearer%20", "");
         // Update the session with the new token
         await updateSessionData("token", token);
-        //update the user with the new company selected
-        const user = await graphQuery(ME_QUERY);
-        await updateSessionData("user", user.me);
         await saveSelectedWorkspace(null);
       }
     }

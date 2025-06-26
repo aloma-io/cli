@@ -1,6 +1,6 @@
-# aloma Package Documentation
+# Aloma CLI Documentation
 
-This document outlines the structure and decisions for the `aloma` package. This package provides utilities and a CLI for interacting with Aloma services.
+This document provides comprehensive documentation for the `aloma` CLI package, including detailed command reference, examples, and advanced usage.
 
 ## Project Structure
 
@@ -15,10 +15,9 @@ This document outlines the structure and decisions for the `aloma` package. This
   - `/connector/`: Connector management commands
   - `/user/`: User management commands
   - `/deploy/`: Deployment commands
+  - `/secret/`: Secret management commands
 - `/src/config.js`: Configuration settings for Keycloak, GraphQL, and other services.
 - `/src/utils.js`: Shared utility functions.
-- `/src/metrics.js`: Contains mock task data and functions to display formatted metrics tables in the console.
-- `/src/logs.js`: Implements a log tailing system with random log generation for simulating real-time task logs.
 - `/src/setup.js`: Implements project creation functionality for generating new Aloma automation projects.
 - `/index.js`: The main entry point for using the package as a Node.js module.
 - `/package.json`: NPM package configuration, including dependencies and CLI definition.
@@ -30,290 +29,378 @@ This document outlines the structure and decisions for the `aloma` package. This
 - `/docs/README.md`: This documentation file.
 - `/tests/`: Directory containing test files.
 
-## Files
+## Commands Overview
 
-- **src/cli.js**: Implements the command-line interface using `commander`. Defines all available commands organized by feature areas.
-- **src/commands/**: Modular command implementations:
-  - **auth/index.js**: Handles the OAuth 2.0 Authorization Code flow with PKCE using Keycloak.
-  - **workspace/index.js**: Manages workspace operations (list, show, switch, add).
-  - **company/index.js**: Manages company operations (list, switch, add).
-  - **step/index.js**: Manages step operations (list, show, add, delete, edit, clone).
-  - **task/index.js**: Manages task operations (list, log, new, clone, stop, resume).
-  - **webhook/index.js**: Manages webhook operations (list, show, add, delete).
-  - **connector/index.js**: Manages connector operations (list, show, add, delete, update, logs, oauth).
-  - **user/index.js**: Manages user operations (list, invite, update, remove).
-  - **deploy/index.js**: Handles deployment from YAML configuration files.
-- **src/config.js**: Contains configuration for Keycloak authentication, GraphQL endpoints, and encryption keys.
-- **src/metrics.js**: Contains mock task data and functions to display formatted metrics tables in the console.
-- **src/logs.js**: Implements a log tailing system with random log generation for simulating real-time task logs.
-- **src/setup.js**: Handles the creation of new Aloma automation projects with predefined structure and templates.
-- **index.js**: Contains exported functions for programmatic use.
-- **package.json**: Defines metadata, dependencies, the `bin` entry (`aloma`), and scripts.
-- **examples/**: Contains example configurations and files for various Aloma features.
+### Authentication
+- `aloma auth` - Authenticate with Aloma via browser
+- `aloma logout` - Clear stored session token
 
-## CLI Usage
+### Workspace Management
+- `aloma workspace list` - List all automation workspaces
+- `aloma workspace show` - Show current workspace details
+- `aloma workspace switch <identifier>` - Switch to a different workspace
+- `aloma workspace add <name>` - Create a new workspace
+- `aloma workspace delete [workspace]` - Delete a workspace
+- `aloma workspace archive [workspace]` - Archive/unarchive a workspace
+- `aloma workspace update [workspace]` - Update workspace settings
+- `aloma workspace source` - Edit source configuration
+- `aloma workspace sync` - Trigger source sync
 
-Running `aloma` with no arguments (or with `-h` or `--help`) displays the main help message.
+### Company Management
+- `aloma company list` - List all available companies
+- `aloma company switch <identifier>` - Switch to a different company
+- `aloma company add <name>` - Create a new company (admin only)
+
+### Step Management
+- `aloma step list` - List all steps
+- `aloma step show <id>` - Show step details
+- `aloma step add <name>` - Add a new step
+- `aloma step delete <id>` - Delete a step
+- `aloma step edit <id>` - Edit a step
+- `aloma step clone <id>` - Clone a step
+
+### Task Management
+- `aloma task list` - List all tasks
+- `aloma task log <id>` - Show task details and logs
+- `aloma task new <name>` - Create a new task
+- `aloma task clone <id>` - Clone a task
+- `aloma task stop <id>` - Stop a running task
+- `aloma task resume <id>` - Resume a stopped task
+
+### Webhook Management
+- `aloma webhook list` - List all webhooks
+- `aloma webhook show <id>` - Show webhook details
+- `aloma webhook add <name>` - Add a new webhook
+- `aloma webhook delete <id>` - Delete a webhook
+
+### Secret Management
+- `aloma secret list` - List all secrets
+- `aloma secret add <name> <value>` - Add a new secret
+- `aloma secret delete <name>` - Delete a secret
+
+### Connector Management
+- `aloma connector list` - List all connectors
+- `aloma connector list-available` - List available connector types
+- `aloma connector show <id>` - Show connector details
+- `aloma connector add <connectorId>` - Add a new connector
+- `aloma connector delete <id>` - Delete a connector
+- `aloma connector update <id>` - Update a connector
+- `aloma connector logs <id>` - View connector logs
+- `aloma connector oauth <id>` - Start OAuth process for a connector
+
+### User Management
+- `aloma user list` - List all users in the current company
+- `aloma user invite <emails>` - Invite new users to the company
+- `aloma user update <id>` - Update a user
+- `aloma user remove <id>` - Remove a user from the company
+
+### Deployment
+- `aloma deploy <yamlPath>` - Deploy resources from YAML configuration
+
+### Setup
+- `aloma setup` - Setup Aloma CLI configuration
+
+## Detailed Command Reference
 
 ### Authentication
 
 #### `aloma auth` or `aloma login`
-
 Initiates the browser-based OAuth 2.0 Authorization Code flow with Keycloak.
-1. Starts a local server on `http://localhost:8989`.
-2. Displays the authentication URL in the console and attempts to open your default browser automatically.
-3. After successful login, Keycloak redirects back to the local server.
-4. The server receives the authorization code, exchanges it for tokens.
-5. The access token is stored securely using the system keychain with fallback to `~/.aloma/token`.
-6. A success message is printed, and the local server shuts down.
+1. Starts a local server on `http://localhost:8989`
+2. Displays the authentication URL in the console and attempts to open your default browser
+3. After successful login, Keycloak redirects back to the local server
+4. The server receives the authorization code, exchanges it for tokens
+5. The access token is stored securely using the system keychain with fallback to `~/.aloma/token`
+6. A success message is printed, and the local server shuts down
 
 #### `aloma logout`
-
 Removes the stored Aloma token from both the system keychain and the fallback file.
 
 ### Workspace Management
 
 #### `aloma workspace list`
-
 Lists all automation workspaces available to the authenticated user.
 
-#### `aloma workspace show`
+Options:
+- `-f, --filter-name <name>` - Filter workspaces by name
+- `-t, --tags <tags>` - Comma-separated list of tags for the workspace
+- `-a, --archived` - Show archived workspaces
 
+#### `aloma workspace show`
 Shows details of the current active workspace.
 
-#### `aloma workspace switch <identifier>`
+Options:
+- `-s, --stats` - Show workspace stats
+- `-sc, --source` - Show source config
+- `-w, --workspace <id>` - Workspace ID
 
+#### `aloma workspace switch <identifier>`
 Switches to a different workspace by name or ID.
 
 #### `aloma workspace add <name>`
-
 Creates a new workspace with the specified name.
 
 Options:
-- `-t, --tags <tags>`: Comma-separated list of tags for the workspace
+- `-t, --tags <tags>` - Comma-separated list of tags for the workspace
+
+#### `aloma workspace delete [workspace]`
+Deletes a workspace or cancels deletion.
+
+Options:
+- `-c, --cancel` - Cancel workspace deletion
+- `-d, --days <days>` - Days until permanent deletion (default: 30)
+
+#### `aloma workspace archive [workspace]`
+Archives or unarchives a workspace.
+
+Options:
+- `-u, --unarchive` - Unarchive workspace
+
+#### `aloma workspace update [workspace]`
+Updates workspace settings.
+
+Options:
+- `-n, --name <name>` - New workspace name
+- `-t, --tags <tags>` - Comma-separated list of tags
+- `-h, --health-enabled <boolean>` - Enable/disable health checks (true/false)
+- `-g, --notification-groups <groups>` - Comma-separated list of notification groups
+
+#### `aloma workspace source`
+Edits the source configuration for the workspace.
+
+Options:
+- `-w, --workspace <id>` - Workspace ID
+- `-f, --file <path>` - Path to source config JSON file
+- `--url <url>` - Source URL
+- `--username <username>` - Source username
+- `--apikey <apikey>` - Source API key
+- `--branch <branch>` - Source branch
+- `--enabled <enabled>` - Source enabled (true/false)
+- `--source-automatic <source_automatic>` - Source automatic (true/false)
+
+#### `aloma workspace sync`
+Triggers source sync for the workspace.
+
+Options:
+- `-w, --workspace <id>` - Workspace ID
 
 ### Company Management
 
 #### `aloma company list`
-
 Lists all available companies.
 
 #### `aloma company switch <identifier>`
-
 Switches to a different company by name or ID.
 
 #### `aloma company add <name>`
-
 Creates a new company (admin only).
 
 Options:
-- `-e, --emails <emails>`: Comma-separated list of emails to invite
+- `-e, --emails <emails>` - Comma-separated list of emails to invite
 
 ### Step Management
 
 #### `aloma step list`
-
 Lists all steps in the current workspace.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
+- `-n, --name <name>` - Filter steps by name
+- `-d, --include-disabled` - Include disabled steps
 
 #### `aloma step show <id>`
-
 Shows detailed information about a specific step.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma step add <name>`
-
 Adds a new step with the specified name.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
-- `-t, --type <type>`: Step type
-- `-f, --file <path>`: Path to file containing step condition and content
+- `-w, --workspace <id>` - Specify workspace ID
+- `-t, --type <type>` - Step type
+- `-f, --file <path>` - Path to file containing step condition and content
 
 #### `aloma step delete <id>`
-
 Deletes a step by ID.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma step edit <id>`
-
 Opens an editor to modify a step.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma step clone <id>`
-
 Creates a copy of an existing step.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 ### Task Management
 
 #### `aloma task list`
-
 Lists all tasks in the current workspace.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
+- `-s, --state <state>` - Filter by state (null, done, attention, error, ignored)
+- `-n, --name <name>` - Filter by task name
 
 #### `aloma task log <id>`
-
 Shows detailed logs for a specific task.
 
 #### `aloma task new <name>`
-
 Creates a new task with the specified name.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
-- `-d, --data <json>`: JSON data to send with the task
-- `-f, --file <path>`: Path to JSON file containing task data
+- `-w, --workspace <id>` - Specify workspace ID
+- `-d, --data <json>` - JSON data to send with the task
+- `-f, --file <path>` - Path to JSON file containing task data
 
 #### `aloma task clone <id>`
-
 Creates a copy of an existing task.
 
 #### `aloma task stop <id>`
-
 Stops a running task.
 
 #### `aloma task resume <id>`
-
 Resumes a stopped task.
 
 ### Webhook Management
 
 #### `aloma webhook list`
-
 Lists all webhooks in the current workspace.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma webhook show <id>`
-
 Shows detailed information about a specific webhook.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma webhook add <name>`
-
 Adds a new webhook with the specified name.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma webhook delete <id>`
-
 Deletes a webhook by ID.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
+
+### Secret Management
+
+#### `aloma secret list`
+Lists all secrets in the current workspace.
+
+Options:
+- `-w, --workspace <id>` - Specify workspace ID
+
+#### `aloma secret add <name> <value>`
+Adds a new secret.
+
+Options:
+- `-w, --workspace <id>` - Specify workspace ID
+- `-d, --description <description>` - Secret description
+- `-e, --encrypted` - Mark secret as encrypted
+- `-o, --options <json>` - JSON options for the secret
+
+#### `aloma secret delete <name>`
+Deletes a secret by name.
+
+Options:
+- `-w, --workspace <id>` - Specify workspace ID
 
 ### Connector Management
 
 #### `aloma connector list`
-
 Lists all connectors in the current workspace.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma connector list-available`
-
 Lists all available connector types and their configurations.
 
 Options:
-- `-f, --filter-name <name>`: Filter connectors by name
+- `-f, --filter-name <name>` - Filter connectors by name
 
 #### `aloma connector show <id>`
-
 Shows detailed information about a specific connector.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma connector add <connectorId>`
-
 Adds a new connector.
 
 Options:
-- `-n, --name <name>`: Connector name
-- `-ns, --namespace <namespace>`: Connector namespace
-- `-w, --workspace <id>`: Specify workspace ID
+- `-n, --name <name>` - Connector name
+- `-ns, --namespace <namespace>` - Connector namespace
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma connector delete <id>`
-
 Deletes a connector by ID.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma connector update <id>`
-
 Updates a connector's configuration.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
-- `-n, --name <name>`: Connector name
-- `-ns, --namespace <namespace>`: Connector namespace
-- `-t, --tags <tags>`: Comma-separated list of tags
-- `-s, --shared`: Share connector in realm
-- `-c, --config <json>`: JSON configuration for the connector
-- `-f, --file <path>`: Path to JSON file containing connector configuration
+- `-w, --workspace <id>` - Specify workspace ID
+- `-n, --name <name>` - Connector name
+- `-ns, --namespace <namespace>` - Connector namespace
+- `-t, --tags <tags>` - Comma-separated list of tags
+- `-s, --shared` - Share connector in realm
+- `-c, --config <json>` - JSON configuration for the connector
+- `-f, --file <path>` - Path to JSON file containing connector configuration
 
 #### `aloma connector logs <id>`
-
 Views logs for a specific connector.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
+- `-w, --workspace <id>` - Specify workspace ID
 
 #### `aloma connector oauth <id>`
-
 Starts OAuth process for a connector.
 
 Options:
-- `-w, --workspace <id>`: Specify workspace ID
-- `-d, --development`: Start OAuth in development mode
+- `-w, --workspace <id>` - Specify workspace ID
+- `-d, --development` - Start OAuth in development mode
 
 ### User Management
 
 #### `aloma user list`
-
 Lists all users in the current company.
 
 #### `aloma user invite <emails>`
-
 Invites new users to the current company.
 
 Options:
-- `-r, --roles <roles>`: Comma-separated list of roles to invite the user with
+- `-r, --roles <roles>` - Comma-separated list of roles to invite the user with
 
 #### `aloma user update <id>`
-
 Updates a user's information.
 
 Options:
-- `-r, --roles <roles>`: Comma-separated list of roles to update the user with
+- `-r, --roles <roles>` - Comma-separated list of roles to update the user with
 
 #### `aloma user remove <id>`
-
 Removes a user from the current company.
 
 ### Deployment
 
 #### `aloma deploy <yamlPath>`
-
 Deploys resources from a YAML configuration file.
 
 The YAML file can define:
@@ -350,59 +437,13 @@ workspaces:
       - name: "data-update"
 ```
 
-### Legacy Commands
+### Setup
 
-The following commands from the original implementation are still available but may be deprecated:
-
-#### `aloma status` or `aloma whoami`
-
-Checks authentication status and displays task metrics.
+#### `aloma setup`
+Sets up Aloma CLI configuration.
 
 Options:
-- `-m, --metrics-only`: Display only metrics without checking authentication
-- `-a, --auth-only`: Display only authentication status without metrics
-
-#### `aloma metrics`
-
-Displays task metrics and system overview.
-
-#### `aloma logs [taskId]`
-
-Displays and tails logs for tasks.
-
-Options:
-- `-i, --interval <ms>`: Set the interval between log entries in milliseconds (default: 1000ms)
-- `-l, --limit <number>`: Limit the number of log entries to display (default: unlimited)
-- `-f, --filter <level>`: Filter logs by level (INFO, DEBUG, WARN, ERROR, SUCCESS)
-
-#### `aloma create <name>`
-
-Creates a new Aloma automation project.
-
-Options:
-- `-d, --directory <path>`: Set a custom directory path for the project
-- `-f, --force`: Overwrite existing directory if it already exists
-
-## Configuration
-
-The CLI uses the following configuration in `src/config.js`:
-
-- **Keycloak Configuration**: OAuth 2.0 authentication settings
-- **GraphQL Configuration**: API endpoint settings
-- **Encryption Configuration**: Public key for token verification
-
-## Dependencies
-
-- **commander**: CLI framework
-- **axios**: HTTP client for API requests
-- **chalk**: Terminal colorization
-- **cli-table3**: Formatted table display
-- **jose**: JWT handling
-- **js-yaml**: YAML file parsing
-- **keytar**: Secure credential storage
-- **open**: Browser opening
-- **openid-client**: OAuth 2.0 client
-- **ora**: Terminal spinners
+- `-f, --force` - Force overwrite existing configuration
 
 ## Examples
 
@@ -448,6 +489,27 @@ export const content = () => {
   }
 }
 ```
+
+## Configuration
+
+The CLI uses the following configuration in `src/config.js`:
+
+- **Keycloak Configuration**: OAuth 2.0 authentication settings
+- **GraphQL Configuration**: API endpoint settings
+- **Encryption Configuration**: Public key for token verification
+
+## Dependencies
+
+- **commander**: CLI framework
+- **axios**: HTTP client for API requests
+- **chalk**: Terminal colorization
+- **cli-table3**: Formatted table display
+- **jose**: JWT handling
+- **js-yaml**: YAML file parsing
+- **keytar**: Secure credential storage
+- **open**: Browser opening
+- **openid-client**: OAuth 2.0 client
+- **ora**: Terminal spinners
 
 ## Local Development Testing
 
