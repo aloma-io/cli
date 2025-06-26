@@ -28,15 +28,17 @@ async function getClient() {
   if (!CLIENT_ID || CLIENT_ID === "YOUR_CLIENT_ID") {
     throw new Error("Keycloak Client ID not configured. Run 'aloma setup'.");
   }
-  
+
   // Try discovery first, if it fails, fallback to manual configuration
   let issuer;
   try {
     issuer = await Issuer.discover(KEYCLOAK_REALM_URL);
   } catch (discoveryError) {
-    console.log(chalk.yellow(`⚠️  Discovery failed: ${discoveryError.message}`));
+    console.log(
+      chalk.yellow(`⚠️  Discovery failed: ${discoveryError.message}`),
+    );
     console.log(chalk.blue("🔧 Using manual endpoint configuration..."));
-    
+
     // Manual issuer configuration based on Keycloak standard endpoints
     issuer = new Issuer({
       issuer: KEYCLOAK_REALM_URL,
@@ -45,10 +47,10 @@ async function getClient() {
       userinfo_endpoint: `${KEYCLOAK_REALM_URL}/protocol/openid-connect/userinfo`,
       jwks_uri: JWKS_URL,
       end_session_endpoint: `${KEYCLOAK_REALM_URL}/protocol/openid-connect/logout`,
-      scopes_supported: ['openid', 'profile', 'email', 'groups'],
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      code_challenge_methods_supported: ['S256']
+      scopes_supported: ["openid", "profile", "email", "groups"],
+      response_types_supported: ["code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      code_challenge_methods_supported: ["S256"],
     });
   }
 
@@ -68,7 +70,7 @@ async function initiateAuth() {
   return new Promise(async (resolve, reject) => {
     try {
       const client = await getClient();
-      
+
       // Generate PKCE parameters
       codeVerifier = generators.codeVerifier();
       const codeChallenge = generators.codeChallenge(codeVerifier);
@@ -87,14 +89,16 @@ async function initiateAuth() {
         .createServer(async (req, res) => {
           try {
             const params = client.callbackParams(req);
-            
+
             // Verify state parameter
             if (params.state !== state) {
               throw new Error("Invalid state parameter - possible CSRF attack");
             }
 
             if (params.error) {
-              throw new Error(`OAuth2 error: ${params.error_description || params.error}`);
+              throw new Error(
+                `OAuth2 error: ${params.error_description || params.error}`,
+              );
             }
 
             const tokenSet = await client.callback(REDIRECT_URI, params, {
@@ -104,14 +108,20 @@ async function initiateAuth() {
             });
 
             if (!tokenSet.access_token) {
-              throw new Error("No access token received from authorization server");
+              throw new Error(
+                "No access token received from authorization server",
+              );
             }
 
             // Verify the ID token using JWKS
             try {
               const claims = tokenSet.claims();
             } catch (verifyError) {
-              console.warn(chalk.yellow(`⚠️  Token verification warning: ${verifyError.message}`));
+              console.warn(
+                chalk.yellow(
+                  `⚠️  Token verification warning: ${verifyError.message}`,
+                ),
+              );
             }
 
             // Parse the ID token claims
@@ -122,7 +132,7 @@ async function initiateAuth() {
               access_token: tokenSet.access_token,
               refresh_token: tokenSet.refresh_token,
               id_token: tokenSet.id_token,
-              expires_at: Date.now() + (tokenSet.expires_in * 1000),
+              expires_at: Date.now() + tokenSet.expires_in * 1000,
               token_type: tokenSet.token_type || "Bearer",
               scope: SCOPE,
               user_info: {
@@ -140,73 +150,79 @@ async function initiateAuth() {
 
             // Store the token data
             await updateSessionData("token", JSON.stringify(sessionData));
-            
-      // Import the fixed public key for encryption like the working example
-      const { AUTH_PUBLIC_KEY } = await import('../../config.js');
-      const publicKey = await jose.importSPKI(AUTH_PUBLIC_KEY, 'RSA-OAEP-256');
-      
-      // Create JWE token matching backend's implementation exactly like the working example
-      const jweToken = await new EncryptJWT({
-        _data: {
-          id: idTokenClaims.sub,
-          firstName: idTokenClaims.given_name,
-          lastName: idTokenClaims.family_name,
-          email: idTokenClaims.email,
-          authRealm: idTokenClaims.iss.split('/').pop(),
-          groups: idTokenClaims.groups || [],
-          access_token: tokenSet.access_token,
-          selectedRealm: idTokenClaims.sid,
-        },
-      })
-        .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
-        .setIssuedAt()
-        .setIssuer('home.aloma.io')
-        .setAudience('local')
-        .setExpirationTime('7d')
-        .encrypt(publicKey);
-      
-      // Store the encrypted token with the 'id-' prefix like the working example
-      const encryptedToken = `id-${jweToken}`;
-      
-      // Try to fetch user data from GraphQL API using the encrypted token
-      let userData = null;
-      let selectedWorkspace = null;
-      
-      try {
-        // Temporarily store the encrypted token for the GraphQL query
-        await updateSessionData("token", encryptedToken);
-        const graphResponse = await graphQuery(ME_QUERY);
-        
-        if (graphResponse && graphResponse.me) {
-          userData = graphResponse.me;
-          
-          // Try to get the default workspace/realm
-          if (userData.realm && userData.realm.id) {
-            selectedWorkspace = userData.realm.id;
-          } else if (userData.realms && userData.realms.length > 0) {
-            selectedWorkspace = userData.realms[0].id;
-          }
-          
-        } else {
-          throw new Error("GraphQL response missing 'me' field");
-        }
-      } catch (userError) {
-        console.warn(chalk.yellow(`⚠️  Could not fetch user profile: ${userError.message}`));
-        // Use basic user info from ID token as fallback
-        userData = sessionData.user_info;
-        
-        // Use the session ID as selected realm if available
-        if (sessionData.user_info.selectedRealm) {
-          selectedWorkspace = sessionData.user_info.selectedRealm;
-        }
-      }
-            
+
+            // Import the fixed public key for encryption like the working example
+            const { AUTH_PUBLIC_KEY } = await import("../../config.js");
+            const publicKey = await jose.importSPKI(
+              AUTH_PUBLIC_KEY,
+              "RSA-OAEP-256",
+            );
+
+            // Create JWE token matching backend's implementation exactly like the working example
+            const jweToken = await new EncryptJWT({
+              _data: {
+                id: idTokenClaims.sub,
+                firstName: idTokenClaims.given_name,
+                lastName: idTokenClaims.family_name,
+                email: idTokenClaims.email,
+                authRealm: idTokenClaims.iss.split("/").pop(),
+                groups: idTokenClaims.groups || [],
+                access_token: tokenSet.access_token,
+                selectedRealm: idTokenClaims.sid,
+              },
+            })
+              .setProtectedHeader({ alg: "RSA-OAEP-256", enc: "A256GCM" })
+              .setIssuedAt()
+              .setIssuer("home.aloma.io")
+              .setAudience("local")
+              .setExpirationTime("7d")
+              .encrypt(publicKey);
+
+            // Store the encrypted token with the 'id-' prefix like the working example
+            const encryptedToken = `id-${jweToken}`;
+
+            // Try to fetch user data from GraphQL API using the encrypted token
+            let userData = null;
+            let selectedWorkspace = null;
+
+            try {
+              // Temporarily store the encrypted token for the GraphQL query
+              await updateSessionData("token", encryptedToken);
+              const graphResponse = await graphQuery(ME_QUERY);
+
+              if (graphResponse && graphResponse.me) {
+                userData = graphResponse.me;
+
+                // Try to get the default workspace/realm
+                if (userData.realm && userData.realm.id) {
+                  selectedWorkspace = userData.realm.id;
+                } else if (userData.realms && userData.realms.length > 0) {
+                  selectedWorkspace = userData.realms[0].id;
+                }
+              } else {
+                throw new Error("GraphQL response missing 'me' field");
+              }
+            } catch (userError) {
+              console.warn(
+                chalk.yellow(
+                  `⚠️  Could not fetch user profile: ${userError.message}`,
+                ),
+              );
+              // Use basic user info from ID token as fallback
+              userData = sessionData.user_info;
+
+              // Use the session ID as selected realm if available
+              if (sessionData.user_info.selectedRealm) {
+                selectedWorkspace = sessionData.user_info.selectedRealm;
+              }
+            }
+
             // Store user data and selected workspace
             await updateSessionData("user", userData);
             if (selectedWorkspace) {
               await updateSessionData("selectedWorkspace", selectedWorkspace);
             }
-            
+
             res.writeHead(200, { "Content-Type": "text/html" });
             res.end(`
               <!DOCTYPE html>
@@ -247,15 +263,20 @@ async function initiateAuth() {
               </body>
               </html>
             `);
-            
+
             shutdownServer();
-            console.log(chalk.green("\n🎉 Authentication completed successfully!"));
+            console.log(
+              chalk.green("\n🎉 Authentication completed successfully!"),
+            );
             console.log(chalk.white("You can now use the Aloma CLI:"));
             console.log(chalk.gray("  ▶ aloma workspace list"));
             console.log();
             resolve(true);
           } catch (err) {
-            console.error(chalk.red("❌ Callback handling failed:"), err.message);
+            console.error(
+              chalk.red("❌ Callback handling failed:"),
+              err.message,
+            );
             res.writeHead(500, { "Content-Type": "text/html" });
             res.end(`
               <!DOCTYPE html>
@@ -315,7 +336,9 @@ async function initiateAuth() {
       authTimeout = setTimeout(
         () => {
           if (server && server.listening) {
-            console.error(chalk.red("❌ Authentication timed out after 5 minutes."));
+            console.error(
+              chalk.red("❌ Authentication timed out after 5 minutes."),
+            );
             shutdownServer();
             reject(new Error("Authentication timed out"));
           }
@@ -323,7 +346,10 @@ async function initiateAuth() {
         5 * 60 * 1000,
       ); // 5 minutes timeout
     } catch (err) {
-      console.error(chalk.red("❌ Authentication initialization failed:"), err.message);
+      console.error(
+        chalk.red("❌ Authentication initialization failed:"),
+        err.message,
+      );
       shutdownServer(); // Ensure server is closed on initial error
       reject(err);
     }

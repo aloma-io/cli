@@ -9,7 +9,11 @@ import {
   DELETE_WORKSPACE_MUTATION,
   ARCHIVE_WORKSPACE_MUTATION,
   SAVE_WORKSPACE_MUTATION,
+  GET_SOURCE_QUERY,
+  SAVE_SOURCE_MUTATION,
 } from "./query.js";
+
+import fs from "fs";
 
 // Global variable to store the selected workspace ID
 let selectedWorkspaceId = null;
@@ -47,6 +51,30 @@ export async function getSelectedWorkspace() {
     return null;
   }
 }
+
+// Common function to resolve workspace ID from identifier or use selected workspace
+async function resolveWorkspaceId(workspaceIdentifier) {
+  let workspaceId = workspaceIdentifier;
+  if (!workspaceIdentifier) {
+    workspaceId = await getSelectedWorkspace();
+    if (!workspaceId) {
+      console.log(
+        chalk.yellow(
+          "No workspace selected. Use `aloma workspace switch` to select one.",
+        ),
+      );
+      return null;
+    }
+  } else {
+    // Try to resolve workspace name to ID
+    const resolvedId = await getWorkspaceId(workspaceIdentifier);
+    if (resolvedId) {
+      workspaceId = resolvedId;
+    }
+  }
+  return workspaceId;
+}
+
 // switch workspace by name or id
 export async function switchWorkspace(workspaceIdentifier) {
   try {
@@ -129,19 +157,9 @@ export async function listWorkspaces(name, tags, archived) {
   }
 }
 
-export async function showWorkspace(workspaceIdentifier, stats) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(
-        chalk.yellow(
-          "No workspace selected. Use `aloma workspace switch` to select one.",
-        ),
-      );
-      return;
-    }
-  }
+export async function showWorkspace(workspaceIdentifier, stats, source) {
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   if (stats) {
     const data = await graphQuery(GET_WORKSPACE_STATS_QUERY, {
@@ -274,6 +292,41 @@ export async function showWorkspace(workspaceIdentifier, stats) {
       `  Connectors: ${chalk.yellow(ws.connectors || 0)}  Webhooks: ${chalk.yellow(ws.webhooks || 0)}`,
     );
     console.log();
+  } else if (source) {
+    try {
+      const data = await graphQuery(GET_SOURCE_QUERY, { id: workspaceId });
+      const ws = data.getAutomationEnvironment;
+      if (!ws) {
+        console.log(chalk.red("Workspace not found."));
+        return;
+      }
+      if (ws.archived || ws.deleting || ws.deleting_at) {
+        console.log(
+          chalk.yellow(
+            "Workspace is archived, being deleted, or scheduled for deletion. No source info shown.",
+          ),
+        );
+        return;
+      }
+      if (!ws.source) {
+        console.log(
+          chalk.yellow("No source configuration found for this workspace."),
+        );
+        return;
+      }
+      console.log(
+        chalk.blue("Source configuration for workspace:") +
+          ` ${ws.name} (ID: ${ws.id})`,
+      );
+      Object.entries(ws.source).forEach(([key, value]) => {
+        console.log(chalk.gray(key + ": ") + chalk.cyan(value));
+      });
+    } catch (error) {
+      console.error(
+        chalk.red("Error fetching source configuration:"),
+        error.message,
+      );
+    }
   } else {
     const data = await graphQuery(GET_WORKSPACE_QUERY, {
       id: workspaceId,
@@ -325,32 +378,25 @@ export async function showWorkspace(workspaceIdentifier, stats) {
       );
     }
     if (ws.task_notification_groups && ws.task_notification_groups.length > 0) {
-      console.log(chalk.gray("Task Notification Groups: ") + chalk.yellow(ws.task_notification_groups.join(", ")));
+      console.log(
+        chalk.gray("Task Notification Groups: ") +
+          chalk.yellow(ws.task_notification_groups.join(", ")),
+      );
     } else {
-      console.log(chalk.gray("Task Notification Groups: ") + chalk.gray("Disabled"));
+      console.log(
+        chalk.gray("Task Notification Groups: ") + chalk.gray("Disabled"),
+      );
     }
   }
 }
 
-export async function deleteWorkspace(workspaceIdentifier, cancel = false, deletionDays) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(
-        chalk.yellow(
-          "No workspace selected. Use `aloma workspace switch` to select one.",
-        ),
-      );
-      return;
-    }
-  } else {
-    // Try to resolve workspace name to ID
-    const resolvedId = await getWorkspaceId(workspaceIdentifier);
-    if (resolvedId) {
-      workspaceId = resolvedId;
-    }
-  }
+export async function deleteWorkspace(
+  workspaceIdentifier,
+  cancel = false,
+  deletionDays,
+) {
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   try {
     // First, get the current workspace to check if it's already being deleted
@@ -358,7 +404,7 @@ export async function deleteWorkspace(workspaceIdentifier, cancel = false, delet
       id: workspaceId,
     });
     const ws = data.getAutomationEnvironment;
-    
+
     if (!ws) {
       console.log(chalk.red("Workspace not found."));
       return;
@@ -389,33 +435,24 @@ export async function deleteWorkspace(workspaceIdentifier, cancel = false, delet
       });
       console.log(chalk.green(`Deletion started for workspace [${ws.name}]`));
       if (deletionDays) {
-        console.log(chalk.gray(`Workspace will be permanently deleted in ${deletionDays} days.`));
+        console.log(
+          chalk.gray(
+            `Workspace will be permanently deleted in ${deletionDays} days.`,
+          ),
+        );
       }
     }
   } catch (error) {
-    console.error(chalk.red("Error managing workspace deletion:"), error.message);
+    console.error(
+      chalk.red("Error managing workspace deletion:"),
+      error.message,
+    );
   }
 }
 
 export async function archiveWorkspace(workspaceIdentifier, unarchive = false) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(
-        chalk.yellow(
-          "No workspace selected. Use `aloma workspace switch` to select one.",
-        ),
-      );
-      return;
-    }
-  } else {
-    // Try to resolve workspace name to ID
-    const resolvedId = await getWorkspaceId(workspaceIdentifier);
-    if (resolvedId) {
-      workspaceId = resolvedId;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   try {
     // First, get the current workspace to check its archive status
@@ -423,7 +460,7 @@ export async function archiveWorkspace(workspaceIdentifier, unarchive = false) {
       id: workspaceId,
     });
     const ws = data.getAutomationEnvironment;
-    
+
     if (!ws) {
       console.log(chalk.red("Workspace not found."));
       return;
@@ -439,7 +476,9 @@ export async function archiveWorkspace(workspaceIdentifier, unarchive = false) {
         id: workspaceId,
         archive: false,
       });
-      console.log(chalk.green(`Workspace [${ws.name}] unarchived successfully.`));
+      console.log(
+        chalk.green(`Workspace [${ws.name}] unarchived successfully.`),
+      );
     } else {
       if (ws.archived) {
         console.log(chalk.yellow("Workspace is already archived."));
@@ -453,29 +492,16 @@ export async function archiveWorkspace(workspaceIdentifier, unarchive = false) {
       console.log(chalk.green(`Workspace [${ws.name}] archived successfully.`));
     }
   } catch (error) {
-    console.error(chalk.red("Error managing workspace archive:"), error.message);
+    console.error(
+      chalk.red("Error managing workspace archive:"),
+      error.message,
+    );
   }
 }
 
 export async function updateWorkspace(workspaceIdentifier, options) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(
-        chalk.yellow(
-          "No workspace selected. Use `aloma workspace switch` to select one.",
-        ),
-      );
-      return;
-    }
-  } else {
-    // Try to resolve workspace name to ID
-    const resolvedId = await getWorkspaceId(workspaceIdentifier);
-    if (resolvedId) {
-      workspaceId = resolvedId;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   try {
     // First, get the current workspace to get existing values
@@ -483,7 +509,7 @@ export async function updateWorkspace(workspaceIdentifier, options) {
       id: workspaceId,
     });
     const ws = data.getAutomationEnvironment;
-    
+
     if (!ws) {
       console.log(chalk.red("Workspace not found."));
       return;
@@ -493,9 +519,24 @@ export async function updateWorkspace(workspaceIdentifier, options) {
     const updateData = {
       id: workspaceId,
       name: options.name || ws.name,
-      tags: options.tags !== undefined ? (options.tags.trim() === "" ? [] : options.tags.split(",").map(tag => tag.trim())) : ws.tags || [],
-      health_enabled: options.health_enabled !== undefined ? options.health_enabled : ws.health_enabled,
-      task_notification_groups: options.notification_groups !== undefined ? (options.notification_groups.trim() === "" ? null : options.notification_groups.split(",").map(group => group.trim())) : ws.task_notification_groups || null
+      tags:
+        options.tags !== undefined
+          ? options.tags.trim() === ""
+            ? []
+            : options.tags.split(",").map((tag) => tag.trim())
+          : ws.tags || [],
+      health_enabled:
+        options.health_enabled !== undefined
+          ? options.health_enabled
+          : ws.health_enabled,
+      task_notification_groups:
+        options.notification_groups !== undefined
+          ? options.notification_groups.trim() === ""
+            ? null
+            : options.notification_groups
+                .split(",")
+                .map((group) => group.trim())
+          : ws.task_notification_groups || null,
     };
 
     // Update workspace
@@ -525,4 +566,124 @@ export async function getWorkspaceId(name) {
   );
 
   return workspace ? workspace.id : null;
+}
+
+// Edit source config for a workspace
+export async function sourceEdit(workspaceIdentifier, options) {
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
+
+  let config = {};
+  if (options.file) {
+    try {
+      const fileContent = fs.readFileSync(options.file, "utf-8");
+      config = JSON.parse(fileContent);
+    } catch (err) {
+      console.error(
+        chalk.red("Failed to read or parse config file:"),
+        err.message,
+      );
+      return;
+    }
+  } else {
+    const data = await graphQuery(GET_SOURCE_QUERY, { id: workspaceId });
+    const ws = data.getAutomationEnvironment;
+
+    if (!ws) {
+      console.log(chalk.red("Workspace not found."));
+      return;
+    }
+
+    if (ws.archived || ws.deleting || ws.deleting_at) {
+      console.log(
+        chalk.yellow(
+          "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.",
+        ),
+      );
+      return;
+    }
+    // Accept CLI options for each field
+    config = {
+      url: options.url || ws.source.url || null,
+      username: options.username || ws.source.username || null,
+      apikey: options.apikey || ws.source.apikey || null,
+      branch: options.branch || ws.source.branch || null,
+      enabled: options.enabled || ws.source.enabled || false,
+      source_automatic:
+        options.source_automatic || ws.source.source_automatic || false,
+    };
+  }
+
+  // Remove undefined fields
+  Object.keys(config).forEach(
+    (k) => config[k] === undefined && delete config[k],
+  );
+
+  try {
+    await graphQuery(SAVE_SOURCE_MUTATION, { id: workspaceId, ...config });
+    console.log(chalk.green("Source configuration updated successfully."));
+  } catch (error) {
+    console.error(
+      chalk.red("Error updating source configuration:"),
+      error.message,
+    );
+  }
+}
+
+// Sync source for a workspace
+export async function syncSource(workspaceIdentifier) {
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
+
+  try {
+    const data = await graphQuery(GET_SOURCE_QUERY, { id: workspaceId });
+    const ws = data.getAutomationEnvironment;
+
+    if (!ws) {
+      console.log(chalk.red("Workspace not found."));
+      return;
+    }
+
+    if (ws.archived || ws.deleting || ws.deleting_at) {
+      console.log(
+        chalk.yellow(
+          "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.",
+        ),
+      );
+      return;
+    }
+
+    if (!ws.source) {
+      console.log(
+        chalk.yellow("No source configuration found for this workspace."),
+      );
+      return;
+    }
+
+    if (ws.source.source_automatic) {
+      console.log(
+        chalk.yellow("Source automatic sync is enabled for this workspace."),
+      );
+      return;
+    }
+
+    // Use SAVE_SOURCE_MUTATION to trigger sync with current values and source_do_sync: true
+    await graphQuery(SAVE_SOURCE_MUTATION, {
+      id: workspaceId,
+      url: ws.source.url,
+      username: ws.source.username,
+      apikey: "", // Preserve API key presence
+      branch: ws.source.branch,
+      enabled: ws.source.enabled,
+      source_automatic: ws.source.source_automatic,
+      source_do_sync: true,
+    });
+
+    console.log(
+      chalk.green("Source sync triggered successfully for workspace:") +
+        ` ${ws.name} (ID: ${ws.id})`,
+    );
+  } catch (error) {
+    console.error(chalk.red("Error triggering source sync:"), error.message);
+  }
 }

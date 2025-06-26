@@ -112,7 +112,11 @@ export async function addStep(
   }
 }
 
-export async function listSteps(includeDisabled = false, workspaceIdentifier, name = null) {
+export async function listSteps(
+  includeDisabled = false,
+  workspaceIdentifier,
+  name = null,
+) {
   let workspaceId = workspaceIdentifier;
   if (!workspaceIdentifier) {
     workspaceId = await getSelectedWorkspace();
@@ -287,18 +291,20 @@ export async function editStep(stepId, workspaceIdentifier) {
  */
 
 export const condition = ${(() => {
-  try {
-    if (step.content?.if) {
-      // Use Function constructor to safely evaluate the JavaScript object
-      const conditionObj = new Function(`return ${step.content.if}`)();
-      return JSON.stringify(conditionObj, null, 2);
-    }
-    return JSON.stringify({}, null, 2);
-  } catch (error) {
-    console.warn(chalk.yellow(`Warning: Could not parse condition: ${error.message}`));
-    return JSON.stringify({}, null, 2);
-  }
-})()};
+      try {
+        if (step.content?.if) {
+          // Use Function constructor to safely evaluate the JavaScript object
+          const conditionObj = new Function(`return ${step.content.if}`)();
+          return JSON.stringify(conditionObj, null, 2);
+        }
+        return JSON.stringify({}, null, 2);
+      } catch (error) {
+        console.warn(
+          chalk.yellow(`Warning: Could not parse condition: ${error.message}`),
+        );
+        return JSON.stringify({}, null, 2);
+      }
+    })()};
 
 export const content = async () => {
 ${step.content?.do || ""}
