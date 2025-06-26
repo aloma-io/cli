@@ -10,7 +10,6 @@ const __dirname = dirname(__filename);
 // Configuration file paths
 const CONFIG_DIR = join(homedir(), ".aloma");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
-const KEYS_FILE = join(CONFIG_DIR, "keys.json");
 
 // Default configuration templates path (for fallback)
 const TEMPLATE_DIR = join(__dirname, "..", "config");
@@ -43,21 +42,8 @@ function loadConfig() {
   }
 }
 
-function loadKeys() {
-  try {
-    const keysData = readFileSync(KEYS_FILE, "utf8");
-    return JSON.parse(keysData);
-  } catch (error) {
-    console.warn(
-      'Aloma keys not found. Run "aloma setup" to configure the CLI.',
-    );
-    return {};
-  }
-}
-
 // Load configuration
 const config = loadConfig();
-const keys = loadKeys();
 
 // Export all configuration with environment variable overrides
 export const ENVIRONMENT_NAME = ENVIRONMENT;
@@ -79,7 +65,6 @@ export const GRAPHQL_HOST =
 // AUTH_PUBLIC_KEY for JWT encryption - the key used by the backend
 export const AUTH_PUBLIC_KEY =
   process.env.ALOMA_AUTH_PUBLIC_KEY ||
-  keys.authPublicKey ||
   config.authPublicKey ||
   `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz/dm1LWt0YnfJpfcK8++oMZ7YGVyFU5aWuqzZnuzHVlrvH1NzCuCDDZ2BjRGvLjirsJu6GlrNuE4r6QORqBi+xZerHLsMcLVzKodNoCt69YdtuELY6O3LdTbvUEzsVpVMXF2NisVVZkEnQ3Uq0ZPWzdoMpGkHY4+qhaVRQqZwcYZ+JkmcjmBUB2QB19rufSgAoSEyvm3Eo8kNFh0qI973Pb/+7sELbIwp37yMBv0gmvc2NtxT76Nr2BtTFuqYL3zGX/7wETJ1PfA6ZENYS5SD/zC+n/LqShQv+pbAJYrj5hyAoGzNSjWTjt/kng+iNc/vtLWUxJLi3W8zp2f99LriwIDAQAB
@@ -92,4 +77,4 @@ export const JWKS_URL =
   "https://accounts.aloma.io/realms/master/protocol/openid-connect/certs";
 
 // Export configuration paths for setup script
-export { CONFIG_DIR, CONFIG_FILE, KEYS_FILE };
+export { CONFIG_DIR, CONFIG_FILE };

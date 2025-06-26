@@ -3,7 +3,7 @@ import path from "path";
 import chalk from "chalk";
 import { execSync } from "child_process";
 import ora from "ora";
-import { CONFIG_DIR, CONFIG_FILE, KEYS_FILE } from "./config.js";
+import { CONFIG_DIR, CONFIG_FILE } from "./config.js";
 
 /**
  * Creates a new Aloma automation project
@@ -378,18 +378,6 @@ async function setupConfigFiles(force) {
 
     // Write the configuration to config.json
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(configData, null, 2));
-
-    // Create keys.json with setup metadata
-    const keysData = {
-      setupTime: new Date().toISOString(),
-      setupMethod: "template",
-      environment: environment,
-    };
-    fs.writeFileSync(KEYS_FILE, JSON.stringify(keysData, null, 2));
-
-    console.log(chalk.green("Using built-in configuration templates."));
-    console.log(chalk.green(`Configuration written to ${CONFIG_FILE}`));
-    console.log(chalk.green(`Keys file written to ${KEYS_FILE}`));
   } catch (error) {
     console.warn(chalk.red(`\nError during setup: ${error.message}`));
     throw error;
