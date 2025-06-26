@@ -10,6 +10,8 @@ import {
   deleteWorkspace,
   archiveWorkspace,
   updateWorkspace,
+  sourceEdit,
+  syncSource,
 } from "./commands/workspace/index.js";
 import {
   addCompany,
@@ -117,9 +119,10 @@ program
     new Command("show")
       .description("Show current workspace")
       .option("-s, --stats", "Show workspace stats")
+      .option("-sc, --source", "Show source config")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (options) => {
-        await showWorkspace(options.workspace, options.stats);
+        await showWorkspace(options.workspace, options.stats, options.source);
       }),
   )
   .addCommand(
@@ -145,7 +148,10 @@ program
   .addCommand(
     new Command("delete")
       .description("Delete a workspace or cancel deletion")
-      .argument("[workspace]", "Workspace ID or name (uses current if not specified)")
+      .argument(
+        "[workspace]",
+        "Workspace ID or name (uses current if not specified)",
+      )
       .option("-c, --cancel", "Cancel workspace deletion")
       .option("-d, --days <days>", "Days until permanent deletion", "30")
       .action(async (workspace, options) => {
@@ -156,7 +162,10 @@ program
   .addCommand(
     new Command("archive")
       .description("Archive or unarchive a workspace")
-      .argument("[workspace]", "Workspace ID or name (uses current if not specified)")
+      .argument(
+        "[workspace]",
+        "Workspace ID or name (uses current if not specified)",
+      )
       .option("-u, --unarchive", "Unarchive workspace")
       .action(async (workspace, options) => {
         await archiveWorkspace(workspace, options.unarchive);
@@ -165,24 +174,64 @@ program
   .addCommand(
     new Command("update")
       .description("Update workspace settings")
-      .argument("[workspace]", "Workspace ID or name (uses current if not specified)")
+      .argument(
+        "[workspace]",
+        "Workspace ID or name (uses current if not specified)",
+      )
       .option("-n, --name <name>", "New workspace name")
       .option("-t, --tags <tags>", "Comma-separated list of tags")
-      .option("-h, --health-enabled <boolean>", "Enable/disable health checks (true/false)")
-      .option("-g, --notification-groups <groups>", "Comma-separated list of notification groups")
+      .option(
+        "-h, --health-enabled <boolean>",
+        "Enable/disable health checks (true/false)",
+      )
+      .option(
+        "-g, --notification-groups <groups>",
+        "Comma-separated list of notification groups",
+      )
       .action(async (workspace, options) => {
         // Parse health_enabled boolean
         let healthEnabled;
         if (options.healthEnabled !== undefined) {
-          healthEnabled = options.healthEnabled.toLowerCase() === 'true';
+          healthEnabled = options.healthEnabled.toLowerCase() === "true";
         }
-        
+
         await updateWorkspace(workspace, {
           name: options.name,
           tags: options.tags,
           health_enabled: healthEnabled,
-          notification_groups: options.notificationGroups
+          notification_groups: options.notificationGroups,
         });
+      }),
+  )
+  .addCommand(
+    new Command("source")
+      .description("Edit the source configuration for the workspace")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option("-f, --file <path>", "Path to source config JSON file")
+      .option("--url <url>", "Source URL")
+      .option("--username <username>", "Source username")
+      .option("--apikey <apikey>", "Source API key")
+      .option("--branch <branch>", "Source branch")
+      .option("--enabled <enabled>", "Source enabled (true/false)")
+      .option(
+        "--source-automatic <source_automatic>",
+        "Source automatic (true/false)",
+      )
+      .action(async (options) => {
+        // Convert string booleans to actual booleans if present
+        if (options.enabled !== undefined)
+          options.enabled = options.enabled === "true";
+        if (options.sourceAutomatic !== undefined)
+          options.source_automatic = options.sourceAutomatic === "true";
+        await sourceEdit(options.workspace, options);
+      }),
+  )
+  .addCommand(
+    new Command("sync")
+      .description("Trigger source sync for the workspace")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .action(async (options) => {
+        await syncSource(options.workspace);
       }),
   );
 
@@ -229,7 +278,11 @@ program
       .option("-n, --name <name>", "Filter steps by name")
       .option("-d, --include-disabled", "Include disabled steps")
       .action(async (options) => {
-        await listSteps(options.includeDisabled, options.workspace, options.name);
+        await listSteps(
+          options.includeDisabled,
+          options.workspace,
+          options.name,
+        );
       }),
   )
   .addCommand(
@@ -418,7 +471,14 @@ program
             return;
           }
         }
-        await addSecret(name, value, options.description, options.encrypted, secretOptions, options.workspace);
+        await addSecret(
+          name,
+          value,
+          options.description,
+          options.encrypted,
+          secretOptions,
+          options.workspace,
+        );
       }),
   )
   .addCommand(

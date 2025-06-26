@@ -119,3 +119,50 @@ export const DELETE_WORKSPACE_MUTATION = `
     deleteAutomationEnvironment(id: $id, delete: $delete, deletionDays: $deletionDays)
   }
 `;
+
+export const GET_SOURCE_QUERY = `
+  query ($id: ID!) {
+    getAutomationEnvironment(id: $id) {
+      id
+      name
+      archived
+      deleting
+      deleting_at
+      source {
+        username
+        has_apikey
+        url
+        branch
+        enabled
+        last_source_sync
+        last_source_sync_errors
+        source_automatic
+        source_do_sync
+      }
+    }
+  }
+`;
+
+export const SAVE_SOURCE_MUTATION = `
+  mutation (
+    $id: ID!
+    $url: String
+    $username: String
+    $apikey: String
+    $branch: String
+    $enabled: Boolean
+    $source_automatic: Boolean
+    $source_do_sync: Boolean
+  ) {
+    saveAutomationEnvironmentSource(
+      id: $id
+      url: $url
+      username: $username
+      apikey: $apikey
+      branch: $branch
+      enabled: $enabled
+      source_automatic: $source_automatic
+      source_do_sync: $source_do_sync
+    )
+  }
+`;

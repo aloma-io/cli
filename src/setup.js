@@ -3,7 +3,7 @@ import path from "path";
 import chalk from "chalk";
 import { execSync } from "child_process";
 import ora from "ora";
-import { CONFIG_DIR, CONFIG_FILE, KEYS_FILE } from "./config.js";
+import { CONFIG_DIR, CONFIG_FILE } from "./config.js";
 
 /**
  * Creates a new Aloma automation project
@@ -369,25 +369,15 @@ async function setupConfigFiles(force) {
   try {
     // Load configuration from template files
     const configData = loadConfigTemplate(environment);
-    
+
     if (!configData) {
-      throw new Error(`Configuration template not found for environment: ${environment}`);
+      throw new Error(
+        `Configuration template not found for environment: ${environment}`,
+      );
     }
-    
+
     // Write the configuration to config.json
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(configData, null, 2));
-    
-    // Create keys.json with setup metadata
-    const keysData = {
-      setupTime: new Date().toISOString(),
-      setupMethod: "template",
-      environment: environment
-    };
-    fs.writeFileSync(KEYS_FILE, JSON.stringify(keysData, null, 2));
-    
-    console.log(chalk.green("Using built-in configuration templates."));
-    console.log(chalk.green(`Configuration written to ${CONFIG_FILE}`));
-    console.log(chalk.green(`Keys file written to ${KEYS_FILE}`));
   } catch (error) {
     console.warn(chalk.red(`\nError during setup: ${error.message}`));
     throw error;
@@ -404,7 +394,7 @@ function loadConfigTemplate(environment) {
   // Get the directory of this setup.js file
   const __filename = import.meta.url.replace("file://", "");
   const __dirname = path.dirname(__filename);
-  
+
   // Build path to config templates relative to this file
   const templatePath = path.join(
     __dirname,
