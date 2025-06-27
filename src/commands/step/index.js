@@ -11,7 +11,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import open from "open";
-import { getSelectedWorkspace } from "../workspace/index.js";
+import { getSelectedWorkspace, getWorkspace } from "../workspace/index.js";
 
 export async function addStep(
   name,
@@ -451,5 +451,261 @@ export async function cloneStep(stepId, workspaceIdentifier) {
     return newStepId;
   } catch (error) {
     console.error(chalk.red(`Error cloning step: ${error.message}`));
+  }
+}
+
+export async function pullStep(workspaceIdentifier, stepId, targetPath) {
+  let workspaceId = workspaceIdentifier;
+  if (!workspaceIdentifier) {
+    workspaceId = await getSelectedWorkspace();
+    if (!workspaceId) {
+      console.log(chalk.yellow("⚠ Workspace ID is required"));
+      return;
+    }
+  }
+
+  // Get workspace details to create folder with workspace name 
+  const workspace = await getWorkspace(workspaceId);
+  if (!workspace) {
+    console.log(chalk.red("Workspace not found"));
+    return;
+  }
+
+  // Use current directory if no path specified
+  const basePath = targetPath || process.cwd();
+  const workspaceFolder = path.join(basePath, workspace.name.replace(/[^a-z0-9]/gi, "_").toLowerCase());
+
+  try {
+    // Create workspace folder if it doesn't exist
+    await fs.mkdir(workspaceFolder, { recursive: true });
+
+    if (stepId) {
+      // Pull specific step
+      const data = await graphQuery(GET_STEP_QUERY, { id: stepId });
+      const step = data.getAutomationStep;
+
+      if (!step) {
+        console.log(chalk.yellow(`Step with ID ${stepId} not found.`));
+        return;
+      }
+
+      await createStepFile(step, workspaceFolder);
+      console.log(chalk.green(`Successfully pulled step: ${step.name}`));
+    } else {
+      // Pull all steps
+      const data = await graphQuery(LIST_STEPS_QUERY, {
+        id: workspaceId,
+        includeDisabled: true,
+      });
+      const steps = data.listAutomationSteps;
+
+      if (!steps || steps.length === 0) {
+        console.log(chalk.yellow("No steps found in workspace."));
+        return;
+      }
+
+      // Get full details for each step
+      for (const stepSummary of steps) {
+        const stepData = await graphQuery(GET_STEP_QUERY, { id: stepSummary.id });
+        const step = stepData.getAutomationStep;
+        if (step) {
+          await createStepFile(step, workspaceFolder);
+        }
+      }
+
+      console.log(chalk.green(`Successfully pulled ${steps.length} steps to: ${workspaceFolder}`));
+    }
+  } catch (error) {
+    console.error(chalk.red("Error pulling steps:"), error.message);
+  }
+}
+
+export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
+  let workspaceId = workspaceIdentifier;
+  if (!workspaceIdentifier) {
+    workspaceId = await getSelectedWorkspace();
+    if (!workspaceId) {
+      console.log(chalk.yellow("⚠ Workspace ID is required"));
+      return;
+    }
+  }
+
+  // Get workspace details to find folder
+  const workspace = await getWorkspace(workspaceId);
+  if (!workspace) {
+    console.log(chalk.red("Workspace not found"));
+    return;
+  }
+
+  // Use current directory if no path specified
+  const basePath = sourcePath || process.cwd();
+  const workspaceFolder = path.join(basePath, workspace.name.replace(/[^a-z0-9]/gi, "_").toLowerCase());
+
+  try {
+    // Check if workspace folder exists
+    try {
+      await fs.access(workspaceFolder);
+    } catch (error) {
+      console.log(chalk.yellow(`Workspace folder not found: ${workspaceFolder}`));
+      return;
+    }
+
+    if (stepId) {
+      // Sync specific step
+      const data = await graphQuery(GET_STEP_QUERY, { id: stepId });
+      const step = data.getAutomationStep;
+
+      if (!step) {
+        console.log(chalk.yellow(`Step with ID ${stepId} not found.`));
+        return;
+      }
+
+      const stepFilePath = path.join(workspaceFolder, `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`);
+      
+      try {
+        await fs.access(stepFilePath);
+        await updateStepFromFile(step, stepFilePath);
+        console.log(chalk.green(`Successfully synced step: ${step.name}`));
+      } catch (error) {
+        console.log(chalk.yellow(`Step file not found: ${stepFilePath}`));
+      }
+    } else {
+      // Sync all steps
+      const data = await graphQuery(LIST_STEPS_QUERY, {
+        id: workspaceId,
+        includeDisabled: true,
+      });
+      const steps = data.listAutomationSteps;
+
+      if (!steps || steps.length === 0) {
+        console.log(chalk.yellow("No steps found in workspace."));
+        return;
+      }
+
+      let syncedCount = 0;
+      for (const stepSummary of steps) {
+        const stepData = await graphQuery(GET_STEP_QUERY, { id: stepSummary.id });
+        const step = stepData.getAutomationStep;
+        if (step) {
+          const stepFilePath = path.join(workspaceFolder, `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`);
+          
+          try {
+            await fs.access(stepFilePath);
+            await updateStepFromFile(step, stepFilePath);
+            syncedCount++;
+          } catch (error) {
+            console.log(chalk.yellow(`Step file not found: ${stepFilePath}`));
+          }
+        }
+      }
+
+      console.log(chalk.green(`Successfully synced ${syncedCount} steps from: ${workspaceFolder}`));
+    }
+  } catch (error) {
+    console.error(chalk.red("Error syncing steps:"), error.message);
+  }
+}
+
+// Helper function to create step file
+async function createStepFile(step, workspaceFolder) {
+  const fileName = `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`;
+  const filePath = path.join(workspaceFolder, fileName);
+
+  const fileContent = `/**
+ * Step: ${step.name}
+ * ID: ${step.id}
+ * 
+ * Edit the condition and content below.
+ * The condition should be a valid JavaScript object (trailing commas are allowed).
+ * The content should be JavaScript code that will be executed.
+ * 
+ * Example:
+ * condition = {
+ *   newStep: true,  // trailing commas are fine
+ *   status: "active"
+ * };
+ * 
+ * content = () => {
+ *   console.log('running step');
+ *   data.newStep = true;
+ * };
+ */
+
+export const condition = ${(() => {
+    try {
+      if (step.content?.if) {
+        // Use Function constructor to safely evaluate the JavaScript object
+        const conditionObj = new Function(`return ${step.content.if}`)();
+        return JSON.stringify(conditionObj, null, 2);
+      }
+      return JSON.stringify({}, null, 2);
+    } catch (error) {
+      console.warn(
+        chalk.yellow(`Warning: Could not parse condition: ${error.message}`),
+      );
+      return JSON.stringify({}, null, 2);
+    }
+  })()};
+
+export const content = async () => {
+${step.content?.do || ""}
+};
+`;
+
+  await fs.writeFile(filePath, fileContent, "utf8");
+}
+
+// Helper function to update step from file
+async function updateStepFromFile(step, filePath) {
+  const fileContent = await fs.readFile(filePath, "utf8");
+
+  // Extract condition and content using regex
+  const conditionMatch = fileContent.match(
+    /export const condition = ([\s\S]*?);/,
+  );
+  const contentMatch = fileContent.match(
+    /export const content = async \(\) => \{([\s\S]*?)\};/,
+  );
+
+  if (!conditionMatch || !contentMatch) {
+    console.error(
+      chalk.red(`Could not parse condition and content from file: ${filePath}`),
+    );
+    return;
+  }
+
+  // Parse the condition as JavaScript object and convert to JSON string
+  let newCondition;
+  try {
+    // First, try to evaluate the condition as a JavaScript object
+    const conditionStr = conditionMatch[1].trim();
+    // Use Function constructor to safely evaluate the object
+    const conditionObj = new Function(`return ${conditionStr}`)();
+    // Then convert to JSON string
+    newCondition = JSON.stringify(conditionObj);
+  } catch (error) {
+    console.error(
+      chalk.red(
+        `Invalid condition format in ${filePath}: ${error.message}\nPlease ensure it is a valid JavaScript object.`,
+      ),
+    );
+    return;
+  }
+  const newContent = contentMatch[1].trim();
+
+  // Update the step
+  const updateData = await graphQuery(SAVE_STEP_MUTATION, {
+    id: step.id,
+    name: step.name,
+    if: newCondition,
+    do: newContent,
+    enabled: step.enabled,
+    version: step.version,
+    nocode_content: step.nocode_content,
+    config_content: step.config_content,
+  });
+
+  if (!updateData.saveAutomationStep) {
+    console.log(chalk.yellow(`Failed to update step: ${step.name}`));
   }
 }

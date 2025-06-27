@@ -687,3 +687,24 @@ export async function syncSource(workspaceIdentifier) {
     console.error(chalk.red("Error triggering source sync:"), error.message);
   }
 }
+
+export async function getWorkspace(identifier) {
+  const token = await getSessionData("token");
+  if (!token) {
+    console.log(
+      chalk.yellow(
+        "⚠ Not authenticated: No token found. Run `aloma auth` to login.",
+      ),
+    );
+    return;
+  }
+
+  const data = await graphQuery(LIST_ENVIRONMENTS_QUERY);
+  const environments = data.listAutomationEnvironmentWithStats;
+
+  const workspace = environments.find(
+    (env) => env.name.toLowerCase() === identifier.toLowerCase() || env.id === identifier,
+  );
+
+return workspace || null
+}

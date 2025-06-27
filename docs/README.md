@@ -58,6 +58,8 @@ This document provides comprehensive documentation for the `aloma` CLI package, 
 - `aloma step delete <id>` - Delete a step
 - `aloma step edit <id>` - Edit a step
 - `aloma step clone <id>` - Clone a step
+- `aloma step pull` - Pull steps from workspace to local files
+- `aloma step sync` - Sync local step files to workspace
 
 ### Task Management
 - `aloma task list` - List all tasks
@@ -239,6 +241,69 @@ Creates a copy of an existing step.
 
 Options:
 - `-w, --workspace <id>` - Specify workspace ID
+
+#### `aloma step pull`
+Pulls steps from workspace to local files. Creates a folder with the workspace name and generates JavaScript files for each step.
+
+Options:
+- `-w, --workspace <id>` - Specify workspace ID
+- `-s, --step <id>` - Step ID (if not specified, pulls all steps)
+- `-p, --path <path>` - Target path (default: current directory)
+
+**Examples:**
+```bash
+# Pull all steps from current workspace to current directory
+aloma step pull
+
+# Pull all steps from specific workspace to a custom path
+aloma step pull -w workspace-123 -p /path/to/steps
+
+# Pull a specific step from current workspace
+aloma step pull -s step-456
+```
+
+#### `aloma step sync`
+Syncs local step files to workspace. Reads step files from the workspace folder and updates the corresponding steps.
+
+Options:
+- `-w, --workspace <id>` - Specify workspace ID
+- `-s, --step <id>` - Step ID (if not specified, syncs all steps)
+- `-p, --path <path>` - Source path (default: current directory)
+
+**Examples:**
+```bash
+# Sync all steps from current directory
+aloma step sync
+
+# Sync all steps from a custom path
+aloma step sync -p /path/to/steps
+
+# Sync a specific step
+aloma step sync -s step-456
+```
+
+**File Format:**
+The pull and sync commands work with JavaScript files that follow this format:
+```javascript
+/**
+ * Step: Step Name
+ * ID: step-id
+ * 
+ * Edit the condition and content below.
+ * The condition should be a valid JavaScript object (trailing commas are allowed).
+ * The content should be JavaScript code that will be executed.
+ */
+
+export const condition = {
+  "status": "active",
+  "type": "example"
+};
+
+export const content = async () => {
+  console.log('Running step');
+  data.processed = true;
+};
+```
 
 ### Task Management
 

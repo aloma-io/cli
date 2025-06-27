@@ -25,6 +25,8 @@ import {
   deleteStep,
   editStep,
   cloneStep,
+  pullStep,
+  syncStep,
 } from "./commands/step/index.js";
 import {
   listTasks,
@@ -333,6 +335,26 @@ program
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await cloneStep(id, options.workspace);
+      }),
+  )
+  .addCommand(
+    new Command("pull")
+      .description("Pull steps from workspace to local files")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option("-s, --step <id>", "Step ID (if not specified, pulls all steps)")
+      .option("-p, --path <path>", "Target path (default: current directory)")
+      .action(async (options) => {
+        await pullStep(options.workspace, options.step, options.path);
+      }),
+  )
+  .addCommand(
+    new Command("sync")
+      .description("Sync local step files to workspace")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option("-s, --step <id>", "Step ID (if not specified, syncs all steps)")
+      .option("-p, --path <path>", "Source path (default: current directory)")
+      .action(async (options) => {
+        await syncStep(options.workspace, options.step, options.path);
       }),
   );
 
