@@ -6,12 +6,13 @@ import {
   GET_STEP_QUERY,
   DELETE_STEP_MUTATION,
   SAVE_STEP_MUTATION,
+  VALIDATE_IF_QUERY,
 } from "./query.js";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import open from "open";
-import { getSelectedWorkspace, getWorkspace } from "../workspace/index.js";
+import { getWorkspace, resolveWorkspaceId } from "../workspace/index.js";
 
 export async function addStep(
   name,
@@ -19,14 +20,8 @@ export async function addStep(
   nocodeType = null,
   filePath = null,
 ) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(chalk.yellow("⚠ Workspace ID is required"));
-      return;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   try {
     // Create the step first
@@ -63,23 +58,20 @@ export async function addStep(
           return;
         }
 
-        // Parse the condition as JavaScript object and convert to JSON string
-        let newCondition;
-        try {
-          // First, try to evaluate the condition as a JavaScript object
-          const conditionStr = conditionMatch[1].trim();
-          // Use Function constructor to safely evaluate the object
-          const conditionObj = new Function(`return ${conditionStr}`)();
-          // Then convert to JSON string
-          newCondition = JSON.stringify(conditionObj);
-        } catch (error) {
+        // Get the condition string directly without trying to parse it as JavaScript
+        const conditionStr = conditionMatch[1].trim();
+        // Validate the condition using the backend
+        const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
+          content: conditionStr,
+        });
+        if (!validateRes.validateAutomationIf) {
           console.error(
-            chalk.red(
-              `Invalid condition format: ${error.message}\nPlease ensure it is a valid JavaScript object.`,
-            ),
+            chalk.red("Condition is invalid, not a valid JSON object."),
           );
           return;
         }
+        // Use the condition string directly as newCondition
+        const newCondition = conditionStr;
         const newContent = contentMatch[1].trim();
 
         // Update the step with the parsed content
@@ -117,14 +109,8 @@ export async function listSteps(
   workspaceIdentifier,
   name = null,
 ) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(chalk.yellow("⚠ Workspace ID is required"));
-      return;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   try {
     const data = await graphQuery(LIST_STEPS_QUERY, {
@@ -203,14 +189,8 @@ export async function showStep(stepId) {
 }
 
 export async function deleteStep(stepId, workspaceIdentifier) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(chalk.yellow("⚠ Workspace ID is required"));
-      return;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   if (!stepId) {
     console.log(chalk.yellow("⚠ Please provide a step ID."));
@@ -238,14 +218,8 @@ export async function deleteStep(stepId, workspaceIdentifier) {
 }
 
 export async function editStep(stepId, workspaceIdentifier) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(chalk.yellow("⚠ Workspace ID is required"));
-      return;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   if (!stepId) {
     console.log(chalk.yellow("⚠ Please provide a step ID."));
@@ -290,21 +264,8 @@ export async function editStep(stepId, workspaceIdentifier) {
  * };
  */
 
-export const condition = ${(() => {
-      try {
-        if (step.content?.if) {
-          // Use Function constructor to safely evaluate the JavaScript object
-          const conditionObj = new Function(`return ${step.content.if}`)();
-          return JSON.stringify(conditionObj, null, 2);
-        }
-        return JSON.stringify({}, null, 2);
-      } catch (error) {
-        console.warn(
-          chalk.yellow(`Warning: Could not parse condition: ${error.message}`),
-        );
-        return JSON.stringify({}, null, 2);
-      }
-    })()};
+export const condition = ${step.content?.if || "{}"};
+
 
 export const content = async () => {
 ${step.content?.do || ""}
@@ -336,23 +297,20 @@ ${step.content?.do || ""}
         return;
       }
 
-      // Parse the condition as JavaScript object and convert to JSON string
-      let newCondition;
-      try {
-        // First, try to evaluate the condition as a JavaScript object
-        const conditionStr = conditionMatch[1].trim();
-        // Use Function constructor to safely evaluate the object
-        const conditionObj = new Function(`return ${conditionStr}`)();
-        // Then convert to JSON string
-        newCondition = JSON.stringify(conditionObj);
-      } catch (error) {
+      // Get the condition string directly without trying to parse it as JavaScript
+      const conditionStr = conditionMatch[1].trim();
+      // Validate the condition using the backend
+      const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
+        content: conditionStr,
+      });
+      if (!validateRes.validateAutomationIf) {
         console.error(
-          chalk.red(
-            `Invalid condition format: ${error.message}\nPlease ensure it is a valid JavaScript object.`,
-          ),
+          chalk.red("Condition is invalid, not a valid JSON object."),
         );
         return;
       }
+      // Use the condition string directly as newCondition
+      const newCondition = conditionStr;
       const newContent = contentMatch[1].trim();
 
       // Update the step
@@ -396,14 +354,8 @@ ${step.content?.do || ""}
 }
 
 export async function cloneStep(stepId, workspaceIdentifier) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(chalk.yellow("⚠ Workspace ID is required"));
-      return;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   if (!stepId) {
     console.log(chalk.yellow("Please provide a step ID to clone."));
@@ -455,16 +407,10 @@ export async function cloneStep(stepId, workspaceIdentifier) {
 }
 
 export async function pullStep(workspaceIdentifier, stepId, targetPath) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(chalk.yellow("⚠ Workspace ID is required"));
-      return;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
-  // Get workspace details to create folder with workspace name 
+  // Get workspace details to create folder with workspace name
   const workspace = await getWorkspace(workspaceId);
   if (!workspace) {
     console.log(chalk.red("Workspace not found"));
@@ -473,7 +419,10 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
 
   // Use current directory if no path specified
   const basePath = targetPath || process.cwd();
-  const workspaceFolder = path.join(basePath, workspace.name.replace(/[^a-z0-9]/gi, "_").toLowerCase());
+  const workspaceFolder = path.join(
+    basePath,
+    workspace.name.replace(/[^a-z0-9]/gi, "_").toLowerCase(),
+  );
 
   try {
     // Create workspace folder if it doesn't exist
@@ -506,14 +455,20 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
 
       // Get full details for each step
       for (const stepSummary of steps) {
-        const stepData = await graphQuery(GET_STEP_QUERY, { id: stepSummary.id });
+        const stepData = await graphQuery(GET_STEP_QUERY, {
+          id: stepSummary.id,
+        });
         const step = stepData.getAutomationStep;
         if (step) {
           await createStepFile(step, workspaceFolder);
         }
       }
 
-      console.log(chalk.green(`Successfully pulled ${steps.length} steps to: ${workspaceFolder}`));
+      console.log(
+        chalk.green(
+          `Successfully pulled ${steps.length} steps to: ${workspaceFolder}`,
+        ),
+      );
     }
   } catch (error) {
     console.error(chalk.red("Error pulling steps:"), error.message);
@@ -521,14 +476,8 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
 }
 
 export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      console.log(chalk.yellow("⚠ Workspace ID is required"));
-      return;
-    }
-  }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
 
   // Get workspace details to find folder
   const workspace = await getWorkspace(workspaceId);
@@ -539,14 +488,19 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
 
   // Use current directory if no path specified
   const basePath = sourcePath || process.cwd();
-  const workspaceFolder = path.join(basePath, workspace.name.replace(/[^a-z0-9]/gi, "_").toLowerCase());
+  const workspaceFolder = path.join(
+    basePath,
+    workspace.name.replace(/[^a-z0-9]/gi, "_").toLowerCase(),
+  );
 
   try {
     // Check if workspace folder exists
     try {
       await fs.access(workspaceFolder);
     } catch (error) {
-      console.log(chalk.yellow(`Workspace folder not found: ${workspaceFolder}`));
+      console.log(
+        chalk.yellow(`Workspace folder not found: ${workspaceFolder}`),
+      );
       return;
     }
 
@@ -560,8 +514,11 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
         return;
       }
 
-      const stepFilePath = path.join(workspaceFolder, `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`);
-      
+      const stepFilePath = path.join(
+        workspaceFolder,
+        `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`,
+      );
+
       try {
         await fs.access(stepFilePath);
         await updateStepFromFile(step, stepFilePath);
@@ -584,11 +541,16 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
 
       let syncedCount = 0;
       for (const stepSummary of steps) {
-        const stepData = await graphQuery(GET_STEP_QUERY, { id: stepSummary.id });
+        const stepData = await graphQuery(GET_STEP_QUERY, {
+          id: stepSummary.id,
+        });
         const step = stepData.getAutomationStep;
         if (step) {
-          const stepFilePath = path.join(workspaceFolder, `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`);
-          
+          const stepFilePath = path.join(
+            workspaceFolder,
+            `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`,
+          );
+
           try {
             await fs.access(stepFilePath);
             await updateStepFromFile(step, stepFilePath);
@@ -599,7 +561,11 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
         }
       }
 
-      console.log(chalk.green(`Successfully synced ${syncedCount} steps from: ${workspaceFolder}`));
+      console.log(
+        chalk.green(
+          `Successfully synced ${syncedCount} steps from: ${workspaceFolder}`,
+        ),
+      );
     }
   } catch (error) {
     console.error(chalk.red("Error syncing steps:"), error.message);
@@ -631,21 +597,7 @@ async function createStepFile(step, workspaceFolder) {
  * };
  */
 
-export const condition = ${(() => {
-    try {
-      if (step.content?.if) {
-        // Use Function constructor to safely evaluate the JavaScript object
-        const conditionObj = new Function(`return ${step.content.if}`)();
-        return JSON.stringify(conditionObj, null, 2);
-      }
-      return JSON.stringify({}, null, 2);
-    } catch (error) {
-      console.warn(
-        chalk.yellow(`Warning: Could not parse condition: ${error.message}`),
-      );
-      return JSON.stringify({}, null, 2);
-    }
-  })()};
+export const condition = ${step.content?.if || "{}"};
 
 export const content = async () => {
 ${step.content?.do || ""}
@@ -674,23 +626,24 @@ async function updateStepFromFile(step, filePath) {
     return;
   }
 
-  // Parse the condition as JavaScript object and convert to JSON string
-  let newCondition;
-  try {
-    // First, try to evaluate the condition as a JavaScript object
-    const conditionStr = conditionMatch[1].trim();
-    // Use Function constructor to safely evaluate the object
-    const conditionObj = new Function(`return ${conditionStr}`)();
-    // Then convert to JSON string
-    newCondition = JSON.stringify(conditionObj);
-  } catch (error) {
+  // Get the condition string directly without trying to parse it as JavaScript
+  const conditionStr = conditionMatch[1].trim();
+
+  // Validate the condition using the backend
+  const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
+    content: conditionStr,
+  });
+  if (!validateRes.validateAutomationIf) {
     console.error(
       chalk.red(
-        `Invalid condition format in ${filePath}: ${error.message}\nPlease ensure it is a valid JavaScript object.`,
+        `Condition is invalid, not a valid JSON object in ${filePath}.`,
       ),
     );
     return;
   }
+
+  // Use the condition string directly as newCondition
+  const newCondition = conditionStr;
   const newContent = contentMatch[1].trim();
 
   // Update the step

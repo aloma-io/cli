@@ -53,7 +53,7 @@ export async function getSelectedWorkspace() {
 }
 
 // Common function to resolve workspace ID from identifier or use selected workspace
-async function resolveWorkspaceId(workspaceIdentifier) {
+export async function resolveWorkspaceId(workspaceIdentifier) {
   let workspaceId = workspaceIdentifier;
   if (!workspaceIdentifier) {
     workspaceId = await getSelectedWorkspace();
@@ -703,8 +703,10 @@ export async function getWorkspace(identifier) {
   const environments = data.listAutomationEnvironmentWithStats;
 
   const workspace = environments.find(
-    (env) => env.name.toLowerCase() === identifier.toLowerCase() || env.id === identifier,
+    (env) =>
+      env.name.toLowerCase() === identifier.toLowerCase() ||
+      env.id === identifier,
   );
 
-return workspace || null
+  return workspace || null;
 }

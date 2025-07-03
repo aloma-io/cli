@@ -63,3 +63,9 @@ export const DELETE_STEP_MUTATION = `
     deleteAutomationStep(id: $id, environment_id: $environment_id)
   }
 `;
+
+export const VALIDATE_IF_QUERY = `
+  query ($content: String) {
+    validateAutomationIf(content: $content)
+  }
+`;
