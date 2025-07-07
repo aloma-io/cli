@@ -1,23 +1,42 @@
 # Company to switch to (optional)
-company: "testing"
+# company: "Aloma Demo"
 
 # List of workspaces to create and configure
 workspaces:
-  - name: "production"
+  - name: "cli-gitTests"
     tags: ["prod", "main"]
     
+    # Connectors configuration
+    connectors:
+      - connectorName: "hubspot.com (private)"
+        # name: "hubspot"
+        # namespace: "hubspot"
+        file: "connector/connector-hubspot.json"
+      - connectorName: "openai.com"
+        namespace: "openaiCom2"
+        config:
+          apiKey: "sk-proj-1234567890"
+
+    # # Secrets configuration
+    # secrets:
+    #   - name: "API_KEY"
+    #     value: "supersecretapikey"
+    #     description: "API key for external service"
+    #     encrypted: true
+    #   - name: "HOME_URL"
+    #     value: "https://www.aloma.ai"
+    #     description: "Home URL"
+    #     encrypted: false
+
     # Steps configuration
     # steps:
     #   - name: "template2"
-    #     file: "examples/step/step1.js"
+    #     file: "step/step1.js"
     
     # Tasks configuration
-    tasks:
-      - name: "template-task"
-        data: {"cliStep": true, "Step": 1}
-      - name: "template-task2"
-        file: "examples/task/task1.json"
+    # tasks: /task/task1.json"
 
     # # Webhooks configuration
     # webhooks:
     #   - name: "data-update"
+    

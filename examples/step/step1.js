@@ -1,6 +1,5 @@
 /**
  * Step: New cli step
- * ID: f8qmjsogz37mzht1kracwo3ntajha04k
  * 
  * Edit the condition and content below.
  * The condition should be a valid JavaScript object (trailing commas are allowed).

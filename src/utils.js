@@ -5,6 +5,7 @@ import { GRAPHQL_URL } from "./config.js";
 import chalk from "chalk";
 import { execSync } from "child_process";
 import { ME_QUERY } from "./commands/auth/query.js";
+import * as jose from "jose";
 
 // Get the package root directory
 export const getPackageRoot = async () => {
@@ -160,4 +161,25 @@ export const urlForRegion = async (url) => {
   }
 
   return url;
+};
+
+export const doEncrypt = async ({
+  pubKey,
+  value,
+  audience = "connector",
+  expiration = "",
+}) => {
+  const algorithm = "RSA-OAEP-256";
+  const issuer = "home.aloma.io";
+  const key = await jose.importSPKI(atob(pubKey), algorithm);
+
+  const item = new jose.EncryptJWT({ _data: value })
+    .setProtectedHeader({ alg: algorithm, enc: "A256GCM" })
+    .setIssuedAt()
+    .setIssuer(issuer)
+    .setAudience(audience);
+
+  if (expiration && expiration !== "none") item.setExpirationTime(expiration);
+
+  return await item.encrypt(key);
 };
