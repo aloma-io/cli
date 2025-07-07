@@ -39,40 +39,8 @@ export async function addStep(
     // If a file path is provided, read and parse it
     if (filePath) {
       try {
-        const fileContent = await fs.readFile(filePath, "utf8");
-
-        // Extract condition and content using regex
-        const conditionMatch = fileContent.match(
-          /export const condition = ([\s\S]*?);/,
-        );
-        const contentMatch = fileContent.match(
-          /export const content = \(\) => \{([\s\S]*?)\};/,
-        );
-
-        if (!conditionMatch || !contentMatch) {
-          console.error(
-            chalk.yellow(
-              "⚠ Could not parse condition and content from file. Using empty defaults.",
-            ),
-          );
-          return;
-        }
-
-        // Get the condition string directly without trying to parse it as JavaScript
-        const conditionStr = conditionMatch[1].trim();
-        // Validate the condition using the backend
-        const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
-          content: conditionStr,
-        });
-        if (!validateRes.validateAutomationIf) {
-          console.error(
-            chalk.red("Condition is invalid, not a valid JSON object."),
-          );
-          return;
-        }
-        // Use the condition string directly as newCondition
-        const newCondition = conditionStr;
-        const newContent = contentMatch[1].trim();
+        const { condition: newCondition, content: newContent } =
+          await parseStepFile(filePath);
 
         // Update the step with the parsed content
         const updateData = await graphQuery(SAVE_STEP_MUTATION, {
@@ -284,34 +252,8 @@ ${step.content?.do || ""}
 
     // Parse the modified content
     try {
-      // Extract condition and content using regex
-      const conditionMatch = modifiedContent.match(
-        /export const condition = ([\s\S]*?);/,
-      );
-      const contentMatch = modifiedContent.match(
-        /export const content = async \(\) => \{([\s\S]*?)\};/,
-      );
-
-      if (!conditionMatch || !contentMatch) {
-        console.error(chalk.red("Could not parse the modified file"));
-        return;
-      }
-
-      // Get the condition string directly without trying to parse it as JavaScript
-      const conditionStr = conditionMatch[1].trim();
-      // Validate the condition using the backend
-      const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
-        content: conditionStr,
-      });
-      if (!validateRes.validateAutomationIf) {
-        console.error(
-          chalk.red("Condition is invalid, not a valid JSON object."),
-        );
-        return;
-      }
-      // Use the condition string directly as newCondition
-      const newCondition = conditionStr;
-      const newContent = contentMatch[1].trim();
+      const { condition: newCondition, content: newContent } =
+        await parseStepFile(tempFilePath);
 
       // Update the step
       const updateData = await graphQuery(SAVE_STEP_MUTATION, {
@@ -609,56 +551,94 @@ ${step.content?.do || ""}
 
 // Helper function to update step from file
 async function updateStepFromFile(step, filePath) {
-  const fileContent = await fs.readFile(filePath, "utf8");
+  try {
+    const { condition: newCondition, content: newContent } =
+      await parseStepFile(filePath);
 
-  // Extract condition and content using regex
-  const conditionMatch = fileContent.match(
-    /export const condition = ([\s\S]*?);/,
-  );
-  const contentMatch = fileContent.match(
-    /export const content = async \(\) => \{([\s\S]*?)\};/,
-  );
+    // Update the step
+    const updateData = await graphQuery(SAVE_STEP_MUTATION, {
+      id: step.id,
+      name: step.name,
+      if: newCondition,
+      do: newContent,
+      enabled: step.enabled,
+      version: step.version,
+      nocode_content: step.nocode_content,
+      config_content: step.config_content,
+    });
 
-  if (!conditionMatch || !contentMatch) {
-    console.error(
-      chalk.red(`Could not parse condition and content from file: ${filePath}`),
-    );
-    return;
+    if (!updateData.saveAutomationStep) {
+      console.log(chalk.yellow(`Failed to update step: ${step.name}`));
+    }
+  } catch (error) {
+    console.error(chalk.red(`Error updating step from file: ${error.message}`));
   }
+}
 
-  // Get the condition string directly without trying to parse it as JavaScript
-  const conditionStr = conditionMatch[1].trim();
+// Helper function to parse step file and extract condition and content
+async function parseStepFile(filePath) {
+  try {
+    const fileContent = await fs.readFile(filePath, "utf8");
 
-  // Validate the condition using the backend
-  const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
-    content: conditionStr,
-  });
-  if (!validateRes.validateAutomationIf) {
-    console.error(
-      chalk.red(
-        `Condition is invalid, not a valid JSON object in ${filePath}.`,
-      ),
+    // Extract condition and content using regex
+    const conditionMatch = fileContent.match(
+      /export const condition = ([\s\S]*?);/,
     );
-    return;
-  }
+    
+    // More robust content extraction that handles nested braces
+    const contentStart = fileContent.indexOf('export const content = async () => {');
+    if (contentStart === -1) {
+      throw new Error("Could not find content export");
+    }
+    
+    const contentAfterStart = fileContent.substring(contentStart);
+    const openBraceIndex = contentAfterStart.indexOf('{');
+    if (openBraceIndex === -1) {
+      throw new Error("Could not find opening brace in content");
+    }
+    
+    // Find the matching closing brace by counting braces
+    let braceCount = 0;
+    let contentEndIndex = -1;
+    
+    for (let i = openBraceIndex; i < contentAfterStart.length; i++) {
+      if (contentAfterStart[i] === '{') {
+        braceCount++;
+      } else if (contentAfterStart[i] === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          contentEndIndex = i;
+          break;
+        }
+      }
+    }
+    
+    if (contentEndIndex === -1) {
+      throw new Error("Could not find matching closing brace in content");
+    }
+    
+    const content = contentAfterStart.substring(openBraceIndex + 1, contentEndIndex).trim();
 
-  // Use the condition string directly as newCondition
-  const newCondition = conditionStr;
-  const newContent = contentMatch[1].trim();
+    if (!conditionMatch) {
+      throw new Error("Could not parse condition from file");
+    }
 
-  // Update the step
-  const updateData = await graphQuery(SAVE_STEP_MUTATION, {
-    id: step.id,
-    name: step.name,
-    if: newCondition,
-    do: newContent,
-    enabled: step.enabled,
-    version: step.version,
-    nocode_content: step.nocode_content,
-    config_content: step.config_content,
-  });
+    // Get the condition string directly without trying to parse it as JavaScript
+    const conditionStr = conditionMatch[1].trim();
 
-  if (!updateData.saveAutomationStep) {
-    console.log(chalk.yellow(`Failed to update step: ${step.name}`));
+    // Validate the condition using the backend
+    const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
+      content: conditionStr,
+    });
+    if (!validateRes.validateAutomationIf) {
+      throw new Error("Condition is invalid, not a valid JSON object");
+    }
+
+    return {
+      condition: conditionStr,
+      content: content,
+    };
+  } catch (error) {
+    throw new Error(`Error parsing step file: ${error.message}`);
   }
 }

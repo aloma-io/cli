@@ -550,13 +550,29 @@ program
       .argument("<connectorId>", "Connector ID")
       .option("-n, --name <name>", "Connector name")
       .option("-ns, --namespace <namespace>", "Connector namespace")
+      .option("-t, --tags <tags>", "Comma-separated list of tags")
+      .option("-s, --shared", "Share connector in realm")
+      .option("-c, --config <json>", "JSON configuration for the connector")
+      .option(
+        "-f, --file <path>",
+        "Path to JSON file containing connector configuration",
+      )
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (connectorId, options) => {
+        // Parse tags from comma-separated string
+        const tags = options.tags ? options.tags.split(",") : undefined;
+        // Parse config from JSON string
+        const config = options.config ? JSON.parse(options.config) : undefined;
+
         await addConnector(
           connectorId,
           options.workspace,
           options.name,
           options.namespace,
+          tags,
+          options.shared,
+          config,
+          options.file,
         );
       }),
   )

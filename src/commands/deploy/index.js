@@ -10,6 +10,8 @@ import {
 import { addStep } from "../step/index.js";
 import { createTask } from "../task/index.js";
 import { addWebhook } from "../webhook/index.js";
+import { addConnector, getConnectorByName } from "../connector/index.js";
+import { addSecret } from "../secret/index.js";
 
 export async function deployFromYaml(yamlPath, options = {}) {
   // Read and parse YAML file
@@ -32,7 +34,7 @@ export async function deployFromYaml(yamlPath, options = {}) {
       let workspaceId = await getWorkspaceId(workspace.name);
       if (!workspaceId) {
         // Create workspace if it doesn't exist
-        await createWorkspace(workspace.name, workspace.tags.join(","));
+        await createWorkspace(workspace.name, workspace.tags ? workspace.tags.join(",") : "");
         workspaceId = await getSelectedWorkspace();
       }
 
@@ -45,21 +47,86 @@ export async function deployFromYaml(yamlPath, options = {}) {
         }
       }
 
-      // Process tasks
-      if (workspace.tasks) {
-        console.log(chalk.blue("\nDeploying tasks..."));
-        for (const task of workspace.tasks) {
-          console.log(chalk.gray(`  - ${task.name}`));
-          await createTask(task.name, task.data, task.file, workspaceId);
-        }
-      }
-
       // Process webhooks
       if (workspace.webhooks) {
         console.log(chalk.blue("\nDeploying webhooks..."));
         for (const webhook of workspace.webhooks) {
           console.log(chalk.gray(`  - ${webhook.name}`));
           await addWebhook(webhook.name, workspaceId);
+        }
+      }
+
+      // Process connectors
+      if (workspace.connectors) {
+        console.log(chalk.blue("\nDeploying connectors..."));
+        for (const connector of workspace.connectors) {
+          let connectorId = connector.connectorId;
+          let connectorName = connector.connectorName;
+          let namespace = connector.namespace;
+          // If connectorId is not provided but connectorName is, search for it
+          if (!connectorId && connectorName) {
+            const connectorData = await getConnectorByName(
+              connectorName,
+              workspaceId,
+            );
+            if (connectorData) {
+              connectorId = connectorData.id;
+              namespace = namespace || connectorData.namespace;
+            } else {
+              continue;
+            }
+          }
+          if (!connectorId) {
+            console.log(
+              chalk.red(
+                `No connectorId or connectorName provided for connector entry.`,
+              ),
+            );
+            continue;
+          }
+          console.log(chalk.gray(`  - ${connectorName || connectorId}`));
+          await addConnector(
+            connectorId,
+            workspaceId,
+            connectorName,
+            namespace,
+            connector.tags,
+            connector.shared_in_realm,
+            connector.config,
+            connector.file,
+          );
+        }
+      }
+
+      // Process secrets
+      if (workspace.secrets) {
+        console.log(chalk.blue("\nDeploying secrets..."));
+        for (const secret of workspace.secrets) {
+          const { name, value, description, encrypted, options } = secret;
+          if (!name || value === undefined) {
+            console.log(
+              chalk.red(`Secret entry must have 'name' and 'value'.`),
+            );
+            continue;
+          }
+          console.log(chalk.gray(`  - ${name}`));
+          await addSecret(
+            name,
+            value,
+            description,
+            encrypted,
+            options,
+            workspaceId,
+          );
+        }
+      }
+
+      // Process tasks
+      if (workspace.tasks) {
+        console.log(chalk.blue("\nDeploying tasks..."));
+        for (const task of workspace.tasks) {
+          console.log(chalk.gray(`  - ${task.name}`));
+          await createTask(task.name, task.data, task.file, workspaceId);
         }
       }
     }

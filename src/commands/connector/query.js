@@ -67,6 +67,8 @@ export const GET_CONNECTOR_QUERY = `
       instances
     }
     getAutomationConnectorConfigSchema(environmentId: $id, connectorId: $connectorId)
+
+    getAutomationConnectorPublicKey(environmentId: $id, connectorId: $connectorId)
   }
 `;
 

@@ -1,0 +1,25 @@
+# Company to switch to (optional)
+# company: "Aloma Demo"
+
+# List of workspaces to create and configure
+workspaces:
+  - name: "Hubspot-test"
+    
+    # Steps configuration
+    steps:
+      - name: "get hubspot companies"
+        file: "step/get_hubspot_companies.js"
+      - name: "get company contacts"
+        file: "step/get_company_contacts.js"
+    
+    # Connectors configuration
+    connectors:
+      - connectorName: "hubspot.com (private)"
+        file: "connector/connector-hubspot.json"
+
+    # Tasks configuration
+    tasks:
+      - name: "get company contacts"
+        data: {"getCompanies": true}
+
+    

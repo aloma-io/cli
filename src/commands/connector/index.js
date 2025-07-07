@@ -10,6 +10,7 @@ import {
   GET_CONNECTOR_LOGS_QUERY,
   START_CONNECTOR_OAUTH_MUTATION,
 } from "./query.js";
+import { doEncrypt } from "../../utils.js";
 import chalk from "chalk";
 import { getSelectedWorkspace } from "../workspace/index.js";
 import fs from "fs/promises";
@@ -121,6 +122,10 @@ export async function addConnector(
   workspaceIdentifier,
   name,
   namespace,
+  tags,
+  shared_in_realm,
+  config,
+  file,
 ) {
   try {
     let workspaceId = workspaceIdentifier;
@@ -165,6 +170,39 @@ export async function addConnector(
 
     if (response.addAutomationMarketConnectorToEnvironment) {
       console.log(chalk.green("\nConnector added successfully!"));
+
+      // If additional configuration is provided, update the connector
+      if (tags || shared_in_realm || config || file) {
+        // Get the added connector's ID from the workspace
+        const workspaceConnectors = await graphQuery(LIST_CONNECTORS_QUERY, {
+          id: workspaceId,
+        });
+        const addedConnector =
+          workspaceConnectors.listAutomationConnectors?.find(
+            (c) => c.name === connectorName,
+          );
+
+        if (addedConnector) {
+          await new Promise((resolve) => setTimeout(resolve, 10000));
+          try {
+            await updateConnector(
+              addedConnector.id,
+              workspaceId,
+              null,
+              null,
+              tags,
+              shared_in_realm,
+              config,
+              file,
+            );
+          } catch (error) {
+            console.error(
+              chalk.red("Error updating connector:"),
+              error.message,
+            );
+          }
+        }
+      }
     } else {
       console.log(chalk.red("Error: Failed to add connector"));
     }
@@ -278,6 +316,19 @@ export async function updateConnector(
       connectorConfig = fileContent.config || connectorConfig;
     }
 
+    // Get the added connector's ID from the workspace
+    const workspaceConnectors = await graphQuery(LIST_CONNECTORS_QUERY, {
+      id: workspaceId,
+    });
+    const toUpdateConnector =
+      workspaceConnectors.listAutomationConnectors?.find(
+        (c) => c.id === connectorId,
+      );
+    let marketId = null;
+    if (toUpdateConnector) {
+      marketId = toUpdateConnector.marketId;
+    }
+
     // Update connector basic info if any of these parameters are provided
     if (
       connectorName ||
@@ -317,12 +368,35 @@ export async function updateConnector(
 
     // Update connector config if provided
     if (connectorConfig) {
+      const items = {};
+      const keys = Object.keys(connectorConfig);
+      const connectorData = await graphQuery(GET_CONNECTOR_QUERY, {
+        id: workspaceId,
+        connectorId,
+      });
+      const connectorKey = connectorData.getAutomationConnectorPublicKey;
+      const schema = connectorData.getAutomationConnectorConfigSchema;
+      for (var i = 0; i < keys.length; ++i) {
+        const key = keys[i];
+
+        if (schema.fields[key].plain) {
+          // @ts-ignore
+          items[key] = connectorConfig[key];
+        } else {
+          // @ts-ignore
+          items[key] = await doEncrypt({
+            value: connectorConfig[key],
+            audience: marketId,
+            pubKey: connectorKey,
+          });
+        }
+      }
       const response = await graphQuery(
         UPDATE_CONNECTOR_CONFIG_SCHEMA_MUTATION,
         {
           environmentId: workspaceId,
           connectorId,
-          content: connectorConfig,
+          content: items,
         },
       );
 
@@ -423,5 +497,58 @@ export async function startConnectorOAuth(
     }
   } catch (error) {
     console.error(chalk.red("Error starting OAuth process:"), error);
+  }
+}
+
+export async function getConnectorByName(connectorName, workspaceIdentifier) {
+  try {
+    let workspaceId = workspaceIdentifier;
+    if (!workspaceIdentifier) {
+      workspaceId = await getSelectedWorkspace();
+      if (!workspaceId) {
+        console.log(chalk.yellow("⚠ Workspace ID is required"));
+        return null;
+      }
+    }
+
+    if (!connectorName) {
+      console.log(chalk.yellow("⚠ Connector name is required"));
+      return null;
+    }
+
+    const data = await graphQuery(LIST_AVAILABLE_CONNECTOR_QUERY, {
+      id: workspaceId,
+      mine: false,
+      name: connectorName,
+    });
+
+    if (
+      !data.listAutomationAvailableConnectors ||
+      data.listAutomationAvailableConnectors.length === 0
+    ) {
+      return null;
+    }
+
+    // Try to find exact match
+    const found = data.listAutomationAvailableConnectors.find(
+      (c) => c.name === connectorName,
+    );
+    if (found) {
+      return {
+        id: found.id,
+        name: found.name,
+        namespace: found.namespace,
+      };
+    } else {
+      console.log(
+        chalk.yellow(
+          `Connector with name '${connectorName}' not found in available connectors.`,
+        ),
+      );
+      return null;
+    }
+  } catch (error) {
+    console.error(chalk.red("Error getting connector by name:"), error.message);
+    throw error;
   }
 }
