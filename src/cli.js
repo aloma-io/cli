@@ -379,8 +379,17 @@ program
     new Command("log")
       .description("Log task details")
       .argument("<id>", "Task ID")
-      .action(async (id) => {
-        await showTask(id);
+      .option("--logs", "Show console and audit logs for each step")
+      .option(
+        "--changes",
+        "Show diff changes for each step (context.content.changes)",
+      )
+      .option(
+        "--step <number>",
+        "Show logs/changes for a specific step number (1-based index)",
+      )
+      .action(async (id, options) => {
+        await showTask(id, options);
       }),
   )
   .addCommand(
