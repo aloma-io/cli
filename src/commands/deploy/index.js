@@ -34,7 +34,10 @@ export async function deployFromYaml(yamlPath, options = {}) {
       let workspaceId = await getWorkspaceId(workspace.name);
       if (!workspaceId) {
         // Create workspace if it doesn't exist
-        await createWorkspace(workspace.name, workspace.tags ? workspace.tags.join(",") : "");
+        await createWorkspace(
+          workspace.name,
+          workspace.tags ? workspace.tags.join(",") : "",
+        );
         workspaceId = await getSelectedWorkspace();
       }
 

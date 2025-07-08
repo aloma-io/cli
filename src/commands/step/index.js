@@ -584,27 +584,29 @@ async function parseStepFile(filePath) {
     const conditionMatch = fileContent.match(
       /export const condition = ([\s\S]*?);/,
     );
-    
+
     // More robust content extraction that handles nested braces
-    const contentStart = fileContent.indexOf('export const content = async () => {');
+    const contentStart = fileContent.indexOf(
+      "export const content = async () => {",
+    );
     if (contentStart === -1) {
       throw new Error("Could not find content export");
     }
-    
+
     const contentAfterStart = fileContent.substring(contentStart);
-    const openBraceIndex = contentAfterStart.indexOf('{');
+    const openBraceIndex = contentAfterStart.indexOf("{");
     if (openBraceIndex === -1) {
       throw new Error("Could not find opening brace in content");
     }
-    
+
     // Find the matching closing brace by counting braces
     let braceCount = 0;
     let contentEndIndex = -1;
-    
+
     for (let i = openBraceIndex; i < contentAfterStart.length; i++) {
-      if (contentAfterStart[i] === '{') {
+      if (contentAfterStart[i] === "{") {
         braceCount++;
-      } else if (contentAfterStart[i] === '}') {
+      } else if (contentAfterStart[i] === "}") {
         braceCount--;
         if (braceCount === 0) {
           contentEndIndex = i;
@@ -612,12 +614,14 @@ async function parseStepFile(filePath) {
         }
       }
     }
-    
+
     if (contentEndIndex === -1) {
       throw new Error("Could not find matching closing brace in content");
     }
-    
-    const content = contentAfterStart.substring(openBraceIndex + 1, contentEndIndex).trim();
+
+    const content = contentAfterStart
+      .substring(openBraceIndex + 1, contentEndIndex)
+      .trim();
 
     if (!conditionMatch) {
       throw new Error("Could not parse condition from file");

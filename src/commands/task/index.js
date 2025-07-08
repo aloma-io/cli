@@ -11,6 +11,7 @@ import {
 import { color } from "./utils.js";
 import { getSelectedWorkspace } from "../workspace/index.js";
 import fs from "fs/promises";
+import { diffJson } from "diff";
 
 export async function listTasks(
   page = 1,
@@ -75,7 +76,21 @@ export async function listTasks(
   }
 }
 
-export async function showTask(taskId) {
+// Helper to print JSON with diff highlights
+function printJsonDiff(prev, curr) {
+  const diff = diffJson(prev, curr);
+  diff.forEach((part) => {
+    if (part.value !== "{}") {
+      let color = chalk.gray;
+      if (part.added) color = chalk.green;
+      if (part.removed) color = chalk.red;
+      process.stdout.write(color(part.value));
+    }
+  });
+  process.stdout.write("\n");
+}
+
+export async function showTask(taskId, options = {}) {
   try {
     if (!taskId) {
       console.log(chalk.yellow("⚠ Please provide a task ID"));
@@ -118,7 +133,6 @@ export async function showTask(taskId) {
     console.log(
       `${chalk.bold("Duration:")} ${task.duration ? `${task.duration}ms` : "N/A"}`,
     );
-    console.log(`${chalk.bold("Steps:")} ${task.steps}`);
     if (task.tags && task.tags.length > 0) {
       console.log(`${chalk.bold("Tags:")} ${task.tags.join(", ")}`);
     }
@@ -139,6 +153,7 @@ export async function showTask(taskId) {
           id: "created",
           title: "created",
           state: "created",
+          data: task.content?.data || {},
         });
       }
 
@@ -200,6 +215,8 @@ export async function showTask(taskId) {
             isApplying: item.event === "applying",
             isCurrentlyRunning:
               idx === history.length - 1 && item.event === "applying",
+            changes: content.changes || [],
+            data: content.data || item.data || {},
           };
         })
         .filter((item, idx) => {
@@ -212,13 +229,24 @@ export async function showTask(taskId) {
           );
         });
 
+      // If --step is specified, filter to that step
+      let entriesToShow = normalized.map((item) => item.id);
+      if (options.step) {
+        const stepIdx = parseInt(options.step, 10);
+        if (!isNaN(stepIdx) && stepIdx >= 0 && stepIdx < normalized.length) {
+          entriesToShow = [normalized[stepIdx].id];
+        } else {
+          console.log(chalk.red("Invalid step number specified."));
+          return;
+        }
+      }
+
       console.log(`\n${chalk.bold("Execution History")}`);
       console.log(
         chalk.gray(
           "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         ),
       );
-
       normalized.forEach((entry, idx) => {
         // Get status color for each event
         let eventStatus = entry.state?.toLowerCase() || entry.event;
@@ -237,70 +265,64 @@ export async function showTask(taskId) {
           console.log(`${chalk.gray("Duration:")} ${entry.executionTime}ms`);
         }
 
-        // Show console logs if available
-        if (entry.console.length > 0) {
-          console.log(`\n${chalk.gray("Console Log:")}`);
-          entry.console.forEach((log) => {
-            const timestamp = new Date(log.ts).toLocaleTimeString();
-            console.log(`${chalk.gray(`[${timestamp}]`)} ${log.msg}`);
-          });
+        // Show logs if requested
+        if (options.logs && entriesToShow.includes(entry.id)) {
+          // Show console logs if available
+          if (entry.console.length > 0) {
+            console.log(`\n${chalk.gray("Console Log:")}`);
+            entry.console.forEach((log) => {
+              const timestamp = new Date(log.ts).toLocaleTimeString();
+              console.log(`${chalk.gray(`[${timestamp}]`)} ${log.msg}`);
+            });
+          }
+          // Show audit logs if available
+          if (entry.audit.length > 0) {
+            console.log(`\n${chalk.gray("Audit Log:")}`);
+            entry.audit.forEach((audit) => {
+              if (audit.type === "message") {
+                console.log(audit.msg);
+              } else if (audit.type === "subtask") {
+                if (audit.action === "add") {
+                  console.log(
+                    `${audit.name} ${chalk.hex(color.created)(`● created`)}`,
+                  );
+                  console.log(`    ${chalk.gray("ID:")} ${audit.id}`);
+                } else if (audit.action === "resolve") {
+                  console.log(
+                    `${audit.name} ${chalk.hex(color.done)(`● completed`)}`,
+                  );
+                  console.log(`    ${chalk.gray("ID:")} ${audit.id}`);
+                }
+              } else if (audit.type === "reference") {
+                if (audit.url) {
+                  console.log(
+                    `Reference: ${audit.name || audit.role} - ${audit.url}`,
+                  );
+                } else if (audit.id) {
+                  console.log(
+                    `Reference: ${audit.name || audit.role} - ${audit.id}`,
+                  );
+                }
+              }
+            });
+          }
         }
 
-        // Show integrations if available
-        if (entry.integrations.length > 0) {
-          console.log(`\n${chalk.gray("Connector Log:")}`);
-          entry.integrations.forEach((log) => {
-            const timestamp = new Date(log.ts).toLocaleTimeString();
-            const avgDuration = (
-              log.durations.reduce((acc, curr) => acc + curr, 0) /
-              log.durations.length
-            ).toFixed(0);
-            console.log(
-              `${chalk.gray(`[${timestamp}]`)} ${chalk.bold(log.alias)}: ${log.count} calls, ${avgDuration}ms avg`,
-            );
-          });
-        }
-
-        // Show audit logs
-        if (entry.audit.length > 0) {
-          console.log(`\n${chalk.gray("Audit Log:")}`);
-          entry.audit.forEach((audit) => {
-            if (audit.type === "message") {
-              console.log(audit.msg);
-            } else if (audit.type === "subtask") {
-              if (audit.action === "add") {
-                console.log(
-                  `${audit.name} ${chalk.hex(color.created)(`● created`)}`,
-                );
-                console.log(`    ${chalk.gray("ID:")} ${audit.id}`);
-              } else if (audit.action === "resolve") {
-                console.log(
-                  `${audit.name} ${chalk.hex(color.done)(`● completed`)}`,
-                );
-                console.log(`    ${chalk.gray("ID:")} ${audit.id}`);
-              }
-            } else if (audit.type === "reference") {
-              if (audit.url) {
-                console.log(
-                  `Reference: ${audit.name || audit.role} - ${audit.url}`,
-                );
-              } else if (audit.id) {
-                console.log(
-                  `Reference: ${audit.name || audit.role} - ${audit.id}`,
-                );
-              }
-            }
-          });
+        // Show changes (diff) if requested and not for 'completed' step
+        if (
+          options.changes &&
+          entriesToShow.includes(entry.id) &&
+          entry.cardTitle !== "complete"
+        ) {
+          // Get current and previous data for this step
+          const prevData = idx > 0 ? normalized[idx - 1].data : {};
+          const currData = entry.data;
+          console.log(`\n${chalk.gray("Step Data Diff:")}`);
+          printJsonDiff(prevData, currData);
         }
 
         if (entry.error) {
           console.log(`\n${chalk.red("Error:")} ${entry.error}`);
-        }
-
-        if (entry.executionTime !== undefined) {
-          console.log(
-            `${chalk.gray("Step execution time:")} ${entry.executionTime}ms`,
-          );
         }
 
         console.log(
