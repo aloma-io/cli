@@ -1,0 +1,13 @@
+{
+  "firstName":"test name",
+  "lastName":"test last name",
+  "fullName":"test full name",
+  "email":"test@test.com",
+  "company":"test company",
+  "phone":"test phone",
+  "jobTitle":"test job title",
+  "message":"test message",
+  "$via":{
+    "name":"Webform"
+  }
+}

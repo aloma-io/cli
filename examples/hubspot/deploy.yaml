@@ -1,5 +1,5 @@
 # Company to switch to (optional)
-company: "Aloma Demo"
+# company: "Aloma Demo"
 
 # List of workspaces to create and configure
 workspaces:

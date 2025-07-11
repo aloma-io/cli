@@ -521,7 +521,7 @@ export const condition = {
   "Step": 1
 };
 
-export const content = () => {
+export const content = async () => {
   console.log("running a cli updated step");
   const message = "This is a test message ";
   console.log(message);

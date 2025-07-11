@@ -1,0 +1,55 @@
+# Company to switch to (optional)
+company: "Aloma Demo"
+
+# List of workspaces to create and configure
+workspaces:
+  - name: "Waitlist automation"
+    
+    # Steps configuration
+    steps:
+      - name: "Add contact to Hubspot"
+        file: "step/add_contact_to_hubspot.js"
+      - name: "Send email for new contact"
+        file: "step/send_email_for_new_contact.js"
+      - name: "Post to slack when new contact"
+        file: "step/post_to_slack_when_new_contact.js"
+      - name: "CTO research"
+        file: "step/cto_research.js"
+      - name: "Update Hubspot with CTO research"
+        file: "step/update_hubspot_with_cto_research.js"
+      - name: "Add to google sheet"
+        file: "step/add_to_google_sheet.js"
+
+    # Connectors configuration
+    connectors:
+      - connectorName: "hubspot.com (private)"
+        file: "connector/connector-hubspot.json"
+      - connectorName: "Google Sheets"
+      - connectorName: "E-Mail (SMTP - OAuth)"
+      - connectorName: "Perplexity"
+        file: "connector/connector-perplexity.json"
+      - connectorName: "slack.com"
+
+    # Secrets configuration
+    secrets:
+      - name: "HUBSPOT_ACCOUNT_ID"
+        value: "******"
+        description: "Hubspot account ID"
+        encrypted: false
+      - name: "WAIT_LIST_SPREADSHEET"
+        value: "********"
+        description: "Google sheet ID"
+        encrypted: false
+      - name: "SLACK_CHANNEL"
+        value: "********"
+        description: "Slack channel ID"
+        encrypted: false
+
+    # Webhooks configuration
+    webhooks:
+      - name: "Webform"
+    
+    # Tasks configuration
+    # tasks:
+    #   - name: "test waitlist"
+    #     file: "task/test_waitlist.json"

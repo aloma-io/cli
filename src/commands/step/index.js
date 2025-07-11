@@ -226,7 +226,7 @@ export async function editStep(stepId, workspaceIdentifier) {
  *   status: "active"
  * };
  * 
- * content = () => {
+ * content = async () => {
  *   console.log('running step');
  *   data.newStep = true;
  * };
@@ -463,8 +463,12 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
 
       try {
         await fs.access(stepFilePath);
-        await updateStepFromFile(step, stepFilePath);
-        console.log(chalk.green(`Successfully synced step: ${step.name}`));
+        try {
+          await updateStepFromFile(step, stepFilePath);
+          console.log(chalk.green(`Successfully synced step: ${step.name}`));
+        } catch (error) {
+          console.log(chalk.red(`Error updating step: ${step.name}`));
+        }
       } catch (error) {
         console.log(chalk.yellow(`Step file not found: ${stepFilePath}`));
       }
@@ -495,8 +499,12 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
 
           try {
             await fs.access(stepFilePath);
-            await updateStepFromFile(step, stepFilePath);
-            syncedCount++;
+            try {
+              await updateStepFromFile(step, stepFilePath);
+              syncedCount++;
+            } catch (error) {
+              console.log(chalk.red(`Error updating step: ${step.name}`));
+            }
           } catch (error) {
             console.log(chalk.yellow(`Step file not found: ${stepFilePath}`));
           }
@@ -533,7 +541,7 @@ async function createStepFile(step, workspaceFolder) {
  *   status: "active"
  * };
  * 
- * content = () => {
+ * content = async () => {
  *   console.log('running step');
  *   data.newStep = true;
  * };
@@ -572,6 +580,7 @@ async function updateStepFromFile(step, filePath) {
     }
   } catch (error) {
     console.error(chalk.red(`Error updating step from file: ${error.message}`));
+    throw new Error(`Error updating step from file: ${error.message}`);
   }
 }
 
@@ -643,6 +652,6 @@ async function parseStepFile(filePath) {
       content: content,
     };
   } catch (error) {
-    throw new Error(`Error parsing step file: ${error.message}`);
+    throw new Error(`Error parsing step file. ${error.message}`);
   }
 }

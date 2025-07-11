@@ -84,8 +84,11 @@ export const graphQuery = async (query, variables = {}) => {
     const data = await response.json();
 
     if (data.errors) {
-      console.error(chalk.red("GraphQL Errors:"), data.errors);
-      throw new Error(data.errors[0].message);
+      // console.error(chalk.red("GraphQL Errors:"), data.errors);
+      const errorMessages = data.errors
+        .map((error) => error.message)
+        .join("\n");
+      throw new Error(errorMessages);
     }
 
     return data.data;

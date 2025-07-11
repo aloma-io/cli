@@ -11,7 +11,7 @@
  *   status: "active"
  * };
  * 
- * content = () => {
+ * content = async () => {
  *   console.log('running step');
  *   data.newStep = true;
  * };
@@ -23,7 +23,7 @@ export const condition = {
 
 export const content = async () => {
 const body = {    
-  limit: 15,
+  limit: 5,
   properties: ['name', 'description', 'linkedin_company_page', 'website','country', 'industry']
 };
 

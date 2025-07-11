@@ -1,5 +1,5 @@
 /**
- * Step: New cli step
+ * Step: Post to slack when new contact
  * 
  * Edit the condition and content below.
  * The condition should be a valid JavaScript object (trailing commas are allowed).
@@ -18,13 +18,14 @@
  */
 
 export const condition = {
-  "cliStep": true,
-  "Step": 1
+  emailSent: true
 };
 
 export const content = async () => {
-  console.log("running a cli updated step");
-  const message = "This is a test message ";
-  console.log(message);
-  task.complete();
+  const slackChannel = task.config("SLACK_CHANNEL")
+data.message = data.firstName + ' ' + data.lastName + ' ' + ' requested to join the wait list';
+
+connectors.slackCom.send({ text: data.message, channel: slackChannel })
+
+task.complete()
 };
