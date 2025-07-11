@@ -63,41 +63,43 @@ export async function deployFromYaml(yamlPath, options = {}) {
       if (workspace.connectors) {
         console.log(chalk.blue("\nDeploying connectors..."));
         for (const connector of workspace.connectors) {
-          let connectorId = connector.connectorId;
-          let connectorName = connector.connectorName;
-          let namespace = connector.namespace;
-          // If connectorId is not provided but connectorName is, search for it
-          if (!connectorId && connectorName) {
-            const connectorData = await getConnectorByName(
-              connectorName,
-              workspaceId,
-            );
-            if (connectorData) {
-              connectorId = connectorData.id;
-              namespace = namespace || connectorData.namespace;
-            } else {
+          try {
+            let connectorId = connector.connectorId;
+            let connectorName = connector.connectorName;
+            let namespace = connector.namespace;
+            // If connectorId is not provided but connectorName is, search for it
+            if (!connectorId && connectorName) {
+              const connectorData = await getConnectorByName(
+                connectorName,
+                workspaceId,
+              );
+              if (connectorData) {
+                connectorId = connectorData.id;
+                namespace = namespace || connectorData.namespace;
+              } else {
+                continue;
+              }
+            }
+            if (!connectorId) {
+              console.log(
+                chalk.red(
+                  `No connectorId or connectorName provided for connector entry.`,
+                ),
+              );
               continue;
             }
-          }
-          if (!connectorId) {
-            console.log(
-              chalk.red(
-                `No connectorId or connectorName provided for connector entry.`,
-              ),
+            console.log(chalk.gray(`  - ${connectorName || connectorId}`));
+            await addConnector(
+              connectorId,
+              workspaceId,
+              connectorName,
+              namespace,
+              connector.tags,
+              connector.shared_in_realm,
+              connector.config,
+              connector.file,
             );
-            continue;
-          }
-          console.log(chalk.gray(`  - ${connectorName || connectorId}`));
-          await addConnector(
-            connectorId,
-            workspaceId,
-            connectorName,
-            namespace,
-            connector.tags,
-            connector.shared_in_realm,
-            connector.config,
-            connector.file,
-          );
+          } catch (error) {}
         }
       }
 

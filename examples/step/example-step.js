@@ -12,7 +12,7 @@
  *   status: "active"
  * };
  * 
- * content = () => {
+ * content = async () => {
  *   console.log('running step');
  *   data.newStep = true;
  * };

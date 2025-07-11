@@ -1,5 +1,5 @@
 /**
- * Step: New cli step
+ * Step: Send email for new contact
  * 
  * Edit the condition and content below.
  * The condition should be a valid JavaScript object (trailing commas are allowed).
@@ -18,13 +18,24 @@
  */
 
 export const condition = {
-  "cliStep": true,
-  "Step": 1
+  googleAdded: true
 };
 
 export const content = async () => {
-  console.log("running a cli updated step");
-  const message = "This is a test message ";
-  console.log(message);
-  task.complete();
+if (!data.sentence) {
+  data.sentence = `Thank you for signing up for the waitlist! We will be in touch with you shortly with updates.`
+}
+connectors.eMailSmtpOAuth.sendEmail({
+  to: `${data.email}`,
+  subject: 'Your on the wait list!',
+  html: `
+  <p>Dear ${data.firstName},</p>
+
+  <p>${data.sentence}</p>
+
+  <p> Kind Regards, <br>
+  The team </p>
+  `
+});
+data.emailSent = true
 };

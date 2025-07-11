@@ -1,5 +1,5 @@
 /**
- * Step: New cli step
+ * Step: Update Hubspot with CTO research
  * 
  * Edit the condition and content below.
  * The condition should be a valid JavaScript object (trailing commas are allowed).
@@ -18,13 +18,25 @@
  */
 
 export const condition = {
-  "cliStep": true,
-  "Step": 1
+  jobTitle: "CTO",
+  hubspotCreate: true,
+  contactResearch: String
 };
 
 export const content = async () => {
-  console.log("running a cli updated step");
-  const message = "This is a test message ";
-  console.log(message);
-  task.complete();
+
+const updateContact = await connectors.hubspotCom.request({
+  url: `/crm/v3/objects/contacts/${data.result.id}`,
+  options: {
+    method: 'PATCH',
+    body: {
+      properties: {
+        "research_profile": `${data.contactResearch}`
+      }
+    },
+    headers: {
+      'Content-type': 'application/json'
+    },
+  }
+});
 };
