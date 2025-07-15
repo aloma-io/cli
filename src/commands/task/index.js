@@ -7,6 +7,7 @@ import {
   CLONE_TASK_MUTATION,
   STOP_TASK_MUTATION,
   RESUME_TASK_MUTATION,
+  NEW_TASK_FROM_HISTORY_MUTATION,
 } from "./query.js";
 import { color } from "./utils.js";
 import { getSelectedWorkspace } from "../workspace/index.js";
@@ -90,6 +91,93 @@ function printJsonDiff(prev, curr) {
   process.stdout.write("\n");
 }
 
+function getNormalizedHistory(task, history) {
+  if (history && history.length > 0) {
+    // Add created event if not present
+    if (!history.find((item) => item.state === "created")) {
+      history.unshift({
+        context: { timestamp: new Date(task.createdAt).getTime() },
+        updatedAt: task.createdAt,
+        error: task.error,
+        task_id: task.id,
+        id: "created",
+        title: "created",
+        state: "created",
+        data: task.content?.data || {},
+      });
+    }
+
+    // Normalize and filter history items
+    const normalized = history
+      .filter((item) => item && item.context)
+      .map((item, idx) => {
+        const isV3 = item.v === 3;
+        const context = item.context;
+        const content = context?.content || {};
+        const date = new Date(
+          context?.snapshot?.timestamp || context?.timestamp || item.updatedAt,
+        ).getTime();
+
+        let executionTime;
+        if (item.rule && context?.content?.context?.appliedRules) {
+          const ruleId = item.rule.id;
+          const found = context.content.context.appliedRules.find(
+            (r) => r.id === ruleId,
+          );
+          if (found && found.executionDuration !== undefined) {
+            executionTime = found.executionDuration;
+          }
+        }
+
+        return {
+          id: item.id,
+          taskId: item.task_id,
+          title: item.event,
+          state: item.state,
+          cardTitle: item.rule?.name
+            ? item.rule.name
+            : item.event || item.state,
+          error: item.error || context?.error,
+          date: new Date(date).toLocaleTimeString(),
+          rule: item.rule,
+          console:
+            context?.content?._currentConsoleLog ||
+            item.context?.consoleLog ||
+            [],
+          audit:
+            context?.content?._currentAuditLog || item.context?.auditLog || [],
+          visualize: content?._currentVisualize || context?.visualization || [],
+          executionTime,
+          integrations: (
+            (isV3
+              ? Object.values(content?._currentIntegration || {})
+              : context?.integrations) || []
+          ).sort((a, b) => (a.alias > b.alias ? 1 : -1)),
+          startedSubtasks:
+            content?._startedSubtasks || context?.startedSubtasks || [],
+          finishedSubtasks:
+            context?._finishedSubtasks || context?.finishedSubtasks || [],
+          isApplying: item.event === "applying",
+          isCurrentlyRunning:
+            idx === history.length - 1 && item.event === "applying",
+          changes: content.changes || [],
+          data: content.data || item.data || {},
+        };
+      })
+      .filter((item, idx) => {
+        if (item.isApplying && !item.isCurrentlyRunning) return false;
+        if (item.audit.length) return true;
+        return (
+          item.rule != null ||
+          item.state === "created" ||
+          idx === history.length - 1
+        );
+      });
+    return normalized;
+  }
+  return [];
+}
+
 export async function showTask(taskId, options = {}) {
   try {
     if (!taskId) {
@@ -143,91 +231,8 @@ export async function showTask(taskId, options = {}) {
     }
 
     if (history && history.length > 0) {
-      // Add created event if not present
-      if (!history.find((item) => item.state === "created")) {
-        history.unshift({
-          context: { timestamp: new Date(task.createdAt).getTime() },
-          updatedAt: task.createdAt,
-          error: task.error,
-          task_id: task.id,
-          id: "created",
-          title: "created",
-          state: "created",
-          data: task.content?.data || {},
-        });
-      }
-
-      // Normalize and filter history items
-      const normalized = history
-        .filter((item) => item && item.context)
-        .map((item, idx) => {
-          const isV3 = item.v === 3;
-          const context = item.context;
-          const content = context?.content || {};
-          const date = new Date(
-            context?.snapshot?.timestamp ||
-              context?.timestamp ||
-              item.updatedAt,
-          ).getTime();
-
-          let executionTime;
-          if (item.rule && context?.content?.context?.appliedRules) {
-            const ruleId = item.rule.id;
-            const found = context.content.context.appliedRules.find(
-              (r) => r.id === ruleId,
-            );
-            if (found && found.executionDuration !== undefined) {
-              executionTime = found.executionDuration;
-            }
-          }
-
-          return {
-            id: item.id,
-            taskId: item.task_id,
-            title: item.event,
-            state: item.state,
-            cardTitle: item.rule?.name
-              ? item.rule.name
-              : item.event || item.state,
-            error: item.error || context?.error,
-            date: new Date(date).toLocaleTimeString(),
-            rule: item.rule,
-            console:
-              context?.content?._currentConsoleLog ||
-              item.context?.consoleLog ||
-              [],
-            audit:
-              context?.content?._currentAuditLog ||
-              item.context?.auditLog ||
-              [],
-            visualize:
-              content?._currentVisualize || context?.visualization || [],
-            executionTime,
-            integrations: (
-              (isV3
-                ? Object.values(content?._currentIntegration || {})
-                : context?.integrations) || []
-            ).sort((a, b) => (a.alias > b.alias ? 1 : -1)),
-            startedSubtasks:
-              content?._startedSubtasks || context?.startedSubtasks || [],
-            finishedSubtasks:
-              context?._finishedSubtasks || context?.finishedSubtasks || [],
-            isApplying: item.event === "applying",
-            isCurrentlyRunning:
-              idx === history.length - 1 && item.event === "applying",
-            changes: content.changes || [],
-            data: content.data || item.data || {},
-          };
-        })
-        .filter((item, idx) => {
-          if (item.isApplying && !item.isCurrentlyRunning) return false;
-          if (item.audit.length) return true;
-          return (
-            item.rule != null ||
-            item.state === "created" ||
-            idx === history.length - 1
-          );
-        });
+      // Get normalized history
+      const normalized = getNormalizedHistory(task, history);
 
       // If --step is specified, filter to that step
       let entriesToShow = normalized.map((item) => item.id);
@@ -266,7 +271,11 @@ export async function showTask(taskId, options = {}) {
         }
 
         // Show logs if requested
-        if (options.logs && entriesToShow.includes(entry.id)) {
+        if (
+          options.logs &&
+          entriesToShow.includes(entry.id) &&
+          entry.state !== "incomplete"
+        ) {
           // Show console logs if available
           if (entry.console.length > 0) {
             console.log(`\n${chalk.gray("Console Log:")}`);
@@ -308,17 +317,29 @@ export async function showTask(taskId, options = {}) {
           }
         }
 
-        // Show changes (diff) if requested and not for 'completed' step
+        // Show changes (diff) if requested and not for the last step
         if (
           options.changes &&
           entriesToShow.includes(entry.id) &&
-          entry.cardTitle !== "complete"
+          entry.state !== "incomplete" &&
+          idx !== normalized.length - 1
         ) {
           // Get current and previous data for this step
           const prevData = idx > 0 ? normalized[idx - 1].data : {};
           const currData = entry.data;
           console.log(`\n${chalk.gray("Step Data Diff:")}`);
           printJsonDiff(prevData, currData);
+        }
+
+        // Show task data after each step if requested and not for the last step
+        if (
+          options.inspect &&
+          entriesToShow.includes(entry.id) &&
+          entry.state !== "incomplete" &&
+          idx !== normalized.length - 1
+        ) {
+          console.log(`\n${chalk.gray("Step Data:")}`);
+          console.log(JSON.stringify(entry.data, null, 2));
         }
 
         if (entry.error) {
@@ -389,21 +410,44 @@ export async function createTask(
   }
 }
 
-export async function cloneTask(taskId) {
+export async function cloneTask(taskId, step = null) {
   try {
     if (!taskId) {
       console.log(chalk.yellow("⚠ Please provide a task ID"));
       return;
     }
 
-    const response = await graphQuery(CLONE_TASK_MUTATION, {
-      id: taskId,
-    });
+    if (step) {
+      const taskData = await graphQuery(GET_TASK_QUERY, {
+        id: taskId,
+      });
+      const task = taskData.getAutomationEnvironmentTask;
+      const history = taskData.getAutomationEnvironmentTaskHistory;
+      const normalized = getNormalizedHistory(task, history);
+      const stepIdx = parseInt(step, 10);
+      if (!isNaN(stepIdx) && stepIdx >= 0 && stepIdx < normalized.length) {
+        const stepId = normalized[stepIdx].id;
+        const response = await graphQuery(NEW_TASK_FROM_HISTORY_MUTATION, {
+          id: stepId,
+        });
+        const newTaskId = response.createAutomationTaskFromHistory;
+        console.log(
+          chalk.green(`✓ Task created successfully with ID: ${newTaskId}`),
+        );
+      } else {
+        console.log(chalk.red("Invalid step number specified."));
+        return;
+      }
+    } else {
+      const response = await graphQuery(CLONE_TASK_MUTATION, {
+        id: taskId,
+      });
 
-    const newTaskId = response.createAutomationTaskFromTask;
-    console.log(
-      chalk.green(`✓ Task cloned successfully with ID: ${newTaskId}`),
-    );
+      const newTaskId = response.createAutomationTaskFromTask;
+      console.log(
+        chalk.green(`✓ Task cloned successfully with ID: ${newTaskId}`),
+      );
+    }
 
     // // Show the newly cloned task
     // await showTask(newTaskId);

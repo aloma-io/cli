@@ -381,6 +381,7 @@ program
       .argument("<id>", "Task ID")
       .option("--logs", "Show console and audit logs for each step")
       .option("--changes", "Show diff changes for each step")
+      .option("--inspect", "Show task data after each step")
       .option("--step <number>", "Show logs/changes for a specific step number")
       .action(async (id, options) => {
         await showTask(id, options);
@@ -404,8 +405,9 @@ program
     new Command("clone")
       .description("Clone a task")
       .argument("<id>", "Task ID")
-      .action(async (id) => {
-        await cloneTask(id);
+      .option("-s, --step <number>", "Step number to clone")
+      .action(async (id, options) => {
+        await cloneTask(id, options.step);
       }),
   )
   .addCommand(
