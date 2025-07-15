@@ -105,3 +105,9 @@ export const STOP_TASK_MUTATION = `
     stopAutomationTask(id: $id)
   }
 `;
+
+export const NEW_TASK_FROM_HISTORY_MUTATION = `
+  mutation ($id: ID!) {
+    createAutomationTaskFromHistory(id: $id)
+  }
+`;
