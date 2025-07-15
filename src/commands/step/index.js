@@ -208,7 +208,9 @@ export async function editStep(stepId, workspaceIdentifier) {
 
     // Create temporary file
     const tempDir = os.tmpdir();
-    const fileName = `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`;
+    // If the step name contains slashes, use only the last segment for the temp file
+    const stepSegments = step.name.split("/");
+    const fileName = `${stepSegments[stepSegments.length - 1]}.js`;
     const tempFilePath = path.join(tempDir, fileName);
 
     // Prepare the file content
@@ -352,19 +354,8 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
   if (!workspaceId) return;
 
-  // Get workspace details to create folder with workspace name
-  const workspace = await getWorkspace(workspaceId);
-  if (!workspace) {
-    console.log(chalk.red("Workspace not found"));
-    return;
-  }
-
   // Use current directory if no path specified
-  const basePath = targetPath || process.cwd();
-  const workspaceFolder = path.join(
-    basePath,
-    workspace.name.replace(/[^a-z0-9]/gi, "_").toLowerCase(),
-  );
+  const workspaceFolder = targetPath || process.cwd();
 
   try {
     // Create workspace folder if it doesn't exist
@@ -421,19 +412,8 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
   if (!workspaceId) return;
 
-  // Get workspace details to find folder
-  const workspace = await getWorkspace(workspaceId);
-  if (!workspace) {
-    console.log(chalk.red("Workspace not found"));
-    return;
-  }
-
   // Use current directory if no path specified
-  const basePath = sourcePath || process.cwd();
-  const workspaceFolder = path.join(
-    basePath,
-    workspace.name.replace(/[^a-z0-9]/gi, "_").toLowerCase(),
-  );
+  const workspaceFolder = sourcePath || process.cwd();
 
   try {
     // Check if workspace folder exists
@@ -456,10 +436,12 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
         return;
       }
 
-      const stepFilePath = path.join(
-        workspaceFolder,
-        `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`,
-      );
+      // If the step name contains slashes, create subfolders accordingly
+      const stepSegments = step.name.split("/");
+      const fileName = `${stepSegments[stepSegments.length - 1]}.js`;
+      const subfolders = stepSegments.slice(0, -1);
+      const targetFolder = path.join(workspaceFolder, ...subfolders);
+      const stepFilePath = path.join(targetFolder, fileName);
 
       try {
         await fs.access(stepFilePath);
@@ -492,10 +474,12 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
         });
         const step = stepData.getAutomationStep;
         if (step) {
-          const stepFilePath = path.join(
-            workspaceFolder,
-            `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`,
-          );
+          // If the step name contains slashes, create subfolders accordingly
+          const stepSegments = step.name.split("/");
+          const fileName = `${stepSegments[stepSegments.length - 1]}.js`;
+          const subfolders = stepSegments.slice(0, -1);
+          const targetFolder = path.join(workspaceFolder, ...subfolders);
+          const stepFilePath = path.join(targetFolder, fileName);
 
           try {
             await fs.access(stepFilePath);
@@ -524,8 +508,13 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
 
 // Helper function to create step file
 async function createStepFile(step, workspaceFolder) {
-  const fileName = `${step.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.js`;
-  const filePath = path.join(workspaceFolder, fileName);
+  // If the step name contains slashes, create subfolders accordingly
+  const stepSegments = step.name.split("/");
+  const fileName = `${stepSegments[stepSegments.length - 1]}.js`;
+  const subfolders = stepSegments.slice(0, -1);
+  const targetFolder = path.join(workspaceFolder, ...subfolders);
+  await fs.mkdir(targetFolder, { recursive: true });
+  const filePath = path.join(targetFolder, fileName);
 
   const fileContent = `/**
  * Step: ${step.name}

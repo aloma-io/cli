@@ -5,28 +5,18 @@ A command-line interface for interacting with Aloma services and utilities.
 ## Installation
 
 ```bash
-npm install -g aloma
+npm install -g @juanjoserodriguez/aloma
 ```
 
 ### Quick Setup
 
 The Aloma CLI uses secure OAuth2 with PKCE (Proof Key for Code Exchange) - no client secrets needed!
 
-#### Automatic Setup
-Installation automatically configures the CLI:
-```bash
-npm install -g aloma  # OAuth2 PKCE configured automatically
-```
-
 #### Manual Setup
 If you need to reconfigure or troubleshoot:
 ```bash
 aloma setup
 ```
-
-#### Configuration
-Configuration is stored securely in your home directory:
-- `~/.aloma/config.json` - OAuth2 configuration
 
 #### Security Features
 - 🔒 **OAuth2 + PKCE**: Industry-standard secure authentication
