@@ -12,7 +12,8 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import open from "open";
-import { getWorkspace, resolveWorkspaceId } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../workspace/index.js";
+import readline from "readline";
 
 export async function addStep(
   name,
@@ -415,6 +416,38 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
   // Use current directory if no path specified
   const workspaceFolder = sourcePath || process.cwd();
 
+  // Helper to prompt for confirmation
+  async function promptConfirmation(message) {
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      rl.question(message, (answer) => {
+        rl.close();
+        resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
+      });
+    });
+  }
+
+  // Helper to recursively get all .js files in a directory
+  async function getAllJsFiles(dir, baseDir = dir) {
+    let results = [];
+    const list = await fs.readdir(dir, { withFileTypes: true });
+    for (const file of list) {
+      const filePath = path.join(dir, file.name);
+      if (file.isDirectory()) {
+        results = results.concat(await getAllJsFiles(filePath, baseDir));
+      } else if (file.isFile() && file.name.endsWith('.js')) {
+        results.push({
+          absPath: filePath,
+          relPath: path.relative(baseDir, filePath),
+        });
+      }
+    }
+    return results;
+  }
+
   try {
     // Check if workspace folder exists
     try {
@@ -445,6 +478,14 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
 
       try {
         await fs.access(stepFilePath);
+        // Prompt for confirmation
+        const confirmed = await promptConfirmation(
+          `Are you sure you want to overwrite the step '${step.name}' with the contents of '${stepFilePath}'? (y/N): `
+        );
+        if (!confirmed) {
+          console.log(chalk.yellow("Sync cancelled by user."));
+          return;
+        }
         try {
           await updateStepFromFile(step, stepFilePath);
           console.log(chalk.green(`Successfully synced step: ${step.name}`));
@@ -460,45 +501,78 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
         id: workspaceId,
         includeDisabled: true,
       });
-      const steps = data.listAutomationSteps;
+      const steps = data.listAutomationSteps || [];
+      // Map step name to step object for quick lookup
+      const stepMap = new Map();
+      for (const stepSummary of steps) {
+        stepMap.set(stepSummary.name, stepSummary);
+      }
 
-      if (!steps || steps.length === 0) {
-        console.log(chalk.yellow("No steps found in workspace."));
+      // Get all .js files in workspaceFolder recursively
+      const jsFiles = await getAllJsFiles(workspaceFolder);
+      if (jsFiles.length === 0) {
+        console.log(chalk.yellow("No .js step files found in workspace folder."));
         return;
       }
 
-      let syncedCount = 0;
-      for (const stepSummary of steps) {
-        const stepData = await graphQuery(GET_STEP_QUERY, {
-          id: stepSummary.id,
-        });
-        const step = stepData.getAutomationStep;
-        if (step) {
-          // If the step name contains slashes, create subfolders accordingly
-          const stepSegments = step.name.split("/");
-          const fileName = `${stepSegments[stepSegments.length - 1]}.js`;
-          const subfolders = stepSegments.slice(0, -1);
-          const targetFolder = path.join(workspaceFolder, ...subfolders);
-          const stepFilePath = path.join(targetFolder, fileName);
+      // Prompt for confirmation ONCE
+      const confirmed = await promptConfirmation(
+        `Are you sure you want to overwrite steps in the workspace with the contents of ${jsFiles.length} file(s) from '${workspaceFolder}'? (y/N): `
+      );
+      if (!confirmed) {
+        console.log(chalk.yellow("Sync cancelled by user."));
+        return;
+      }
 
+      let updatedCount = 0;
+      let createdCount = 0;
+      for (const { absPath, relPath } of jsFiles) {
+        // Derive step name from relPath (remove .js extension, convert path separators to /)
+        const stepName = relPath.replace(/\\/g, "/").replace(/\.js$/, "");
+        const step = stepMap.get(stepName);
+        if (step) {
+          // Update existing step
           try {
-            await fs.access(stepFilePath);
-            try {
-              await updateStepFromFile(step, stepFilePath);
-              syncedCount++;
-            } catch (error) {
-              console.log(chalk.red(`Error updating step: ${step.name}`));
-            }
+            // Get full step details for update
+            const stepData = await graphQuery(GET_STEP_QUERY, { id: step.id });
+            const fullStep = stepData.getAutomationStep;
+            await updateStepFromFile(fullStep, absPath);
+            updatedCount++;
           } catch (error) {
-            console.log(chalk.yellow(`Step file not found: ${stepFilePath}`));
+            console.log(chalk.red(`Error updating step: ${stepName}`));
+          }
+        } else {
+          // Create new step
+          try {
+            const { condition: newCondition, content: newContent } = await parseStepFile(absPath);
+            // Create the step first
+            const createData = await graphQuery(CREATE_STEP_MUTATION, {
+              name: stepName,
+              environment_id: workspaceId,
+              nocode_type: null,
+            });
+            const newStepId = createData.createAutomationStep;
+            // Update the step with the parsed content
+            await graphQuery(SAVE_STEP_MUTATION, {
+              id: newStepId,
+              name: stepName,
+              if: newCondition,
+              do: newContent,
+              enabled: true,
+              version: 0,
+              nocode_content: null,
+              config_content: null,
+            });
+            createdCount++;
+          } catch (error) {
+            console.log(chalk.red(`Error creating step: ${stepName}`));
           }
         }
       }
-
       console.log(
         chalk.green(
-          `Successfully synced ${syncedCount} steps from: ${workspaceFolder}`,
-        ),
+          `Successfully synced steps from: ${workspaceFolder}\nUpdated: ${updatedCount}, Created: ${createdCount}`
+        )
       );
     }
   } catch (error) {
