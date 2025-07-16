@@ -23,11 +23,11 @@ workspaces:
     # Connectors configuration
     connectors:
       - connectorName: "hubspot.com (private)"
-        file: "connector/connector-hubspot.json"
+        file: "connector/connector-hubspot.yaml"
       - connectorName: "Google Sheets"
       - connectorName: "E-Mail (SMTP - OAuth)"
       - connectorName: "Perplexity"
-        file: "connector/connector-perplexity.json"
+        file: "connector/connector-perplexity.yaml"
       - connectorName: "slack.com"
 
     # Secrets configuration
@@ -52,4 +52,4 @@ workspaces:
     # Tasks configuration
     # tasks:
     #   - name: "test waitlist"
-    #     file: "task/test_waitlist.json"
+    #     file: "task/test_waitlist.yaml"

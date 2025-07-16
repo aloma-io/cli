@@ -15,6 +15,8 @@ import chalk from "chalk";
 import { getSelectedWorkspace } from "../workspace/index.js";
 import fs from "fs/promises";
 import open from "open";
+import yaml from "js-yaml";
+import path from "path";
 
 export async function listAvailableConnectors(workspaceIdentifier, filterName) {
   try {
@@ -305,8 +307,13 @@ export async function updateConnector(
     }
 
     if (file) {
-      let fileContent = await fs.readFile(file, "utf8");
-      fileContent = JSON.parse(fileContent);
+      const ext = path.extname(file).toLowerCase();
+      let fileContent;
+      if (ext === ".yaml" || ext === ".yml") {
+        fileContent = yaml.load(await fs.readFile(file, "utf8"));
+      } else {
+        fileContent = JSON.parse(await fs.readFile(file, "utf8"));
+      }
       // Set properties from file content
       connectorName = fileContent.name || connectorName;
       connectorNamespace = fileContent.namespace || connectorNamespace;

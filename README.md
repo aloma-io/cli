@@ -55,7 +55,7 @@ aloma task list
 ### 🏢 Workspace Management
 - **Workspace Operations**: Create, list, switch, and manage workspaces
 - **Workspace Configuration**: Update settings, tags, and health checks
-- **Source Control**: Configure and sync source repositories
+- **Source Control**: Configure and sync source repositories with JSON or YAML files
 - **Archive Management**: Archive and unarchive workspaces
 - **Workspace Deletion**: Safe deletion with recovery options
 
@@ -75,7 +75,7 @@ aloma task list
 - **Task Logging**: Detailed task logs and execution history
 - **Task Cloning**: Duplicate existing tasks for reuse
 - **State Filtering**: Filter tasks by execution state
-- **Data Integration**: Pass JSON data to tasks
+- **Data Integration**: Pass JSON or YAML data to tasks
 
 ### 🔗 Webhook Management
 - **Webhook Operations**: Create, list, and manage webhooks
@@ -90,7 +90,7 @@ aloma task list
 
 ### 🔌 Connector Management
 - **Connector Library**: Browse available connector types
-- **Connector Configuration**: Add and configure data connectors
+- **Connector Configuration**: Add and configure data connectors with JSON or YAML files
 - **OAuth Integration**: OAuth setup for third-party services
 - **Connector Logs**: Monitor connector performance and errors
 - **Shared Connectors**: Share connectors across the realm
@@ -105,10 +105,48 @@ aloma task list
 - **Multi-Resource Deployment**: Deploy workspaces, steps, tasks, and webhooks
 - **Environment Management**: Deploy to different environments
 
+### 📄 Configuration File Support
+- **Multi-Format Support**: Use JSON or YAML for configuration files
+- **Automatic Detection**: File format automatically detected by extension
+- **Backward Compatibility**: Existing JSON files continue to work
+- **Supported Formats**:
+  - **Connector Configs**: `.json`, `.yaml`, `.yml`
+  - **Task Configs**: `.json`, `.yaml`, `.yml`
+  - **Source Configs**: `.json`, `.yaml`, `.yml`
+
 ### 🛠️ Development Tools
 - **Local Development**: Link package for development testing
 - **Configuration Management**: Environment-specific configurations
 - **Error Handling**: Comprehensive error reporting and debugging
+
+## Configuration Examples
+
+### Connector Configuration (YAML)
+```yaml
+config:
+  apiToken: "your-api-token-here"
+  baseUrl: "https://api.example.com"
+```
+
+### Task Configuration (YAML)
+```yaml
+firstName: "John"
+lastName: "Doe"
+email: "john@example.com"
+company: "Example Corp"
+$via:
+  name: "Webform"
+```
+
+### Source Configuration (YAML)
+```yaml
+apikey: "your-github-token"
+branch: "main"
+enabled: true
+source_automatic: false
+url: "https://github.com/user/repo.git"
+username: "username"
+```
 
 ## Documentation
 

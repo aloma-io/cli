@@ -7,7 +7,7 @@ import {
   getWorkspaceId,
   getSelectedWorkspace,
 } from "../workspace/index.js";
-import { addStep } from "../step/index.js";
+import { addStep, syncStep } from "../step/index.js";
 import { createTask } from "../task/index.js";
 import { addWebhook } from "../webhook/index.js";
 import { addConnector, getConnectorByName } from "../connector/index.js";
@@ -45,8 +45,13 @@ export async function deployFromYaml(yamlPath, options = {}) {
       if (workspace.steps) {
         console.log(chalk.blue("\nDeploying steps..."));
         for (const step of workspace.steps) {
-          console.log(chalk.gray(`  - ${step.name}`));
-          await addStep(step.name, workspaceId, step.type, step.file);
+          if (step.syncPath) {
+            // Sync all .js files from the given directory as steps
+            await syncStep(workspaceId, null, step.syncPath, true);
+          } else {
+            console.log(chalk.gray(`  - ${step.name}`));
+            await addStep(step.name, workspaceId, step.type, step.file);
+          }
         }
       }
 

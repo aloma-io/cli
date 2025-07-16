@@ -13,6 +13,8 @@ import { color } from "./utils.js";
 import { getSelectedWorkspace } from "../workspace/index.js";
 import fs from "fs/promises";
 import { diffJson } from "diff";
+import yaml from "js-yaml";
+import path from "path";
 
 export async function listTasks(
   page = 1,
@@ -384,13 +386,25 @@ export async function createTask(
       if (taskData) {
         data = typeof taskData === "string" ? JSON.parse(taskData) : taskData;
       } else if (taskFile) {
-        data = JSON.parse(await fs.readFile(taskFile, "utf8"));
+        const ext = path.extname(taskFile).toLowerCase();
+        if (ext === ".json") {
+          data = JSON.parse(await fs.readFile(taskFile, "utf8"));
+        } else if (ext === ".yaml" || ext === ".yml") {
+          data = yaml.load(await fs.readFile(taskFile, "utf8"));
+        } else {
+          console.log(
+            chalk.yellow(
+              "⚠ Unsupported file extension. Only .json and .yaml/.yml are supported.",
+            ),
+          );
+          return;
+        }
       } else {
         console.log(chalk.yellow("⚠ No data provided"));
         return;
       }
     } catch (e) {
-      console.error(chalk.red("Error parsing JSON data:"), e.message);
+      console.error(chalk.red("Error parsing JSON/YAML data:"), e.message);
       return;
     }
 
