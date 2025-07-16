@@ -409,7 +409,12 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
   }
 }
 
-export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
+export async function syncStep(
+  workspaceIdentifier,
+  stepId,
+  sourcePath,
+  noPrompt,
+) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
   if (!workspaceId) return;
 
@@ -482,9 +487,12 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
       try {
         await fs.access(stepFilePath);
         // Prompt for confirmation
-        const confirmed = await promptConfirmation(
-          `Are you sure you want to overwrite the step '${step.name}' with the contents of '${stepFilePath}'? (y/N): `,
-        );
+        let confirmed = true;
+        if (!noPrompt) {
+          confirmed = await promptConfirmation(
+            `Are you sure you want to overwrite the step '${step.name}' with the contents of '${stepFilePath}'? (y/N): `,
+          );
+        }
         if (!confirmed) {
           console.log(chalk.yellow("Sync cancelled by user."));
           return;
@@ -521,9 +529,12 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
       }
 
       // Prompt for confirmation ONCE
-      const confirmed = await promptConfirmation(
-        `Are you sure you want to overwrite steps in the workspace with the contents of ${jsFiles.length} file(s) from '${workspaceFolder}'? (y/N): `,
-      );
+      let confirmed = true;
+      if (!noPrompt) {
+        confirmed = await promptConfirmation(
+          `Are you sure you want to overwrite steps in the workspace with the contents of ${jsFiles.length} file(s) from '${workspaceFolder}'? (y/N): `,
+        );
+      }
       if (!confirmed) {
         console.log(chalk.yellow("Sync cancelled by user."));
         return;

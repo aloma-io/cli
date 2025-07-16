@@ -14,6 +14,8 @@ import {
 } from "./query.js";
 
 import fs from "fs";
+import yaml from "js-yaml";
+import path from "path";
 
 // Global variable to store the selected workspace ID
 let selectedWorkspaceId = null;
@@ -577,7 +579,12 @@ export async function sourceEdit(workspaceIdentifier, options) {
   if (options.file) {
     try {
       const fileContent = fs.readFileSync(options.file, "utf-8");
-      config = JSON.parse(fileContent);
+      const ext = path.extname(options.file).toLowerCase();
+      if (ext === ".yml" || ext === ".yaml") {
+        config = yaml.load(fileContent);
+      } else {
+        config = JSON.parse(fileContent);
+      }
     } catch (err) {
       console.error(
         chalk.red("Failed to read or parse config file:"),

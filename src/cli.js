@@ -396,7 +396,7 @@ program
         "-d, --data <json>",
         "JSON data to send with the task (e.g. '{\"test\":true}')",
       )
-      .option("-f, --file <path>", "Path to JSON file containing task data")
+      .option("-f, --file <path>", "Path to YAML file containing task data")
       .action(async (name, options) => {
         await createTask(name, options.data, options.file, options.workspace);
       }),
@@ -487,12 +487,12 @@ program
       .option("-w, --workspace <id>", "Workspace ID")
       .option("-d, --description <description>", "Secret description")
       .option("-e, --encrypted", "Mark secret as encrypted")
-      .option("-o, --options <json>", "JSON options for the secret")
+      .option("-o, --options <yaml>", "YAML options for the secret")
       .action(async (name, value, options) => {
         let secretOptions = {};
         if (options.options) {
           try {
-            secretOptions = JSON.parse(options.options);
+            secretOptions = yaml.load(options.options);
           } catch (error) {
             console.error(chalk.red("Invalid JSON in options:"), error.message);
             return;
@@ -560,7 +560,7 @@ program
       .option("-c, --config <json>", "JSON configuration for the connector")
       .option(
         "-f, --file <path>",
-        "Path to JSON file containing connector configuration",
+        "Path to JSON or YAML file containing connector configuration",
       )
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (connectorId, options) => {

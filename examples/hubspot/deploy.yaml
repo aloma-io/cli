@@ -15,7 +15,8 @@ workspaces:
     # Connectors configuration
     connectors:
       - connectorName: "hubspot.com (private)"
-        file: "connector/connector-hubspot.json"
+        file: "connector/connector-hubspot.yaml"
+        
 
     # Tasks configuration
     tasks:

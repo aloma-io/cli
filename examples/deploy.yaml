@@ -11,22 +11,22 @@ workspaces:
       - connectorName: "hubspot.com (private)"
         # name: "hubspot"
         # namespace: "hubspot"
-        file: "connector/connector-hubspot.json"
+        file: "connector/connector-hubspot.yaml"
       - connectorName: "openai.com"
         namespace: "openaiCom2"
         config:
           apiKey: "sk-proj-1234567890"
 
-    # # Secrets configuration
-    # secrets:
-    #   - name: "API_KEY"
-    #     value: "supersecretapikey"
-    #     description: "API key for external service"
-    #     encrypted: true
-    #   - name: "HOME_URL"
-    #     value: "https://www.aloma.ai"
-    #     description: "Home URL"
-    #     encrypted: false
+    # Secrets configuration
+    secrets:
+      - name: "API_KEY"
+        value: "supersecretapikey"
+        description: "API key for external service"
+        encrypted: true
+      - name: "HOME_URL"
+        value: "https://www.aloma.ai"
+        description: "Home URL"
+        encrypted: false
 
     # Steps configuration
     # steps:

@@ -1,0 +1,6 @@
+apikey: ""
+branch: "main"
+enabled: true
+source_automatic: false
+url: "https://github.com/Jhon-Doe/aloma-git.git"
+username: "Jhon-Doe" 
