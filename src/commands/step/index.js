@@ -425,7 +425,10 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
       });
       rl.question(message, (answer) => {
         rl.close();
-        resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
+        resolve(
+          answer.trim().toLowerCase() === "y" ||
+            answer.trim().toLowerCase() === "yes",
+        );
       });
     });
   }
@@ -438,7 +441,7 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
       const filePath = path.join(dir, file.name);
       if (file.isDirectory()) {
         results = results.concat(await getAllJsFiles(filePath, baseDir));
-      } else if (file.isFile() && file.name.endsWith('.js')) {
+      } else if (file.isFile() && file.name.endsWith(".js")) {
         results.push({
           absPath: filePath,
           relPath: path.relative(baseDir, filePath),
@@ -480,7 +483,7 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
         await fs.access(stepFilePath);
         // Prompt for confirmation
         const confirmed = await promptConfirmation(
-          `Are you sure you want to overwrite the step '${step.name}' with the contents of '${stepFilePath}'? (y/N): `
+          `Are you sure you want to overwrite the step '${step.name}' with the contents of '${stepFilePath}'? (y/N): `,
         );
         if (!confirmed) {
           console.log(chalk.yellow("Sync cancelled by user."));
@@ -511,13 +514,15 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
       // Get all .js files in workspaceFolder recursively
       const jsFiles = await getAllJsFiles(workspaceFolder);
       if (jsFiles.length === 0) {
-        console.log(chalk.yellow("No .js step files found in workspace folder."));
+        console.log(
+          chalk.yellow("No .js step files found in workspace folder."),
+        );
         return;
       }
 
       // Prompt for confirmation ONCE
       const confirmed = await promptConfirmation(
-        `Are you sure you want to overwrite steps in the workspace with the contents of ${jsFiles.length} file(s) from '${workspaceFolder}'? (y/N): `
+        `Are you sure you want to overwrite steps in the workspace with the contents of ${jsFiles.length} file(s) from '${workspaceFolder}'? (y/N): `,
       );
       if (!confirmed) {
         console.log(chalk.yellow("Sync cancelled by user."));
@@ -544,7 +549,8 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
         } else {
           // Create new step
           try {
-            const { condition: newCondition, content: newContent } = await parseStepFile(absPath);
+            const { condition: newCondition, content: newContent } =
+              await parseStepFile(absPath);
             // Create the step first
             const createData = await graphQuery(CREATE_STEP_MUTATION, {
               name: stepName,
@@ -571,8 +577,8 @@ export async function syncStep(workspaceIdentifier, stepId, sourcePath) {
       }
       console.log(
         chalk.green(
-          `Successfully synced steps from: ${workspaceFolder}\nUpdated: ${updatedCount}, Created: ${createdCount}`
-        )
+          `Successfully synced steps from: ${workspaceFolder}\nUpdated: ${updatedCount}, Created: ${createdCount}`,
+        ),
       );
     }
   } catch (error) {

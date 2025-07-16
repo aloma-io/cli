@@ -5,7 +5,7 @@ A command-line interface for interacting with Aloma services and utilities.
 ## Installation
 
 ```bash
-npm install -g @juanjoserodriguez/aloma
+npm install -g @aloma.io/aloma
 ```
 
 ### Quick Setup
