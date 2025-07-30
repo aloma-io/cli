@@ -672,7 +672,13 @@ async function parseStepFile(filePath) {
     const fileContent = await fs.readFile(filePath, "utf8");
     const ast = parser.parse(fileContent, {
       sourceType: "module",
-      plugins: ["jsx", "asyncGenerators", "classProperties", "dynamicImport", "objectRestSpread"],
+      plugins: [
+        "jsx",
+        "asyncGenerators",
+        "classProperties",
+        "dynamicImport",
+        "objectRestSpread",
+      ],
     });
 
     let conditionStr = null;
@@ -687,8 +693,8 @@ async function parseStepFile(filePath) {
       ) {
         for (const decl of node.declaration.declarations) {
           if (decl.id.name === "condition") {
-              conditionStr = generate.default(decl.init).code;
-            }
+            conditionStr = generate.default(decl.init).code;
+          }
           if (
             decl.id.name === "content" &&
             decl.init.type === "ArrowFunctionExpression"

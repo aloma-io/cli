@@ -10,7 +10,12 @@ import * as jose from "jose";
 // Get the package root directory
 export const getPackageRoot = async () => {
   // First check local node_modules
-  const localPath = path.join(process.cwd(), "node_modules", "@aloma.io", "aloma");
+  const localPath = path.join(
+    process.cwd(),
+    "node_modules",
+    "@aloma.io",
+    "aloma",
+  );
   try {
     const stats = await fs.stat(localPath);
     if (stats.isDirectory()) {
