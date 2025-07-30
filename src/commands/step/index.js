@@ -14,6 +14,8 @@ import os from "os";
 import open from "open";
 import { resolveWorkspaceId } from "../workspace/index.js";
 import readline from "readline";
+import parser from "@babel/parser";
+import generate from "@babel/generator";
 
 export async function addStep(
   name,
@@ -668,56 +670,41 @@ async function updateStepFromFile(step, filePath) {
 async function parseStepFile(filePath) {
   try {
     const fileContent = await fs.readFile(filePath, "utf8");
+    const ast = parser.parse(fileContent, {
+      sourceType: "module",
+      plugins: ["jsx", "asyncGenerators", "classProperties", "dynamicImport", "objectRestSpread"],
+    });
 
-    // Extract condition and content using regex
-    const conditionMatch = fileContent.match(
-      /export const condition = ([\s\S]*?);/,
-    );
+    let conditionStr = null;
+    let contentStr = null;
 
-    // More robust content extraction that handles nested braces
-    const contentStart = fileContent.indexOf(
-      "export const content = async () => {",
-    );
-    if (contentStart === -1) {
-      throw new Error("Could not find content export");
-    }
-
-    const contentAfterStart = fileContent.substring(contentStart);
-    const openBraceIndex = contentAfterStart.indexOf("{");
-    if (openBraceIndex === -1) {
-      throw new Error("Could not find opening brace in content");
-    }
-
-    // Find the matching closing brace by counting braces
-    let braceCount = 0;
-    let contentEndIndex = -1;
-
-    for (let i = openBraceIndex; i < contentAfterStart.length; i++) {
-      if (contentAfterStart[i] === "{") {
-        braceCount++;
-      } else if (contentAfterStart[i] === "}") {
-        braceCount--;
-        if (braceCount === 0) {
-          contentEndIndex = i;
-          break;
+    for (const node of ast.program.body) {
+      // Extract export const condition = ...
+      if (
+        node.type === "ExportNamedDeclaration" &&
+        node.declaration &&
+        node.declaration.type === "VariableDeclaration"
+      ) {
+        for (const decl of node.declaration.declarations) {
+          if (decl.id.name === "condition") {
+              conditionStr = generate.default(decl.init).code;
+            }
+          if (
+            decl.id.name === "content" &&
+            decl.init.type === "ArrowFunctionExpression"
+          ) {
+            contentStr = generate.default(decl.init.body).code;
+            // Remove wrapping braces if present
+            if (contentStr.startsWith("{") && contentStr.endsWith("}")) {
+              contentStr = contentStr.slice(1, -1).trim();
+            }
+          }
         }
       }
     }
 
-    if (contentEndIndex === -1) {
-      throw new Error("Could not find matching closing brace in content");
-    }
-
-    const content = contentAfterStart
-      .substring(openBraceIndex + 1, contentEndIndex)
-      .trim();
-
-    if (!conditionMatch) {
-      throw new Error("Could not parse condition from file");
-    }
-
-    // Get the condition string directly without trying to parse it as JavaScript
-    const conditionStr = conditionMatch[1].trim();
+    if (!conditionStr) throw new Error("Could not parse condition from file");
+    if (!contentStr) throw new Error("Could not parse content from file");
 
     // Validate the condition using the backend
     const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
@@ -726,10 +713,9 @@ async function parseStepFile(filePath) {
     if (!validateRes.validateAutomationIf) {
       throw new Error("Condition is invalid, not a valid JSON object");
     }
-
     return {
       condition: conditionStr,
-      content: content,
+      content: contentStr,
     };
   } catch (error) {
     throw new Error(`Error parsing step file. ${error.message}`);

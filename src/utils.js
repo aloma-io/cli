@@ -10,7 +10,7 @@ import * as jose from "jose";
 // Get the package root directory
 export const getPackageRoot = async () => {
   // First check local node_modules
-  const localPath = path.join(process.cwd(), "node_modules", "aloma");
+  const localPath = path.join(process.cwd(), "node_modules", "@aloma.io", "aloma");
   try {
     const stats = await fs.stat(localPath);
     if (stats.isDirectory()) {
@@ -23,7 +23,7 @@ export const getPackageRoot = async () => {
   // Try global installation using npm root -g
   try {
     const globalRoot = execSync("npm root -g").toString().trim();
-    const globalPath = path.join(globalRoot, "aloma");
+    const globalPath = path.join(globalRoot, "@aloma.io", "aloma");
     const stats = await fs.stat(globalPath);
     if (stats.isDirectory()) {
       return globalPath;

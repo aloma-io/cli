@@ -96,7 +96,7 @@ async function initializeProject(name) {
         author: "",
         license: "ISC",
         dependencies: {
-          aloma: "^1.0.0",
+          "@aloma.io/aloma": "^1.0.0",
         },
       };
 
@@ -134,7 +134,7 @@ async function createTemplateFiles(name) {
 
     // Create index.js
     const indexContent = `// Main entry point for ${name}
-import { Aloma } from 'aloma';
+import { Aloma } from '@aloma.io/aloma';
 
 // Initialize Aloma
 const aloma = new Aloma({

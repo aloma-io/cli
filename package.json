@@ -44,6 +44,8 @@
   },
   "homepage": "https://github.com/aloma-io/cli#readme",
   "dependencies": {
+    "@babel/generator": "^7.28.0",
+    "@babel/parser": "^7.28.0",
     "axios": "^1.9.0",
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",
