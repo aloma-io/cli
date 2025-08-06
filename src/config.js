@@ -1,27 +1,26 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import { getPackageRoot } from "./utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Configuration file paths
-const CONFIG_DIR = join(homedir(), ".aloma");
-const CONFIG_FILE = join(CONFIG_DIR, "config.json");
-
-// Default configuration templates path (for fallback)
-const TEMPLATE_DIR = join(__dirname, "..", "config");
 
 // Get current environment
 const ENVIRONMENT =
   process.env.ALOMA_ENV || process.env.NODE_ENV || "production";
 
-// Load configuration from local files
-function loadConfig() {
+// Default configuration templates path (for fallback)
+const TEMPLATE_DIR = join(__dirname, "..", "config");
+
+// Load configuration from package directory or fallback to templates
+async function loadConfig() {
   try {
-    const configData = readFileSync(CONFIG_FILE, "utf8");
+    // Try to load from package directory first
+    const packageRoot = await getPackageRoot();
+    const packageConfigPath = join(packageRoot, ".config", "config.json");
+    const configData = readFileSync(packageConfigPath, "utf8");
     return JSON.parse(configData);
   } catch (error) {
     // Fallback to template configuration if available
@@ -42,8 +41,8 @@ function loadConfig() {
   }
 }
 
-// Load configuration
-const config = loadConfig();
+// Load configuration using top-level await
+const config = await loadConfig();
 
 // Export all configuration with environment variable overrides
 export const ENVIRONMENT_NAME = ENVIRONMENT;
@@ -75,6 +74,3 @@ export const JWKS_URL =
   process.env.ALOMA_JWKS_URL ||
   config.jwksUrl ||
   "https://accounts.aloma.io/realms/master/protocol/openid-connect/certs";
-
-// Export configuration paths for setup script
-export { CONFIG_DIR, CONFIG_FILE };
