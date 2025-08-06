@@ -133,3 +133,4 @@ Thumbs.db
 *.token
 config.json
 
+.DS_Store
