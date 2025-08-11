@@ -18,11 +18,12 @@ export async function setupCLIConfig(options = {}) {
 
   console.log(chalk.blue("\n🔧 Setting up Aloma CLI configuration...\n"));
 
-  const spinner = ora("Creating configuration directory").start();
+  const spinner = ora("Creating configuration directory\n").start();
 
   try {
     // Get package root and create config directory
     const packageRoot = await getPackageRoot();
+    console.log("packageRoot: ", packageRoot);
     const configDir = path.join(packageRoot, ".config");
     const configFile = path.join(configDir, "config.json");
 
@@ -101,7 +102,7 @@ async function setupConfigFiles(force, configFile) {
  */
 function loadConfigTemplate(environment) {
   // Get the directory of this setup.js file
-  const __filename = import.meta.url.replace("file://", "");
+  const __filename = decodeURIComponent(import.meta.url.replace("file://", ""));
   const __dirname = path.dirname(__filename);
 
   // Build path to config templates relative to this file
