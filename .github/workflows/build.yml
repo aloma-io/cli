@@ -15,4 +15,7 @@ jobs:
       dockerfile: 'Dockerfile'
       context: '.'
       tags: ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
-    secrets: inherit
+    secrets:
+      AZURE_USER: ${{ secrets.REGISTRY_USER }}
+      AZURE_PASS: ${{ secrets.REGISTRY_PASS }}
+      GOOGLE_CLOUD_KEY: ${{ secrets.GOOGLE_CLOUD_KEY }}
