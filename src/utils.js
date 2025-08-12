@@ -7,7 +7,6 @@ import { ME_QUERY } from "./commands/auth/query.js";
 import * as jose from "jose";
 import { getPackageRoot } from "./package-utils.js";
 
-
 // Get the storage path
 export const getStoragePath = async (folder) => {
   const packageRoot = await getPackageRoot();
