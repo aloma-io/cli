@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import chalk from "chalk";
 import ora from "ora";
-import { getPackageRoot } from "./utils.js";
+import { getPackageRoot } from "./package-utils.js";
 
 /**
  * Setup CLI configuration
