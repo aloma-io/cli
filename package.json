@@ -1,6 +1,6 @@
 {
   "name": "@aloma.io/aloma",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Aloma CLI and utility package",
   "type": "module",
   "main": "src/index.js",
