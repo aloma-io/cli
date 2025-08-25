@@ -8,6 +8,7 @@ import {
   getSelectedWorkspace,
 } from "../workspace/index.js";
 import { addStep, syncStep } from "../step/index.js";
+import { addLibrary, syncLibrary } from "../library/index.js";
 import { createTask } from "../task/index.js";
 import { addWebhook } from "../webhook/index.js";
 import { addConnector, getConnectorByName } from "../connector/index.js";
@@ -51,6 +52,26 @@ export async function deployFromYaml(yamlPath, options = {}) {
           } else {
             console.log(chalk.gray(`  - ${step.name}`));
             await addStep(step.name, workspaceId, step.type, step.file);
+          }
+        }
+      }
+
+      // Process libraries
+      if (workspace.libraries) {
+        console.log(chalk.blue("\nDeploying libraries..."));
+        for (const library of workspace.libraries) {
+          if (library.syncPath) {
+            // Sync all .js files from the given directory as libraries
+            await syncLibrary(workspaceId, null, library.syncPath, true);
+          } else {
+            console.log(chalk.gray(`  - ${library.name}`));
+            await addLibrary(
+              library.name, 
+              library.namespace || library.name.split('/')[0] || "default",
+              workspaceId, 
+              library.file,
+              library.tags || [],
+            );
           }
         }
       }

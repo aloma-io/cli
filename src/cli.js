@@ -29,6 +29,15 @@ import {
   syncStep,
 } from "./commands/step/index.js";
 import {
+  listLibraries,
+  showLibrary,
+  addLibrary,
+  updateLibrary,
+  deleteLibrary,
+  pullLibrary,
+  syncLibrary,
+} from "./commands/library/index.js";
+import {
   listTasks,
   showTask,
   createTask,
@@ -355,6 +364,94 @@ program
       .option("-p, --path <path>", "Source path (default: current directory)")
       .action(async (options) => {
         await syncStep(options.workspace, options.step, options.path);
+      }),
+  );
+
+// Library commands
+program
+  .command("library")
+  .description("Manage automation libraries")
+  .addCommand(
+    new Command("list")
+      .description("List all libraries")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option("-n, --name <name>", "Filter libraries by name")
+      .action(async (options) => {
+        await listLibraries(options.workspace, options.name);
+      }),
+  )
+  .addCommand(
+    new Command("show")
+      .description("Show library details")
+      .argument("<id>", "Library ID")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .action(async (id, options) => {
+        await showLibrary(id, options.workspace);
+      }),
+  )
+  .addCommand(
+    new Command("add")
+      .description("Add a new library")
+      .argument("<name>", "Library name")
+      .argument("<namespace>", "Library namespace")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option(
+        "-f, --file <path>",
+        "Path to file containing library types and content",
+      )
+      .option("-t, --tags <tags>", "Comma-separated list of tags")
+      .option("-e, --enabled <enabled>", "Enable/disable library (true/false)", "true")
+      .action(async (name, namespace, options) => {
+        const enabled = options.enabled === "true";
+        const tags = options.tags ? options.tags.split(",").map(t => t.trim()) : [];
+        await addLibrary(name, namespace, options.workspace, options.file, tags, enabled);
+      }),
+  )
+  .addCommand(
+    new Command("update")
+      .description("Update a library")
+      .argument("<id>", "Library ID")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option(
+        "-f, --file <path>",
+        "Path to file containing library types and content",
+      )
+      .option("-n, --namespace <namespace>", "Library namespace")
+      .option("-t, --tags <tags>", "Comma-separated list of tags")
+      .option("-e, --enabled <enabled>", "Enable/disable library (true/false)")
+      .action(async (id, options) => {
+        const enabled = options.enabled !== undefined ? options.enabled === "true" : undefined;
+        const tags = options.tags ? options.tags.split(",").map(t => t.trim()) : undefined;
+        await updateLibrary(id, options.workspace, options.file, options.namespace, tags, enabled);
+      }),
+  )
+  .addCommand(
+    new Command("delete")
+      .description("Delete a library")
+      .argument("<id>", "Library ID")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .action(async (id, options) => {
+        await deleteLibrary(id, options.workspace);
+      }),
+  )
+  .addCommand(
+    new Command("pull")
+      .description("Pull libraries from workspace to local files")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option("-l, --library <id>", "Library ID (if not specified, pulls all libraries)")
+      .option("-p, --path <path>", "Target path (default: current directory)")
+      .action(async (options) => {
+        await pullLibrary(options.workspace, options.library, options.path);
+      }),
+  )
+  .addCommand(
+    new Command("sync")
+      .description("Sync local library files to workspace")
+      .option("-w, --workspace <id>", "Workspace ID")
+      .option("-l, --library <id>", "Library ID (if not specified, syncs all libraries)")
+      .option("-p, --path <path>", "Source path (default: current directory)")
+      .action(async (options) => {
+        await syncLibrary(options.workspace, options.library, options.path);
       }),
   );
 
