@@ -400,11 +400,24 @@ program
         "Path to file containing library types and content",
       )
       .option("-t, --tags <tags>", "Comma-separated list of tags")
-      .option("-e, --enabled <enabled>", "Enable/disable library (true/false)", "true")
+      .option(
+        "-e, --enabled <enabled>",
+        "Enable/disable library (true/false)",
+        "true",
+      )
       .action(async (name, namespace, options) => {
         const enabled = options.enabled === "true";
-        const tags = options.tags ? options.tags.split(",").map(t => t.trim()) : [];
-        await addLibrary(name, namespace, options.workspace, options.file, tags, enabled);
+        const tags = options.tags
+          ? options.tags.split(",").map((t) => t.trim())
+          : [];
+        await addLibrary(
+          name,
+          namespace,
+          options.workspace,
+          options.file,
+          tags,
+          enabled,
+        );
       }),
   )
   .addCommand(
@@ -420,9 +433,21 @@ program
       .option("-t, --tags <tags>", "Comma-separated list of tags")
       .option("-e, --enabled <enabled>", "Enable/disable library (true/false)")
       .action(async (id, options) => {
-        const enabled = options.enabled !== undefined ? options.enabled === "true" : undefined;
-        const tags = options.tags ? options.tags.split(",").map(t => t.trim()) : undefined;
-        await updateLibrary(id, options.workspace, options.file, options.namespace, tags, enabled);
+        const enabled =
+          options.enabled !== undefined
+            ? options.enabled === "true"
+            : undefined;
+        const tags = options.tags
+          ? options.tags.split(",").map((t) => t.trim())
+          : undefined;
+        await updateLibrary(
+          id,
+          options.workspace,
+          options.file,
+          options.namespace,
+          tags,
+          enabled,
+        );
       }),
   )
   .addCommand(
@@ -438,7 +463,10 @@ program
     new Command("pull")
       .description("Pull libraries from workspace to local files")
       .option("-w, --workspace <id>", "Workspace ID")
-      .option("-l, --library <id>", "Library ID (if not specified, pulls all libraries)")
+      .option(
+        "-l, --library <id>",
+        "Library ID (if not specified, pulls all libraries)",
+      )
       .option("-p, --path <path>", "Target path (default: current directory)")
       .action(async (options) => {
         await pullLibrary(options.workspace, options.library, options.path);
@@ -448,7 +476,10 @@ program
     new Command("sync")
       .description("Sync local library files to workspace")
       .option("-w, --workspace <id>", "Workspace ID")
-      .option("-l, --library <id>", "Library ID (if not specified, syncs all libraries)")
+      .option(
+        "-l, --library <id>",
+        "Library ID (if not specified, syncs all libraries)",
+      )
       .option("-p, --path <path>", "Source path (default: current directory)")
       .action(async (options) => {
         await syncLibrary(options.workspace, options.library, options.path);

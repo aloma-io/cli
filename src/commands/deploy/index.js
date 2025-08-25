@@ -66,9 +66,9 @@ export async function deployFromYaml(yamlPath, options = {}) {
           } else {
             console.log(chalk.gray(`  - ${library.name}`));
             await addLibrary(
-              library.name, 
-              library.namespace || library.name.split('/')[0] || "default",
-              workspaceId, 
+              library.name,
+              library.namespace || library.name.split("/")[0] || "default",
+              workspaceId,
               library.file,
               library.tags || [],
             );

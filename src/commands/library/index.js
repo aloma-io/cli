@@ -35,7 +35,9 @@ export async function listLibraries(workspaceIdentifier, filterName = null) {
       console.log(`${chalk.bold(library.name)}`);
       console.log(`   ID: ${library.id}`);
       console.log(`   Namespace: ${library.namespace}`);
-      console.log(`   Enabled: ${library.enabled ? chalk.green("Yes") : chalk.red("No")}`);
+      console.log(
+        `   Enabled: ${library.enabled ? chalk.green("Yes") : chalk.red("No")}`,
+      );
       console.log(`   Tags: ${library.tags?.join(", ") || "None"}`);
       console.log(`   Version: ${library.version}`);
       console.log(`   Created: ${library.createdAt}`);
@@ -68,7 +70,9 @@ export async function showLibrary(libraryId, workspaceIdentifier) {
     console.log(`${chalk.bold("ID:")} ${library.id}`);
     console.log(`${chalk.bold("Namespace:")} ${library.namespace || "N/A"}`);
     console.log(`${chalk.bold("Version:")} ${library.version}`);
-    console.log(`${chalk.bold("Enabled:")} ${library.enabled ? chalk.green("Yes") : chalk.red("No")}`);
+    console.log(
+      `${chalk.bold("Enabled:")} ${library.enabled ? chalk.green("Yes") : chalk.red("No")}`,
+    );
     console.log(`${chalk.bold("Tags:")} ${library.tags?.join(", ") || "None"}`);
 
     if (library.types) {
@@ -83,7 +87,14 @@ export async function showLibrary(libraryId, workspaceIdentifier) {
   }
 }
 
-export async function addLibrary(name, namespace, workspaceIdentifier, filePath = null, tags = [], enabled = true) {
+export async function addLibrary(
+  name,
+  namespace,
+  workspaceIdentifier,
+  filePath = null,
+  tags = [],
+  enabled = true,
+) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
   if (!workspaceId) return;
 
@@ -135,7 +146,14 @@ export async function addLibrary(name, namespace, workspaceIdentifier, filePath 
   }
 }
 
-export async function updateLibrary(libraryId, workspaceIdentifier, filePath = null, namespace = null, tags = null, enabled = null) {
+export async function updateLibrary(
+  libraryId,
+  workspaceIdentifier,
+  filePath = null,
+  namespace = null,
+  tags = null,
+  enabled = null,
+) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
   if (!workspaceId) return;
 
@@ -201,7 +219,9 @@ export async function deleteLibrary(libraryId, workspaceIdentifier) {
     });
 
     if (data.deleteAutomationLib) {
-      console.log(chalk.green(`Successfully deleted library with ID: ${libraryId}`));
+      console.log(
+        chalk.green(`Successfully deleted library with ID: ${libraryId}`),
+      );
     } else {
       console.log(
         chalk.yellow(
@@ -333,7 +353,9 @@ export async function syncLibrary(
 
     if (libraryId) {
       // Sync specific library
-      const data = await graphQuery(GET_AUTOMATION_LIB_QUERY, { id: libraryId });
+      const data = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
+        id: libraryId,
+      });
       const library = data.getAutomationLib;
 
       if (!library) {
@@ -363,7 +385,9 @@ export async function syncLibrary(
         }
         try {
           await updateLibraryFromFile(library, libraryFilePath);
-          console.log(chalk.green(`Successfully synced library: ${library.name}`));
+          console.log(
+            chalk.green(`Successfully synced library: ${library.name}`),
+          );
         } catch (error) {
           console.log(chalk.red(`Error updating library: ${library.name}`));
         }
@@ -413,7 +437,9 @@ export async function syncLibrary(
           // Update existing library
           try {
             // Get full library details for update
-            const libraryData = await graphQuery(GET_AUTOMATION_LIB_QUERY, { id: library.id });
+            const libraryData = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
+              id: library.id,
+            });
             const fullLibrary = libraryData.getAutomationLib;
             await updateLibraryFromFile(fullLibrary, absPath);
             updatedCount++;
@@ -431,17 +457,17 @@ export async function syncLibrary(
               environment_id: workspaceId,
             });
             const newLibraryId = createData.createAutomationLib;
-                         // Update the library with the parsed content
-             await graphQuery(UPDATE_AUTOMATION_LIB_MUTATION, {
-               id: newLibraryId,
-               name: libraryName,
-               namespace: libraryName.split('/')[0] || "default", // Use first part of name as namespace
-               content: newContent,
-               types: newTypes,
-               version: 0,
-               tags: [],
-               enabled: true,
-             });
+            // Update the library with the parsed content
+            await graphQuery(UPDATE_AUTOMATION_LIB_MUTATION, {
+              id: newLibraryId,
+              name: libraryName,
+              namespace: libraryName.split("/")[0] || "default", // Use first part of name as namespace
+              content: newContent,
+              types: newTypes,
+              version: 0,
+              tags: [],
+              enabled: true,
+            });
             createdCount++;
           } catch (error) {
             console.log(chalk.red(`Error creating library: ${libraryName}`));
@@ -524,11 +550,12 @@ async function updateLibraryFromFile(library, filePath) {
       console.log(chalk.yellow(`Failed to update library: ${library.name}`));
     }
   } catch (error) {
-    console.error(chalk.red(`Error updating library from file: ${error.message}`));
+    console.error(
+      chalk.red(`Error updating library from file: ${error.message}`),
+    );
     throw new Error(`Error updating library from file: ${error.message}`);
   }
 }
-
 
 // Helper function to parse library file and extract types and content
 export async function parseLibraryFile(filePath) {
@@ -558,7 +585,10 @@ export async function parseLibraryFile(filePath) {
         for (const decl of node.declaration.declarations) {
           if (decl.id.name === "types") {
             // Handle types as a function that returns a string
-            if (decl.init.type === "ArrowFunctionExpression" || decl.init.type === "FunctionExpression") {
+            if (
+              decl.init.type === "ArrowFunctionExpression" ||
+              decl.init.type === "FunctionExpression"
+            ) {
               // Extract the return statement content
               const body = decl.init.body;
               if (body.type === "BlockStatement") {
@@ -569,9 +599,15 @@ export async function parseLibraryFile(filePath) {
                     // Remove quotes if it's a string literal, but preserve template literals
                     if (typesStr.startsWith('"') && typesStr.endsWith('"')) {
                       typesStr = typesStr.slice(1, -1);
-                    } else if (typesStr.startsWith("'") && typesStr.endsWith("'")) {
+                    } else if (
+                      typesStr.startsWith("'") &&
+                      typesStr.endsWith("'")
+                    ) {
                       typesStr = typesStr.slice(1, -1);
-                    } else if (typesStr.startsWith('`') && typesStr.endsWith('`')) {
+                    } else if (
+                      typesStr.startsWith("`") &&
+                      typesStr.endsWith("`")
+                    ) {
                       // Keep template literal as-is, just remove the backticks
                       typesStr = typesStr.slice(1, -1);
                     }
@@ -589,12 +625,17 @@ export async function parseLibraryFile(filePath) {
           }
           if (decl.id.name === "content") {
             // Handle content as a function that contains the code
-            if (decl.init.type === "ArrowFunctionExpression" || decl.init.type === "FunctionExpression") {
+            if (
+              decl.init.type === "ArrowFunctionExpression" ||
+              decl.init.type === "FunctionExpression"
+            ) {
               const body = decl.init.body;
               if (body.type === "BlockStatement") {
                 // Extract all statements and convert them to code
-                const statements = body.body.map(stmt => generate.default(stmt).code);
-                contentStr = statements.join('\n');
+                const statements = body.body.map(
+                  (stmt) => generate.default(stmt).code,
+                );
+                contentStr = statements.join("\n");
               } else if (body.type === "StringLiteral") {
                 // Arrow function with implicit return
                 contentStr = body.value;
