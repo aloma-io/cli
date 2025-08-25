@@ -80,7 +80,7 @@ export async function showLibrary(libraryId, workspaceIdentifier) {
     }
 
     if (library.content) {
-      console.log(`\n${chalk.bold("Content:")}\n${library.content}`);
+      console.log(`\n${chalk.bold("Content:")}\n${library.content.content}`);
     }
   } catch (error) {
     console.error(chalk.red("Error fetching library details:"), error.message);
@@ -521,7 +521,7 @@ export const types = () => {
 };
 
 export const content = () => {
-${library.content || ""}
+${library.content.content || ""}
 };
 `;
 
