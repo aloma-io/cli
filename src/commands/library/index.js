@@ -517,7 +517,7 @@ async function createLibraryFile(library, workspaceFolder) {
  */
 
 export const types = () => {
-  return ${JSON.stringify(library.types || "", null, 2)};
+  return \`${library.types || ""}\`;
 };
 
 export const content = () => {
