@@ -60,14 +60,20 @@ async function selectCompanyInteractive() {
 
     // Find current company index
     if (currentCompanyId) {
-      const currentIndex = realms.findIndex(realm => realm.id === currentCompanyId);
+      const currentIndex = realms.findIndex(
+        (realm) => realm.id === currentCompanyId,
+      );
       if (currentIndex !== -1) {
         selectedIndex = currentIndex;
       }
     }
 
     console.log(chalk.blue("\nSelect a company to switch to:"));
-    console.log(chalk.gray("Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n"));
+    console.log(
+      chalk.gray(
+        "Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n",
+      ),
+    );
 
     // Create readline interface
     const rl = readline.createInterface({
@@ -78,23 +84,29 @@ async function selectCompanyInteractive() {
     // Set raw mode for key capture
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    process.stdin.setEncoding('utf8');
+    process.stdin.setEncoding("utf8");
 
     return new Promise((resolve) => {
       const displayCompanies = () => {
         // Clear screen and move cursor to top
-        process.stdout.write('\x1B[2J\x1B[0f');
+        process.stdout.write("\x1B[2J\x1B[0f");
         console.log(chalk.blue("Select a company to switch to:"));
-        console.log(chalk.gray("Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n"));
+        console.log(
+          chalk.gray(
+            "Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n",
+          ),
+        );
 
         realms.forEach((realm, index) => {
           const isSelected = index === selectedIndex;
           const isCurrent = realm.id === currentCompanyId;
-          const prefix = isSelected ? chalk.cyan('❯ ') : '  ';
-          const name = isSelected ? chalk.cyan.bold(realm.name) : chalk.white(realm.name);
-          const current = isCurrent ? chalk.green(' [current]') : '';
+          const prefix = isSelected ? chalk.cyan("❯ ") : "  ";
+          const name = isSelected
+            ? chalk.cyan.bold(realm.name)
+            : chalk.white(realm.name);
+          const current = isCurrent ? chalk.green(" [current]") : "";
           const id = chalk.gray(` (ID: ${realm.id})`);
-          
+
           console.log(`${prefix}${name}${id}${current}`);
         });
       };
@@ -102,15 +114,17 @@ async function selectCompanyInteractive() {
       displayCompanies();
 
       const handleKeyPress = (key) => {
-        if (key === '\u0003') { // Ctrl+C
+        if (key === "\u0003") {
+          // Ctrl+C
           process.stdin.setRawMode(false);
           rl.close();
-          console.log(chalk.yellow('\nSelection cancelled.'));
+          console.log(chalk.yellow("\nSelection cancelled."));
           resolve(null);
           return;
         }
 
-        if (key === '\r' || key === '\n') { // Enter
+        if (key === "\r" || key === "\n") {
+          // Enter
           process.stdin.setRawMode(false);
           rl.close();
           const selectedCompany = realms[selectedIndex];
@@ -119,16 +133,20 @@ async function selectCompanyInteractive() {
           return;
         }
 
-        if (key === '\u001b[A') { // Up arrow
-          selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : realms.length - 1;
+        if (key === "\u001b[A") {
+          // Up arrow
+          selectedIndex =
+            selectedIndex > 0 ? selectedIndex - 1 : realms.length - 1;
           displayCompanies();
-        } else if (key === '\u001b[B') { // Down arrow
-          selectedIndex = selectedIndex < realms.length - 1 ? selectedIndex + 1 : 0;
+        } else if (key === "\u001b[B") {
+          // Down arrow
+          selectedIndex =
+            selectedIndex < realms.length - 1 ? selectedIndex + 1 : 0;
           displayCompanies();
         }
       };
 
-      process.stdin.on('data', handleKeyPress);
+      process.stdin.on("data", handleKeyPress);
     });
   } catch (error) {
     console.error(chalk.red("Error fetching companies:"), error.message);
@@ -197,7 +215,9 @@ export const switchCompany = async (identifier) => {
       }
     }
 
-    console.log(chalk.green(`Successfully switched to company [${company.name}]`));
+    console.log(
+      chalk.green(`Successfully switched to company [${company.name}]`),
+    );
   } catch (error) {
     console.log(chalk.red("Error switching company:", error.message));
   }

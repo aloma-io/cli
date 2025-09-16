@@ -94,14 +94,20 @@ async function selectWorkspaceInteractive() {
 
     // Find current workspace index
     if (currentWorkspaceId) {
-      const currentIndex = workspaces.findIndex(w => w.id === currentWorkspaceId);
+      const currentIndex = workspaces.findIndex(
+        (w) => w.id === currentWorkspaceId,
+      );
       if (currentIndex !== -1) {
         selectedIndex = currentIndex;
       }
     }
 
     console.log(chalk.blue("\nSelect a workspace to switch to:"));
-    console.log(chalk.gray("Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n"));
+    console.log(
+      chalk.gray(
+        "Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n",
+      ),
+    );
 
     // Create readline interface
     const rl = readline.createInterface({
@@ -112,23 +118,29 @@ async function selectWorkspaceInteractive() {
     // Set raw mode for key capture
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    process.stdin.setEncoding('utf8');
+    process.stdin.setEncoding("utf8");
 
     return new Promise((resolve) => {
       const displayWorkspaces = () => {
         // Clear screen and move cursor to top
-        process.stdout.write('\x1B[2J\x1B[0f');
+        process.stdout.write("\x1B[2J\x1B[0f");
         console.log(chalk.blue("Select a workspace to switch to:"));
-        console.log(chalk.gray("Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n"));
+        console.log(
+          chalk.gray(
+            "Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n",
+          ),
+        );
 
         workspaces.forEach((workspace, index) => {
           const isSelected = index === selectedIndex;
           const isCurrent = workspace.id === currentWorkspaceId;
-          const prefix = isSelected ? chalk.cyan('❯ ') : '  ';
-          const name = isSelected ? chalk.cyan.bold(workspace.name) : chalk.white(workspace.name);
-          const current = isCurrent ? chalk.green(' [current]') : '';
+          const prefix = isSelected ? chalk.cyan("❯ ") : "  ";
+          const name = isSelected
+            ? chalk.cyan.bold(workspace.name)
+            : chalk.white(workspace.name);
+          const current = isCurrent ? chalk.green(" [current]") : "";
           const id = chalk.gray(` (ID: ${workspace.id})`);
-          
+
           console.log(`${prefix}${name}${id}${current}`);
         });
       };
@@ -136,15 +148,17 @@ async function selectWorkspaceInteractive() {
       displayWorkspaces();
 
       const handleKeyPress = (key) => {
-        if (key === '\u0003') { // Ctrl+C
+        if (key === "\u0003") {
+          // Ctrl+C
           process.stdin.setRawMode(false);
           rl.close();
-          console.log(chalk.yellow('\nSelection cancelled.'));
+          console.log(chalk.yellow("\nSelection cancelled."));
           resolve(null);
           return;
         }
 
-        if (key === '\r' || key === '\n') { // Enter
+        if (key === "\r" || key === "\n") {
+          // Enter
           process.stdin.setRawMode(false);
           rl.close();
           const selectedWorkspace = workspaces[selectedIndex];
@@ -153,16 +167,20 @@ async function selectWorkspaceInteractive() {
           return;
         }
 
-        if (key === '\u001b[A') { // Up arrow
-          selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : workspaces.length - 1;
+        if (key === "\u001b[A") {
+          // Up arrow
+          selectedIndex =
+            selectedIndex > 0 ? selectedIndex - 1 : workspaces.length - 1;
           displayWorkspaces();
-        } else if (key === '\u001b[B') { // Down arrow
-          selectedIndex = selectedIndex < workspaces.length - 1 ? selectedIndex + 1 : 0;
+        } else if (key === "\u001b[B") {
+          // Down arrow
+          selectedIndex =
+            selectedIndex < workspaces.length - 1 ? selectedIndex + 1 : 0;
           displayWorkspaces();
         }
       };
 
-      process.stdin.on('data', handleKeyPress);
+      process.stdin.on("data", handleKeyPress);
     });
   } catch (error) {
     console.error(chalk.red("Error fetching workspaces:"), error.message);

@@ -140,7 +140,10 @@ program
   )
   .addCommand(
     new Command("switch")
-      .argument("[identifier]", "Workspace name or ID (optional - will show interactive selection if not provided)")
+      .argument(
+        "[identifier]",
+        "Workspace name or ID (optional - will show interactive selection if not provided)",
+      )
       .description("Switch to a different workspace by name or ID")
       .action(async (identifier) => {
         await switchWorkspace(identifier);
@@ -261,7 +264,10 @@ program
   )
   .addCommand(
     new Command("switch")
-      .argument("[identifier]", "Company name or ID (optional - will show interactive selection if not provided)")
+      .argument(
+        "[identifier]",
+        "Company name or ID (optional - will show interactive selection if not provided)",
+      )
       .description("Switch to a different company by name or ID")
       .action(async (identifier) => {
         await switchCompany(identifier);
@@ -503,7 +509,12 @@ program
       .option("-n, --name <name>", "Filter by task name")
       .option("-p, --page <page>", "Page number")
       .action(async (options) => {
-        await listTasks(options.page, options.workspace, options.state, options.name);
+        await listTasks(
+          options.page,
+          options.workspace,
+          options.state,
+          options.name,
+        );
       }),
   )
   .addCommand(
