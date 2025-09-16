@@ -13,8 +13,6 @@ import {
   SCOPE,
   JWKS_URL,
 } from "../../config.js";
-import { graphQuery } from "../../utils.js";
-import { ME_QUERY } from "./query.js";
 
 let server;
 let codeVerifier; // For PKCE
@@ -113,52 +111,17 @@ async function initiateAuth() {
               );
             }
 
-            // Verify the ID token using JWKS
-            try {
-              const claims = tokenSet.claims();
-            } catch (verifyError) {
-              console.warn(
-                chalk.yellow(
-                  `⚠️  Token verification warning: ${verifyError.message}`,
-                ),
-              );
-            }
-
             // Parse the ID token claims
             const idTokenClaims = tokenSet.claims();
-            // For OAuth2 PKCE, we store tokens directly without encryption
-            // The tokens are already signed and verifiable via JWKS
-            const sessionData = {
-              access_token: tokenSet.access_token,
-              refresh_token: tokenSet.refresh_token,
-              id_token: tokenSet.id_token,
-              expires_at: Date.now() + tokenSet.expires_in * 1000,
-              token_type: tokenSet.token_type || "Bearer",
-              scope: SCOPE,
-              user_info: {
-                id: idTokenClaims.sub,
-                firstName: idTokenClaims.given_name,
-                lastName: idTokenClaims.family_name,
-                email: idTokenClaims.email,
-                authRealm: idTokenClaims.iss.split("/").pop(),
-                groups: idTokenClaims.groups || [],
-                selectedRealm: idTokenClaims.sid,
-              },
-              created_at: Date.now(),
-              jwks_url: JWKS_URL,
-            };
 
-            // Store the token data
-            await updateSessionData("token", JSON.stringify(sessionData));
-
-            // Import the fixed public key for encryption like the working example
+            // Import the fixed public key for encryption
             const { AUTH_PUBLIC_KEY } = await import("../../config.js");
             const publicKey = await jose.importSPKI(
               AUTH_PUBLIC_KEY,
               "RSA-OAEP-256",
             );
 
-            // Create JWE token matching backend's implementation exactly like the working example
+            // Create JWE token matching backend's implementation
             const jweToken = await new EncryptJWT({
               _data: {
                 id: idTokenClaims.sub,
@@ -178,48 +141,12 @@ async function initiateAuth() {
               .setExpirationTime("7d")
               .encrypt(publicKey);
 
-            // Store the encrypted token with the 'id-' prefix like the working example
+            // Store the encrypted token with the 'id-' prefix
             const encryptedToken = `id-${jweToken}`;
 
-            // Try to fetch user data from GraphQL API using the encrypted token
-            let userData = null;
-            let selectedWorkspace = null;
-
-            try {
-              // Temporarily store the encrypted token for the GraphQL query
-              await updateSessionData("token", encryptedToken);
-              const graphResponse = await graphQuery(ME_QUERY);
-
-              if (graphResponse && graphResponse.me) {
-                userData = graphResponse.me;
-
-                // Try to get the default workspace/realm
-                if (userData.realm && userData.realm.id) {
-                  selectedWorkspace = userData.realm.id;
-                } else if (userData.realms && userData.realms.length > 0) {
-                  selectedWorkspace = userData.realms[0].id;
-                }
-              } else {
-                throw new Error("GraphQL response missing 'me' field");
-              }
-            } catch (userError) {
-              console.warn(
-                chalk.yellow(
-                  `⚠️  Could not fetch user profile: ${userError.message}`,
-                ),
-              );
-              // Use basic user info from ID token as fallback
-              userData = sessionData.user_info;
-
-              // Use the session ID as selected realm if available
-              if (sessionData.user_info.selectedRealm) {
-                selectedWorkspace = sessionData.user_info.selectedRealm;
-              }
-            }
-
-            if (selectedWorkspace) {
-              await updateSessionData("selectedWorkspace", selectedWorkspace);
-            }
+            // Store the session data with the encrypted token
+            await updateSessionData("selectedWorkspace", null);
+            await updateSessionData("token", encryptedToken);
 
             res.writeHead(200, { "Content-Type": "text/html" });
             res.end(`
@@ -360,13 +287,11 @@ function shutdownServer() {
     authTimeout = null;
   }
   if (server && server.listening) {
-    console.log("Shutting down local server...");
     server.close(() => {
       for (const socket of sockets) {
         socket.destroy();
       }
       sockets.clear();
-      console.log("Local server shut down.");
       server = null;
     });
   }

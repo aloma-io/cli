@@ -16,6 +16,7 @@ import {
 import fs from "fs";
 import yaml from "js-yaml";
 import path from "path";
+import readline from "readline";
 
 // Global variable to store the selected workspace ID
 let selectedWorkspaceId = null;
@@ -77,38 +78,137 @@ export async function resolveWorkspaceId(workspaceIdentifier) {
   return workspaceId;
 }
 
-// switch workspace by name or id
-export async function switchWorkspace(workspaceIdentifier) {
+// Interactive workspace selection
+async function selectWorkspaceInteractive() {
   try {
-    if (!workspaceIdentifier) {
-      console.log(chalk.yellow("⚠ Workspace identifier is required"));
-      return;
-    }
     const data = await graphQuery(LIST_WORKSPACES_QUERY);
     const workspaces = data.listAutomationEnvironmentWithStats;
 
     if (!workspaces || workspaces.length === 0) {
       console.log(chalk.yellow("No workspaces found."));
-      return;
+      return null;
     }
 
-    // Try to find and switch to it
-    const workspace = workspaces.find(
-      (w) =>
-        w.name.toLowerCase() === workspaceIdentifier.toLowerCase() ||
-        w.id === workspaceIdentifier,
-    );
+    const currentWorkspaceId = await getSelectedWorkspace();
+    let selectedIndex = 0;
 
-    if (workspace) {
-      await saveSelectedWorkspace(workspace.id);
-      console.log(chalk.green(`Switched to workspace [${workspace.name}]`));
-      return;
-    } else {
-      console.log(chalk.red(`Workspace '${workspaceIdentifier}' not found.`));
-      return;
+    // Find current workspace index
+    if (currentWorkspaceId) {
+      const currentIndex = workspaces.findIndex(w => w.id === currentWorkspaceId);
+      if (currentIndex !== -1) {
+        selectedIndex = currentIndex;
+      }
     }
+
+    console.log(chalk.blue("\nSelect a workspace to switch to:"));
+    console.log(chalk.gray("Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n"));
+
+    // Create readline interface
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    // Set raw mode for key capture
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+
+    return new Promise((resolve) => {
+      const displayWorkspaces = () => {
+        // Clear screen and move cursor to top
+        process.stdout.write('\x1B[2J\x1B[0f');
+        console.log(chalk.blue("Select a workspace to switch to:"));
+        console.log(chalk.gray("Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n"));
+
+        workspaces.forEach((workspace, index) => {
+          const isSelected = index === selectedIndex;
+          const isCurrent = workspace.id === currentWorkspaceId;
+          const prefix = isSelected ? chalk.cyan('❯ ') : '  ';
+          const name = isSelected ? chalk.cyan.bold(workspace.name) : chalk.white(workspace.name);
+          const current = isCurrent ? chalk.green(' [current]') : '';
+          const id = chalk.gray(` (ID: ${workspace.id})`);
+          
+          console.log(`${prefix}${name}${id}${current}`);
+        });
+      };
+
+      displayWorkspaces();
+
+      const handleKeyPress = (key) => {
+        if (key === '\u0003') { // Ctrl+C
+          process.stdin.setRawMode(false);
+          rl.close();
+          console.log(chalk.yellow('\nSelection cancelled.'));
+          resolve(null);
+          return;
+        }
+
+        if (key === '\r' || key === '\n') { // Enter
+          process.stdin.setRawMode(false);
+          rl.close();
+          const selectedWorkspace = workspaces[selectedIndex];
+          console.log(chalk.green(`\nSelected: ${selectedWorkspace.name}`));
+          resolve(selectedWorkspace);
+          return;
+        }
+
+        if (key === '\u001b[A') { // Up arrow
+          selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : workspaces.length - 1;
+          displayWorkspaces();
+        } else if (key === '\u001b[B') { // Down arrow
+          selectedIndex = selectedIndex < workspaces.length - 1 ? selectedIndex + 1 : 0;
+          displayWorkspaces();
+        }
+      };
+
+      process.stdin.on('data', handleKeyPress);
+    });
   } catch (error) {
     console.error(chalk.red("Error fetching workspaces:"), error.message);
+    return null;
+  }
+}
+
+// switch workspace by name or id
+export async function switchWorkspace(workspaceIdentifier) {
+  try {
+    let workspace = null;
+
+    if (!workspaceIdentifier) {
+      // Interactive selection
+      workspace = await selectWorkspaceInteractive();
+      if (!workspace) {
+        return;
+      }
+    } else {
+      // Direct selection by identifier
+      const data = await graphQuery(LIST_WORKSPACES_QUERY);
+      const workspaces = data.listAutomationEnvironmentWithStats;
+
+      if (!workspaces || workspaces.length === 0) {
+        console.log(chalk.yellow("No workspaces found."));
+        return;
+      }
+
+      // Try to find and switch to it
+      workspace = workspaces.find(
+        (w) =>
+          w.name.toLowerCase() === workspaceIdentifier.toLowerCase() ||
+          w.id === workspaceIdentifier,
+      );
+
+      if (!workspace) {
+        console.log(chalk.red(`Workspace '${workspaceIdentifier}' not found.`));
+        return;
+      }
+    }
+
+    // Switch to the selected workspace
+    await saveSelectedWorkspace(workspace.id);
+    console.log(chalk.green(`Switched to workspace [${workspace.name}]`));
+  } catch (error) {
+    console.error(chalk.red("Error switching workspace:"), error.message);
   }
 }
 

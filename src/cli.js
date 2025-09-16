@@ -74,12 +74,14 @@ import {
   removeUser,
 } from "./commands/user/index.js";
 import { setupCLIConfig } from "./setup.js";
+import { getPackageVersion } from "./package-utils.js";
+
 const program = new Command();
 
 program
   .name("aloma")
   .description("CLI for interacting with Aloma services and utilities")
-  .version("1.0.0"); // Fetches version from package.json
+  .version(getPackageVersion());
 
 program
   .command("auth")
@@ -138,7 +140,7 @@ program
   )
   .addCommand(
     new Command("switch")
-      .argument("<identifier>", "Workspace name or ID")
+      .argument("[identifier]", "Workspace name or ID (optional - will show interactive selection if not provided)")
       .description("Switch to a different workspace by name or ID")
       .action(async (identifier) => {
         await switchWorkspace(identifier);
@@ -259,7 +261,7 @@ program
   )
   .addCommand(
     new Command("switch")
-      .argument("<identifier>", "Company name or ID")
+      .argument("[identifier]", "Company name or ID (optional - will show interactive selection if not provided)")
       .description("Switch to a different company by name or ID")
       .action(async (identifier) => {
         await switchCompany(identifier);
@@ -499,8 +501,9 @@ program
         "Filter by state (null, done, attention, error, ignored)",
       )
       .option("-n, --name <name>", "Filter by task name")
+      .option("-p, --page <page>", "Page number")
       .action(async (options) => {
-        await listTasks(1, options.workspace, options.state, options.name);
+        await listTasks(options.page, options.workspace, options.state, options.name);
       }),
   )
   .addCommand(
