@@ -22,7 +22,7 @@ export async function listAvailableConnectors(workspaceIdentifier, filterName) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
     if (!workspaceId) return;
-    
+
     const data = await graphQuery(LIST_AVAILABLE_CONNECTOR_QUERY, {
       id: workspaceId,
       mine: false,
@@ -57,7 +57,7 @@ export async function getConnector(id, workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
     if (!workspaceId) return;
-    
+
     const data = await graphQuery(GET_CONNECTOR_QUERY, {
       id: workspaceId,
       connectorId: id,
