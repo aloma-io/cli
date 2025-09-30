@@ -10,11 +10,11 @@ import {
   NEW_TASK_FROM_HISTORY_MUTATION,
 } from "./query.js";
 import { color } from "./utils.js";
-import { getSelectedWorkspace } from "../workspace/index.js";
 import fs from "fs/promises";
 import { diffJson } from "diff";
 import yaml from "js-yaml";
 import path from "path";
+import { resolveWorkspaceId } from "../workspace/index.js";
 
 export async function listTasks(
   page = 1,
@@ -23,14 +23,8 @@ export async function listTasks(
   name = null,
 ) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     const limit = 10;
     const offset = (page - 1) * limit;
@@ -367,14 +361,8 @@ export async function createTask(
   workspaceIdentifier,
 ) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     if (!name) {
       console.log(chalk.yellow("⚠ Please provide a task name"));

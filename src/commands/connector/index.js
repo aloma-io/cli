@@ -12,7 +12,7 @@ import {
 } from "./query.js";
 import { doEncrypt } from "../../utils.js";
 import chalk from "chalk";
-import { getSelectedWorkspace } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../workspace/index.js";
 import fs from "fs/promises";
 import open from "open";
 import yaml from "js-yaml";
@@ -20,14 +20,9 @@ import path from "path";
 
 export async function listAvailableConnectors(workspaceIdentifier, filterName) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
+    
     const data = await graphQuery(LIST_AVAILABLE_CONNECTOR_QUERY, {
       id: workspaceId,
       mine: false,
@@ -60,14 +55,9 @@ export async function listAvailableConnectors(workspaceIdentifier, filterName) {
 
 export async function getConnector(id, workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
+    
     const data = await graphQuery(GET_CONNECTOR_QUERY, {
       id: workspaceId,
       connectorId: id,
@@ -130,14 +120,8 @@ export async function addConnector(
   file,
 ) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     if (!connectorId) {
       console.log(chalk.yellow("⚠ Connector ID is required"));
@@ -216,14 +200,9 @@ export async function addConnector(
 
 export async function removeConnector(id, workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
+
     await graphQuery(REMOVE_CONNECTOR_MUTATION, {
       id,
       environmentId: workspaceId,
@@ -237,14 +216,9 @@ export async function removeConnector(id, workspaceIdentifier) {
 
 export async function listConnectors(workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
+
     const data = await graphQuery(LIST_CONNECTORS_QUERY, { id: workspaceId });
 
     if (
@@ -286,14 +260,8 @@ export async function updateConnector(
   file,
 ) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     let connectorName = name;
     let connectorNamespace = namespace;
@@ -425,14 +393,8 @@ export async function updateConnector(
 
 export async function getConnectorLogs(id, workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     if (!id) {
       console.log(chalk.yellow("⚠ Connector ID is required"));
@@ -463,14 +425,8 @@ export async function startConnectorOAuth(
   isDevelopment = false,
 ) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     if (!id) {
       console.log(chalk.yellow("⚠ Connector ID is required"));
@@ -509,14 +465,8 @@ export async function startConnectorOAuth(
 
 export async function getConnectorByName(connectorName, workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return null;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     if (!connectorName) {
       console.log(chalk.yellow("⚠ Connector name is required"));

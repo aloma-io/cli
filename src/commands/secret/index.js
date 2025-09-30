@@ -1,21 +1,11 @@
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import { GET_SECRET_QUERY, SAVE_SECRET_MUTATION } from "./query.js";
-import { getSelectedWorkspace } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../workspace/index.js";
 
 export async function listSecrets(workspaceId) {
-  let targetWorkspaceId = workspaceId;
-  if (!workspaceId) {
-    targetWorkspaceId = await getSelectedWorkspace();
-    if (!targetWorkspaceId) {
-      console.log(
-        chalk.yellow(
-          "⚠ No workspace selected. Use `aloma workspace switch` to select one.",
-        ),
-      );
-      return;
-    }
-  }
+  const targetWorkspaceId = await resolveWorkspaceId(workspaceId);
+  if (!targetWorkspaceId) return;
 
   try {
     const data = await graphQuery(GET_SECRET_QUERY, {
@@ -71,18 +61,8 @@ export async function addSecret(
   options = {},
   workspaceId,
 ) {
-  let targetWorkspaceId = workspaceId;
-  if (!workspaceId) {
-    targetWorkspaceId = await getSelectedWorkspace();
-    if (!targetWorkspaceId) {
-      console.log(
-        chalk.yellow(
-          "⚠ No workspace selected. Use `aloma workspace switch` to select one.",
-        ),
-      );
-      return;
-    }
-  }
+  const targetWorkspaceId = await resolveWorkspaceId(workspaceId);
+  if (!targetWorkspaceId) return;
 
   try {
     // Get current secrets
@@ -117,18 +97,8 @@ export async function addSecret(
 }
 
 export async function deleteSecret(secretName, workspaceId) {
-  let targetWorkspaceId = workspaceId;
-  if (!workspaceId) {
-    targetWorkspaceId = await getSelectedWorkspace();
-    if (!targetWorkspaceId) {
-      console.log(
-        chalk.yellow(
-          "⚠ No workspace selected. Use `aloma workspace switch` to select one.",
-        ),
-      );
-      return;
-    }
-  }
+  const targetWorkspaceId = await resolveWorkspaceId(workspaceId);
+  if (!targetWorkspaceId) return;
 
   try {
     // Get current secrets

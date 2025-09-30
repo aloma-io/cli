@@ -5,18 +5,12 @@ import {
 } from "./query.js";
 import chalk from "chalk";
 import { graphQuery, urlForRegion } from "../../utils.js";
-import { getSelectedWorkspace } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../workspace/index.js";
 
 export async function listWebhooks(workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     const response = await graphQuery(LIST_WEBHOOKS_QUERY, {
       id: workspaceId,
@@ -46,14 +40,8 @@ export async function listWebhooks(workspaceIdentifier) {
 
 export async function addWebhook(name, workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     if (!name) {
       console.log(chalk.yellow("⚠ Please provide name for the webhook"));
@@ -76,14 +64,8 @@ export async function addWebhook(name, workspaceIdentifier) {
 
 export async function showWebhook(webhookId, workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     if (!webhookId) {
       console.log(chalk.yellow("⚠ Please provide a webhook ID"));
@@ -116,14 +98,8 @@ export async function showWebhook(webhookId, workspaceIdentifier) {
 
 export async function deleteWebhook(webhookId, workspaceIdentifier) {
   try {
-    let workspaceId = workspaceIdentifier;
-    if (!workspaceIdentifier) {
-      workspaceId = await getSelectedWorkspace();
-      if (!workspaceId) {
-        console.log(chalk.yellow("⚠ Workspace ID is required"));
-        return;
-      }
-    }
+    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+    if (!workspaceId) return;
 
     if (!webhookId) {
       console.log(chalk.yellow("⚠ Please provide a webhook ID"));
