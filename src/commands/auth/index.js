@@ -90,7 +90,7 @@ async function initiateAuth() {
 
             // Verify state parameter
             if (params.state !== state) {
-              throw new Error("Invalid state parameter - possible CSRF attack");
+              throw new Error("Invalid state parameter");
             }
 
             if (params.error) {
