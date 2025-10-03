@@ -11,6 +11,7 @@ import {
   SAVE_WORKSPACE_MUTATION,
   GET_SOURCE_QUERY,
   SAVE_SOURCE_MUTATION,
+  CREATE_GETTING_STARTED_MUTATION,
 } from "./query.js";
 
 import fs from "fs";
@@ -834,4 +835,32 @@ export async function getWorkspace(identifier) {
   );
 
   return workspace || null;
+}
+
+export async function switchDefaultWorkspace() {
+  let defaultWorkspace = null;
+  // Check if there are any workspaces
+  const data = await graphQuery(LIST_WORKSPACES_QUERY);
+  const workspaces = data.listAutomationEnvironmentWithStats;
+
+  if (!workspaces || workspaces.length === 0) {
+    // If no workspaces, create a getting started workspace
+    const dataCreated = await graphQuery(CREATE_GETTING_STARTED_MUTATION);
+    const workspaceCreated = dataCreated.createGettingStarted;
+    if (workspaceCreated) {
+      defaultWorkspace = workspaceCreated;
+      // Get the list of workspaces again to get the new workspace
+      const data = await graphQuery(LIST_WORKSPACES_QUERY);
+      const workspaces = data.listAutomationEnvironmentWithStats;
+      defaultWorkspace = workspaces[0];
+    }
+  } else {
+    // If there are workspaces, use the first one
+    defaultWorkspace = workspaces[0];
+  }
+
+  if (defaultWorkspace) {
+    // Switch to the default workspace
+    await switchWorkspace(defaultWorkspace.id);
+  }
 }

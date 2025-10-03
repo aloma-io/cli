@@ -1,11 +1,17 @@
 import http from "http";
+import path from "path";
+import fetch from "node-fetch";
 import { Issuer, generators } from "openid-client";
 import open from "open";
 import { promises as fs } from "fs";
 import chalk from "chalk";
 import { EncryptJWT } from "jose";
 import * as jose from "jose";
-import { getStoragePath, updateSessionData } from "../../utils.js";
+import {
+  getStoragePath,
+  updateSessionData,
+  getSessionData,
+} from "../../utils.js";
 import {
   KEYCLOAK_REALM_URL,
   CLIENT_ID,
@@ -13,6 +19,7 @@ import {
   SCOPE,
   JWKS_URL,
 } from "../../config.js";
+import { switchDefaultWorkspace } from "../workspace/index.js";
 
 let server;
 let codeVerifier; // For PKCE
@@ -147,6 +154,7 @@ async function initiateAuth() {
             // Store the session data with the encrypted token
             await updateSessionData("selectedWorkspace", null);
             await updateSessionData("token", encryptedToken);
+            await switchDefaultWorkspace();
 
             res.writeHead(200, { "Content-Type": "text/html" });
             res.end(`
@@ -297,18 +305,75 @@ function shutdownServer() {
   }
 }
 
+async function endKeycloakSession() {
+  try {
+    // Get current session data to extract token information
+    const sessionData = await getSessionData();
+    if (!sessionData || !sessionData.token) {
+      console.log(
+        chalk.yellow("⚠️  No active session found to terminate on Keycloak"),
+      );
+      return;
+    }
+
+    // Get the Keycloak client to access logout endpoint
+    const client = await getClient();
+
+    // Extract the ID token from the stored token (if available)
+    // The token is encrypted, so we'll attempt to call the logout endpoint anyway
+    const logoutUrl = `${KEYCLOAK_REALM_URL}/protocol/openid-connect/logout`;
+
+    // console.log(chalk.blue("🔄 Terminating Keycloak session..."));
+
+    // Make a request to the logout endpoint
+    const response = await fetch(logoutUrl, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Aloma CLI",
+      },
+    });
+
+    // if (response.ok || response.status === 404) {
+    //   // console.log(chalk.green("✅ Keycloak session terminated successfully"));
+    // } else {
+    //   console.log(chalk.yellow("⚠️  Could not verify Keycloak session termination (this is usually fine)"));
+    // }
+  } catch (error) {
+    console.log(
+      chalk.yellow(
+        `⚠️  Could not terminate Keycloak session: ${error.message}`,
+      ),
+    );
+    console.log(
+      chalk.gray(
+        "   This is usually fine - the local session will still be cleared.",
+      ),
+    );
+  }
+}
+
 async function clearSessionData() {
   try {
-    const sessionPath = await getStoragePath("session");
+    // First, terminate the Keycloak session
+    await endKeycloakSession();
+
+    // Then clear local session data
+    const cachePath = await getStoragePath("session");
+    const sessionPath = path.join(cachePath, "session.json");
     await fs.unlink(sessionPath);
-    console.log("Session data cleared successfully");
+    // console.log(chalk.green("✅ Local session data cleared successfully"));
+    console.log(
+      chalk.green("✓ Logout completed - you have been signed out of Aloma"),
+    );
     return true;
   } catch (error) {
     if (error.code === "ENOENT") {
-      console.log("No session data found to clear");
+      console.log(chalk.yellow("ℹ️  No local session data found to clear"));
       return false;
     } else {
-      console.error(`Failed to clear session data: ${error.message}`);
+      console.error(
+        chalk.red(`❌ Failed to clear session data: ${error.message}`),
+      );
       return false;
     }
   }

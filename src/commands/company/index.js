@@ -4,7 +4,10 @@ import axios from "axios";
 import { GRAPHQL_HOST } from "../../config.js";
 import { graphQuery } from "../../utils.js";
 import { ME_QUERY } from "../auth/query.js";
-import { saveSelectedWorkspace } from "../workspace/index.js";
+import {
+  saveSelectedWorkspace,
+  switchDefaultWorkspace,
+} from "../workspace/index.js";
 import readline from "readline";
 
 export const addCompany = async (name, emails) => {
@@ -210,8 +213,10 @@ export const switchCompany = async (identifier) => {
           .replace("Bearer%20", "");
         // Update the session with the new token
         await updateSessionData("token", token);
+        // Reset the selected workspace
         await updateSessionData("selectedWorkspace", null);
         await saveSelectedWorkspace(null);
+        await switchDefaultWorkspace();
       }
     }
 

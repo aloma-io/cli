@@ -166,3 +166,9 @@ export const SAVE_SOURCE_MUTATION = `
     )
   }
 `;
+
+export const CREATE_GETTING_STARTED_MUTATION = `
+  mutation {
+    createGettingStarted
+  }
+`;
