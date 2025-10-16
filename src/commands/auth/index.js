@@ -25,6 +25,8 @@ let server;
 let codeVerifier; // For PKCE
 let sockets = new Set();
 let authTimeout; // Store the timeout ID
+let authCompleted = false; // Flag to prevent duplicate processing
+let stateGeneratedAt; // Track when state was generated
 
 async function getClient() {
   if (!KEYCLOAK_REALM_URL || KEYCLOAK_REALM_URL === "YOUR_KEYCLOAK_REALM_URL") {
@@ -81,6 +83,7 @@ async function initiateAuth() {
       const codeChallenge = generators.codeChallenge(codeVerifier);
       const state = generators.state();
       const nonce = generators.nonce();
+      stateGeneratedAt = Date.now(); // Track when state was generated
       const authUrl = client.authorizationUrl({
         scope: SCOPE,
         response_mode: "query",
@@ -93,10 +96,68 @@ async function initiateAuth() {
       server = http
         .createServer(async (req, res) => {
           try {
+            // Check if authentication has already completed
+            if (authCompleted) {
+              res.writeHead(200, { "Content-Type": "text/html" });
+              res.end(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Authentication Already Complete</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                        h1 { color: #28a745; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Authentication already completed!</h1>
+                    <p>You can close this browser tab and return to the CLI.</p>
+                </body>
+                </html>
+              `);
+              return;
+            }
+
             const params = client.callbackParams(req);
 
             // Verify state parameter
             if (params.state !== state) {
+              // If authentication already completed, this might be a duplicate request
+              if (authCompleted) {
+                res.writeHead(200, { "Content-Type": "text/html" });
+                res.end(`
+                  <!DOCTYPE html>
+                  <html>
+                  <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                    <h1 style="color: #28a745;">Authentication already completed!</h1>
+                    <p>You can close this browser tab and return to the CLI.</p>
+                  </body>
+                  </html>
+                `);
+                return;
+              }
+
+              // Check if state has expired (5 minutes)
+              const stateAge = Date.now() - stateGeneratedAt;
+              if (stateAge > 5 * 60 * 1000) {
+                console.log(
+                  chalk.yellow(
+                    "⚠️  State parameter expired, this might be a duplicate or delayed request",
+                  ),
+                );
+                res.writeHead(400, { "Content-Type": "text/html" });
+                res.end(`
+                  <!DOCTYPE html>
+                  <html>
+                  <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                    <h1 style="color: #dc3545;">Authentication expired</h1>
+                    <p>Please try the authentication process again.</p>
+                  </body>
+                  </html>
+                `);
+                return;
+              }
+
               throw new Error("Invalid state parameter");
             }
 
@@ -150,6 +211,9 @@ async function initiateAuth() {
 
             // Store the encrypted token with the 'id-' prefix
             const encryptedToken = `id-${jweToken}`;
+
+            // Mark authentication as completed to prevent duplicate processing
+            authCompleted = true;
 
             // Store the session data with the encrypted token
             await updateSessionData("selectedWorkspace", null);
@@ -303,6 +367,9 @@ function shutdownServer() {
       server = null;
     });
   }
+  // Reset auth completed flag and state tracking for next authentication attempt
+  authCompleted = false;
+  stateGeneratedAt = null;
 }
 
 async function endKeycloakSession() {
