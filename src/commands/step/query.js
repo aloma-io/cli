@@ -69,3 +69,29 @@ export const VALIDATE_IF_QUERY = `
     validateAutomationIf(content: $content)
   }
 `;
+
+export const GENERATE_STEP_MUTATION = `
+  mutation (
+    $userInput: NonEmptyString!
+    $environmentId: ID!
+    $chatHistory: [ChatMessageInput!]
+  ) {
+    generateAutomationStep(
+      userInput: $userInput
+      environmentId: $environmentId
+      chatHistory: $chatHistory
+    ) {
+      success
+      step {
+        id
+        name
+        description
+        condition
+        content
+        chatMessage
+      }
+      explanation
+      chatMessage
+    }
+  }
+`;

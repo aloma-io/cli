@@ -27,6 +27,7 @@ import {
   cloneStep,
   pullStep,
   syncStep,
+  generateStep,
 } from "./commands/step/index.js";
 import {
   listLibraries,
@@ -372,6 +373,18 @@ program
       .option("-p, --path <path>", "Source path (default: current directory)")
       .action(async (options) => {
         await syncStep(options.workspace, options.step, options.path);
+      }),
+  )
+  .addCommand(
+    new Command("generate")
+      .description("Generate a step interactively using AI")
+      .requiredOption(
+        "-f, --file <path>",
+        "Path to the step file (e.g., filename.js or path/filename.js)",
+      )
+      .option("-w, --workspace <id>", "Workspace ID")
+      .action(async (options) => {
+        await generateStep(options.file, options.workspace);
       }),
   );
 

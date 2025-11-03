@@ -7,6 +7,7 @@ import {
   DELETE_STEP_MUTATION,
   SAVE_STEP_MUTATION,
   VALIDATE_IF_QUERY,
+  GENERATE_STEP_MUTATION,
 } from "./query.js";
 import fs from "fs/promises";
 import path from "path";
@@ -725,5 +726,185 @@ async function parseStepFile(filePath) {
     };
   } catch (error) {
     throw new Error(`Error parsing step file. ${error.message}`);
+  }
+}
+
+export async function generateStep(filePath, workspaceIdentifier) {
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
+  if (!workspaceId) return;
+
+  if (!filePath) {
+    console.log(
+      chalk.yellow("⚠ Please provide a file path with -f or --file"),
+    );
+    return;
+  }
+
+  try {
+    // Ensure the directory exists
+    const dir = path.dirname(filePath);
+    if (dir !== "." && dir !== "") {
+      await fs.mkdir(dir, { recursive: true });
+    }
+
+    // Initialize chat history
+    const chatHistory = [];
+
+    // Create or read existing file
+    let existingContent = "";
+    try {
+      existingContent = await fs.readFile(filePath, "utf8");
+      console.log(chalk.blue(`Reading existing file: ${filePath}`));
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+      console.log(chalk.blue(`Creating new file: ${filePath}`));
+    }
+
+    // Create readline interface for interactive input
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    console.log(chalk.blue("\n🤖 Starting interactive step generation..."));
+    console.log(
+      chalk.gray(
+        "Type your requirements, or 'exit'/'quit' to end the session\n",
+      ),
+    );
+
+    // Helper function to write step to file
+    const writeStepToFile = async (step) => {
+      let conditionStr = "{}";
+
+      if (step.condition) {
+        if (typeof step.condition === "object") {
+          conditionStr = JSON.stringify(step.condition, null, 2);
+        } else {
+          // If it's already a string, use it directly (might be JSON or JS object literal)
+          conditionStr = step.condition;
+        }
+      }
+
+      const descriptionLine = step.description
+        ? ` * ${step.description}\n`
+        : "";
+      const idLine = step.id ? ` * ID: ${step.id}\n` : "";
+      const hasMetaInfo = step.id || step.description;
+
+      const fileContent = `/**
+ * Step: ${step.name || "Generated Step"}
+${idLine}${descriptionLine}${hasMetaInfo ? " *\n" : ""} * Edit the condition and content below.
+ * The condition should be a valid JavaScript object (trailing commas are allowed).
+ * The content should be JavaScript code that will be executed.
+ */
+
+export const condition = ${conditionStr};
+
+export const content = async () => {
+${step.content || ""}
+};
+`;
+
+      await fs.writeFile(filePath, fileContent, "utf8");
+      console.log(chalk.green(`\n✓ Code written to ${filePath}`));
+    };
+
+    // Main chat loop
+    const askQuestion = () => {
+      return new Promise((resolve) => {
+        rl.question(chalk.cyan("You: "), async (userInput) => {
+          const trimmedInput = userInput.trim();
+
+          if (
+            !trimmedInput ||
+            trimmedInput.toLowerCase() === "exit" ||
+            trimmedInput.toLowerCase() === "quit"
+          ) {
+            rl.close();
+            console.log(chalk.yellow("\n👋 Ending session. Goodbye!"));
+            resolve(null);
+            return;
+          }
+
+          // Add user message to chat history
+          const userMessage = {
+            role: "user",
+            content: trimmedInput,
+          };
+          chatHistory.push(userMessage);
+
+          console.log(chalk.gray("\n🤔 Generating step..."));
+
+          try {
+            // Call the mutation
+            const data = await graphQuery(GENERATE_STEP_MUTATION, {
+              userInput: trimmedInput,
+              environmentId: workspaceId,
+              chatHistory: chatHistory.slice(0, -1), // Send history without current message
+            });
+
+            const result = data.generateAutomationStep;
+
+            if (!result || !result.success || !result.step) {
+              console.log(
+                chalk.red(
+                  `\n❌ Error: ${result?.explanation || "Failed to generate step"}`,
+                ),
+              );
+              // Still add assistant message to history
+              chatHistory.push({
+                role: "assistant",
+                content:
+                  result?.chatMessage ||
+                  "I encountered an error generating the step.",
+              });
+              resolve(true);
+              return;
+            }
+
+            const step = result.step;
+
+            // Display AI response
+            if (result.chatMessage) {
+              console.log(chalk.blue(`\n🤖 Assistant: ${result.chatMessage}`));
+            }
+
+            // Write step to file
+            await writeStepToFile(step);
+
+            // Add assistant message to chat history
+            chatHistory.push({
+              role: "assistant",
+              content:
+                result.chatMessage ||
+                "I've generated a step based on your request.",
+            });
+
+            resolve(true);
+          } catch (error) {
+            console.error(chalk.red(`\n❌ Error: ${error.message}`));
+            chatHistory.push({
+              role: "assistant",
+              content: `Sorry, I encountered an error: ${error.message}`,
+            });
+            resolve(true);
+          }
+        });
+      });
+    };
+
+    // Start the chat loop
+    let shouldContinue = true;
+    while (shouldContinue) {
+      const result = await askQuestion();
+      if (result === null) {
+        shouldContinue = false;
+      }
+    }
+  } catch (error) {
+    console.error(chalk.red("Error in step generation:"), error.message);
   }
 }
