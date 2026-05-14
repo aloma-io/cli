@@ -70,7 +70,7 @@ export async function getConnector(id, workspaceIdentifier) {
     console.log(`Namespace: ${connector.namespace}`);
     console.log(`Shared in Realm: ${connector.shared_in_realm}`);
     console.log(
-      `Health: ${connector.health.healthy ? "Healthy" : "Unhealthy"}`,
+      `Health: ${connector.health[0].healthy ? "Healthy" : "Unhealthy"}`,
     );
 
     const connector_schema = data.getAutomationConnectorConfigSchema;
