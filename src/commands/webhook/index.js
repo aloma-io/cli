@@ -16,7 +16,7 @@ export async function listWebhooks(workspaceIdentifier) {
       id: workspaceId,
     });
 
-    const webhooks = response.listAutomationWebhooks;
+    const webhooks = response.listAutomationWebhooks ?? [];
 
     if (webhooks.length === 0) {
       console.log(chalk.yellow("No webhooks found in the current workspace."));

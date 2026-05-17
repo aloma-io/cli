@@ -70,7 +70,7 @@ export async function getConnector(id, workspaceIdentifier) {
     console.log(`Namespace: ${connector.namespace}`);
     console.log(`Shared in Realm: ${connector.shared_in_realm}`);
     console.log(
-      `Health: ${connector.health[0].healthy ? "Healthy" : "Unhealthy"}`,
+      `Health: ${(Array.isArray(connector.health) && connector.health[0]?.healthy) ? "Healthy" : "Unhealthy"}`,
     );
 
     const connector_schema = data.getAutomationConnectorConfigSchema;
@@ -237,7 +237,7 @@ export async function listConnectors(workspaceIdentifier) {
       console.log(`Namespace: ${connector.namespace}`);
       console.log(`Last Used At: ${connector.last_used_at}`);
       console.log(
-        `Health: ${connector.health[0].healthy ? chalk.green("Healthy") : chalk.red("Unhealthy")}`,
+        `Health: ${(Array.isArray(connector.health) && connector.health[0]?.healthy) ? chalk.green("Healthy") : chalk.red("Unhealthy")}`,
       );
     });
   } catch (error) {
@@ -354,7 +354,7 @@ export async function updateConnector(
       for (var i = 0; i < keys.length; ++i) {
         const key = keys[i];
 
-        if (schema.fields[key].plain) {
+        if (schema.fields[key]?.plain) {
           // @ts-ignore
           items[key] = connectorConfig[key];
         } else {

@@ -722,7 +722,18 @@ program
         // Parse tags from comma-separated string
         const tags = options.tags ? options.tags.split(",") : undefined;
         // Parse config from JSON string
-        const config = options.config ? JSON.parse(options.config) : undefined;
+        let config;
+        if (options.config) {
+          try {
+            config = JSON.parse(options.config);
+          } catch (e) {
+            console.error(
+              chalk.red("Error: -c/--config must be a valid JSON string:"),
+              e.message,
+            );
+            return;
+          }
+        }
 
         await addConnector(
           connectorId,
@@ -760,6 +771,20 @@ program
         "Path to JSON file containing connector configuration",
       )
       .action(async (id, options) => {
+        // Parse config from JSON string
+        let config;
+        if (options.config) {
+          try {
+            config = JSON.parse(options.config);
+          } catch (e) {
+            console.error(
+              chalk.red("Error: -c/--config must be a valid JSON string:"),
+              e.message,
+            );
+            return;
+          }
+        }
+
         await updateConnector(
           id,
           options.workspace,
@@ -767,7 +792,7 @@ program
           options.namespace,
           options.tags,
           options.shared,
-          options.config,
+          config,
           options.file,
         );
       }),
