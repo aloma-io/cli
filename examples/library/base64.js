@@ -1,31 +1,18 @@
 /**
  * Library: base64
- * 
- * Edit the types and content below.
- * The types should be a function that returns type definitions.
- * The content should be JavaScript code with function implementations and exports.
- * 
- * Example:
- * types = () => {
- *   return "function processData(data: any): any";
- * };
- * 
- * content = () => {
- *   const processData = (data) => {
- *     return data.map(item => ({ ...item, processed: true }));
- *   };
- *   module.exports = { processData };
- * };
+ *
+ * Fixed 21 May 2026 — encode() body replaced with canonical string-based implementation
+ * (previous Uint8Array(Object.values(obj)) produced all-zero bytes for string input).
  */
 
 export const types = () => {
   return `
   /**
-  * Encode an object into a base64 string
-  * @param {object} obj - The object to encode
+  * Encode a string into a base64 string
+  * @param {string} str - The string to encode
   * @returns {string} - The base64 encoded string
   **/
-  declare function encode(obj: any): string;
+  declare function encode(str: string): string;
   /**
   * Decode a base64 string
   * @param {string} base64String - The base64 encoded string
@@ -35,32 +22,28 @@ export const types = () => {
 };
 
 export const content = () => {
-const encode = (obj) => {
-  const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const byteArray = new Uint8Array(Object.values(obj));
-  let binaryString = '';
+  const encode = (str) => {
+    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const bytes = [];
+    for (let i = 0; i < str.length; i++) {
+      bytes.push(str.charCodeAt(i));
+    }
+    const byteArray = new Uint8Array(bytes);
+    let binaryString = '';
+    byteArray.forEach(byte => { binaryString += String.fromCharCode(byte); });
 
-  // Convert each byte to a binary string
-  for (let i = 0; i < byteArray.length; i++) {
-    binaryString += byteArray[i].toString(2).padStart(8, '0');
-  }
-
-  let base64 = '';
-
-  // Convert binary string to Base64
-  for (let i = 0; i < binaryString.length; i += 6) {
-    const binarySegment = binaryString.substr(i, 6);
-    const decimalValue = parseInt(binarySegment, 2);
-    base64 += base64Chars[decimalValue];
-  }
-
-  // Add padding if needed
-  while (base64.length % 4 !== 0) {
-    base64 += '=';
-  }
-
-  return base64;
-};
+    let base64 = '';
+    for (let i = 0; i < binaryString.length; i += 3) {
+      const b0 = binaryString.charCodeAt(i);
+      const b1 = i + 1 < binaryString.length ? binaryString.charCodeAt(i + 1) : 0;
+      const b2 = i + 2 < binaryString.length ? binaryString.charCodeAt(i + 2) : 0;
+      base64 += base64Chars[b0 >> 2];
+      base64 += base64Chars[((b0 & 3) << 4) | (b1 >> 4)];
+      base64 += i + 1 < binaryString.length ? base64Chars[((b1 & 15) << 2) | (b2 >> 6)] : '=';
+      base64 += i + 2 < binaryString.length ? base64Chars[b2 & 63] : '=';
+    }
+    return base64;
+  };
 
   function decode(base64String) {
     const base64 = base64String.replace(/=+$/, '');
@@ -84,5 +67,6 @@ const encode = (obj) => {
     }
     return decodedString;
   }
-module.exports = { encode, decode }
+
+  module.exports = { encode, decode };
 };
