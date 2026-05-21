@@ -312,7 +312,7 @@ export async function showWorkspace(workspaceIdentifier, stats, source) {
 
     // Automation (30 days)
     let autoPercent =
-      typeof ws.testPercentage7 === "number" ? ws.testPercentage7 : 0;
+      typeof ws.testPercentage30 === "number" ? ws.testPercentage30 : 0;
     let manualPercent = 100 - autoPercent;
     // If you have a 30d automation percentage, use it instead
     // let autoPercent = ws.testPercentage30 || 0;

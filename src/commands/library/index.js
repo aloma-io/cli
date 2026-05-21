@@ -179,13 +179,23 @@ export async function updateLibrary(
     const newTags = tags || currentLibrary.tags || [];
     const newEnabled = enabled !== null ? enabled : currentLibrary.enabled;
 
+    // If a file is provided, parse it for new content and types;
+    // otherwise keep the library's current content and types.
+    let newContent = currentLibrary.content?.content || "";
+    let newTypes = currentLibrary.types || "";
+    if (filePath) {
+      const parsed = await parseLibraryFile(filePath);
+      newContent = parsed.content;
+      newTypes = parsed.types;
+    }
+
     // Update the library
     const updateData = await graphQuery(UPDATE_AUTOMATION_LIB_MUTATION, {
       id: libraryId,
       name: currentLibrary.name,
       namespace: newNamespace,
-      content: currentLibrary.content.content || "",
-      types: currentLibrary.types || "",
+      content: newContent,
+      types: newTypes,
       version: currentLibrary.version,
       tags: newTags,
       enabled: newEnabled,
