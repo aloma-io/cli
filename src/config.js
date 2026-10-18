@@ -60,6 +60,11 @@ export const GRAPHQL_URL =
   process.env.ALOMA_GRAPHQL_URL || config.graphqlUrl || "";
 export const GRAPHQL_HOST =
   process.env.ALOMA_GRAPHQL_HOST || config.graphqlHost || "";
+// Where the CLI exchanges its login for an Aloma session (next to the GraphQL endpoint)
+export const SESSION_URL =
+  process.env.ALOMA_SESSION_URL ||
+  config.sessionUrl ||
+  (GRAPHQL_URL ? new URL("/oauth2/cli/session", GRAPHQL_URL).toString() : "");
 
 // AUTH_PUBLIC_KEY for JWT encryption - the key used by the backend
 export const AUTH_PUBLIC_KEY =

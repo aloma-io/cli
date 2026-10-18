@@ -5,8 +5,6 @@ import { Issuer, generators } from "openid-client";
 import open from "open";
 import { promises as fs } from "fs";
 import chalk from "chalk";
-import { EncryptJWT } from "jose";
-import * as jose from "jose";
 import {
   getStoragePath,
   updateSessionData,
@@ -18,7 +16,9 @@ import {
   REDIRECT_URI,
   SCOPE,
   JWKS_URL,
+  SESSION_URL,
 } from "../../config.js";
+import { exchangeIdTokenForSession } from "./session.js";
 import { switchDefaultWorkspace } from "../workspace/index.js";
 
 let server;
@@ -179,45 +179,18 @@ async function initiateAuth() {
               );
             }
 
-            // Parse the ID token claims
-            const idTokenClaims = tokenSet.claims();
-
-            // Import the fixed public key for encryption
-            const { AUTH_PUBLIC_KEY } = await import("../../config.js");
-            const publicKey = await jose.importSPKI(
-              AUTH_PUBLIC_KEY,
-              "RSA-OAEP-256",
-            );
-
-            // Create JWE token matching backend's implementation
-            const jweToken = await new EncryptJWT({
-              _data: {
-                id: idTokenClaims.sub,
-                firstName: idTokenClaims.given_name,
-                lastName: idTokenClaims.family_name,
-                email: idTokenClaims.email,
-                authRealm: idTokenClaims.iss.split("/").pop(),
-                groups: idTokenClaims.groups || [],
-                access_token: tokenSet.access_token,
-                selectedRealm: idTokenClaims.sid,
-              },
-            })
-              .setProtectedHeader({ alg: "RSA-OAEP-256", enc: "A256GCM" })
-              .setIssuedAt()
-              .setIssuer("home.aloma.io")
-              .setAudience("local")
-              .setExpirationTime("7d")
-              .encrypt(publicKey);
-
-            // Store the encrypted token with the 'id-' prefix
-            const encryptedToken = `id-${jweToken}`;
+            // The API checks the login service's ID token and issues the session
+            const sessionToken = await exchangeIdTokenForSession({
+              idToken: tokenSet.id_token,
+              url: SESSION_URL,
+            });
 
             // Mark authentication as completed to prevent duplicate processing
             authCompleted = true;
 
             // Store the session data with the encrypted token
             await updateSessionData("selectedWorkspace", null);
-            await updateSessionData("token", encryptedToken);
+            await updateSessionData("token", sessionToken);
             await switchDefaultWorkspace();
 
             res.writeHead(200, { "Content-Type": "text/html" });
