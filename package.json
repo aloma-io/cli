@@ -1,6 +1,6 @@
 {
   "name": "@aloma.io/aloma",
-  "version": "0.0.19",
+  "version": "0.1.0",
   "description": "Aloma CLI and utility package",
   "type": "module",
   "main": "src/index.js",
@@ -15,7 +15,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node tests/test-openid.js",
+    "test": "node --test tests/session-exchange.test.js && node tests/test-openid.js",
     "setup": "npm link",
     "auth": "node src/cli.js auth",
     "format": "prettier --write \"src/**/*.{js,ts}\"",
