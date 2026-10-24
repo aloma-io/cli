@@ -18,7 +18,7 @@ const loadConfig = async (config, env = {}) => {
   return { c: r.result.value, r };
 };
 
-test("values come from <package root>/.config/config.json; the session URL sits next to GraphQL", async () => {
+test("values come from <HOME>/.config/aloma/config.json; the session URL sits next to GraphQL", async () => {
   const { c, r } = await loadConfig({
     keycloakRealmUrl: "http://127.0.0.1:9/realms/test",
     clientId: "graph-cli",
@@ -66,11 +66,12 @@ test("ALOMA_* environment variables override the configuration file", async () =
   assert.equal(c2.SESSION_URL, "http://127.0.0.1:6/s");
 });
 
-test("missing configuration: falls back to the production template, with a warning", async () => {
+// No install-time setup any more (finding 8): the bundled template is the normal default, so it is
+// used without a warning.
+test("missing configuration: the bundled production template is used, quietly", async () => {
   const { c, r } = await loadConfig(undefined);
   const t = template("production");
-  assert.match(r.stderr, /Using template configuration for production environment\./);
-  assert.match(r.stderr, /Run "aloma setup" to configure the CLI properly\./);
+  assert.equal(r.output.trim(), "");
   assert.equal(c.KEYCLOAK_REALM_URL, t.keycloakRealmUrl);
   assert.equal(c.GRAPHQL_URL, t.graphqlUrl);
   assert.equal(c.CLIENT_ID, t.clientId);
@@ -79,7 +80,7 @@ test("missing configuration: falls back to the production template, with a warni
 
 test("ALOMA_ENV picks the template used when there is no configuration", async () => {
   const { c, r } = await loadConfig(undefined, { ALOMA_ENV: "development" });
-  assert.match(r.stderr, /Using template configuration for development environment\./);
+  assert.equal(r.output.trim(), "");
   assert.equal(c.GRAPHQL_URL, template("development").graphqlUrl);
   assert.equal(c.ENVIRONMENT_NAME, "development");
 });
@@ -102,4 +103,21 @@ test("no configuration and no template: built-in defaults; no API or session URL
   assert.equal(c.CLIENT_ID, "graph", "built-in default differs from the templates' graph-cli");
   assert.equal(c.REDIRECT_URI, "http://localhost:8989");
   assert.equal(c.JWKS_URL, "https://accounts.aloma.io/realms/master/protocol/openid-connect/certs");
+});
+
+// SECURITY: the configuration is never read from the current directory (finding 1).
+test("SECURITY: a config.json in the cwd's node_modules/@aloma.io/aloma/.config is ignored", async () => {
+  sb = makeSandbox({ config: { graphqlUrl: "https://own.example.test/graphql" } });
+  sb.plant({ config: { graphqlUrl: "http://127.0.0.1:9/planted/graphql", sessionUrl: "http://127.0.0.1:9/s", keycloakRealmUrl: "http://127.0.0.1:9/r" } });
+  const r = await runDriver(sb, { fn: "config" });
+  assert.equal(r.result.value.GRAPHQL_URL, "https://own.example.test/graphql");
+  assert.equal(r.result.value.SESSION_URL, "https://own.example.test/oauth2/cli/session");
+  assert.notEqual(r.result.value.KEYCLOAK_REALM_URL, "http://127.0.0.1:9/r");
+});
+
+test("SECURITY: with no own configuration, a planted one is still ignored (bundled template used)", async () => {
+  sb = makeSandbox();
+  sb.plant({ config: { graphqlUrl: "http://127.0.0.1:9/planted/graphql" } });
+  const r = await runDriver(sb, { fn: "config" });
+  assert.equal(r.result.value.GRAPHQL_URL, template("production").graphqlUrl);
 });

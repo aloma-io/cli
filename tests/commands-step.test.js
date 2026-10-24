@@ -306,12 +306,55 @@ test("step pull: steps with the same name overwrite each other (last one wins)",
   assert.match(r.stdout, /Successfully pulled 3 steps to:/);
 }));
 
-test("step pull: a step name with .. segments writes outside the target folder", sandboxTest(async (sb) => {
+// SECURITY (was PINS SUSPECT BEHAVIOUR: names come from the server and were not sanitised, so
+// "../escaped" was written outside the target folder). Unsafe names are skipped, the rest pulled.
+test("SECURITY: step pull never writes outside the target folder", sandboxTest(async (sb) => {
+  mockSteps(sb, [
+    FULL("s-1", "../escaped", "{}", "x();"),
+    FULL("s-2", "grp/../../escaped2", "{}", "x();"),
+    FULL("s-3", "/abs/escaped3", "{}", "x();"),
+    FULL("s-4", "a//b", "{}", "x();"),
+    FULL("s-5", "..", "{}", "x();"),
+    FULL("s-6", "grp\\..\\escaped4", "{}", "x();"),
+    FULL("s-7", "ok/inside", "{}", "fine();"),
+  ]);
+  const r = await sb.run(["step", "pull", "-p", "out"]);
+  for (const f of ["escaped.js", "escaped2.js", "out/escaped.js", "abs", "out/abs", "escaped4.js"]) {
+    assert.equal(sb.exists(f), false, f);
+  }
+  assert.deepEqual(sb.list(), ["out"], "nothing next to the target folder");
+  assert.deepEqual(sb.list("out"), ["ok"]);
+  assert.match(sb.read("out/ok/inside.js"), /fine\(\);/);
+  assert.equal((r.out.match(/Skipped step s-\d: unsafe name/g) || []).length, 6, r.out);
+}));
+
+test("SECURITY: step pull -s with an unsafe name writes nothing and says why", sandboxTest(async (sb) => {
   mockSteps(sb, [FULL("s-1", "../escaped", "{}", "x();")]);
+  const r = await sb.run(["step", "pull", "-s", "s-1", "-p", "out"]);
+  assert.equal(sb.exists("escaped.js"), false);
+  assert.match(r.stderr, /Error pulling steps: unsafe step name/);
+  assert.doesNotMatch(r.stdout, /Successfully pulled/);
+}));
+
+// SECURITY: a name or id cannot close the header comment and inject code at the top of the file.
+// SECURITY: a name or id cannot close the header comment and inject code at the top of the file.
+test("SECURITY: step pull: name and id cannot break out of the header comment", sandboxTest(async (sb) => {
+  mockSteps(sb, [FULL("s-1 */\nglobalThis.pwnedId = 1;\n/*", "x*/ globalThis.pwned = 1; /* y", "{}", "x();")]);
   await sb.run(["step", "pull", "-p", "out"]);
-  // PINS SUSPECT BEHAVIOUR (security): names come from the server and are not sanitised.
-  assert.equal(sb.exists("escaped.js"), true);
-  assert.equal(sb.exists("out/escaped.js"), false);
+  const file = "out/x*/ globalThis.pwned = 1; /* y.js";
+  assert.ok(sb.exists(file), sb.list("out").join());
+  const text = sb.read(file);
+  const header = text.slice(0, text.indexOf("export const condition"));
+  assert.equal(header.split("*/").length, 2, "only the header's own closing */");
+  assert.doesNotMatch(text, /^globalThis\.pwned/m);
+  assert.doesNotMatch(header.slice(0, -4), /\*\//, "no early end of the comment");
+}));
+
+test("SECURITY: step pull: a name with control characters (newlines) is skipped", sandboxTest(async (sb) => {
+  mockSteps(sb, [FULL("s-1", "evil\nname", "{}", "x();")]);
+  const r = await sb.run(["step", "pull", "-p", "out"]);
+  assert.deepEqual(sb.list("out"), []);
+  assert.match(r.out, /Skipped step s-1: unsafe name/);
 }));
 
 test("step pull: empty workspace, unknown step id, API error", sandboxTest(async (sb) => {

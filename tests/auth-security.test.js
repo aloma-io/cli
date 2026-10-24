@@ -12,6 +12,10 @@ import { exchangeIdTokenForSession } from "../src/commands/auth/session.js";
 
 const FAKE_ID_TOKEN = "FAKE-ID-TOKEN-5555-test-only";
 
+// The in-process exchange tests talk to plain-http loopback mocks: allowed only with this opt-in,
+// and only for loopback hosts (see the transport tests below).
+process.env.ALOMA_ALLOW_HTTP_LOOPBACK = "1";
+
 // ---- the test harness itself: no real host can be reached -------------------------------------
 
 test("harness: the network guard blocks non-loopback connections and lookups", async () => {
@@ -131,25 +135,39 @@ function describeExchange() {
     await assert.rejects(exchangeIdTokenForSession({ idToken: FAKE_ID_TOKEN, url: "" }), /absolute URL/i);
   });
 
-  // SECURITY: a 302 redirect turns the POST into a GET without a body: the ID token is not resent.
-  // PINS SUSPECT BEHAVIOUR: but the redirect is followed to any host, and whatever session that host
-  // answers with is accepted and would be stored.
-  test("SECURITY: exchange redirected (302) to another host does not resend the ID token", async () => {
-    const token = await exchangeIdTokenForSession({ idToken: FAKE_ID_TOKEN, url: `${api.origin}/redirect?status=302` });
-    assert.equal(other.requests.length, 1);
-    assert.equal(other.requests[0].method, "GET");
-    assert.equal(other.requests[0].body, "");
-    assert.equal(token, "id-FAKE-OTHER-test-only", "PINS SUSPECT BEHAVIOUR: the other host's session is accepted");
+  // SECURITY (was PINS SUSPECT BEHAVIOUR: a 307/308 redirect was followed to any host with the ID
+  // token in the body, and a 302 redirect target's session was accepted). Redirects are refused.
+  for (const status of [301, 302, 303, 307, 308]) {
+    test(`SECURITY: exchange answered with a redirect (${status}) is refused; nothing is sent elsewhere`, async () => {
+      await assert.rejects(
+        exchangeIdTokenForSession({ idToken: FAKE_ID_TOKEN, url: `${api.origin}/redirect?status=${status}` }),
+        /redirect/i,
+      );
+      assert.equal(other.requests.length, 0, "the redirect target is never contacted");
+    });
+  }
+
+  test("SECURITY: the error for a refused redirect does not echo the ID token or the target", async () => {
+    const err = await exchangeIdTokenForSession({ idToken: FAKE_ID_TOKEN, url: `${api.origin}/redirect?status=307` }).catch((e) => e);
+    assert.ok(!err.message.includes(FAKE_ID_TOKEN));
+    assert.ok(!err.message.includes(String(other.port)));
   });
 
-  // PINS SUSPECT BEHAVIOUR: a 307/308 redirect is followed to any host and the body, with the ID
-  // token in it, is posted there; the session that host returns is accepted.
-  test("PINS SUSPECT BEHAVIOUR: exchange redirected (307) to another host posts the ID token there", async () => {
-    const token = await exchangeIdTokenForSession({ idToken: FAKE_ID_TOKEN, url: `${api.origin}/redirect?status=307` });
-    assert.equal(other.requests.length, 1);
-    assert.equal(other.requests[0].method, "POST");
-    assert.deepEqual(JSON.parse(other.requests[0].body), { id_token: FAKE_ID_TOKEN });
-    assert.equal(token, "id-FAKE-OTHER-test-only");
+  test("SECURITY: the exchange refuses a plain-http session URL that is not loopback", async () => {
+    await assert.rejects(
+      exchangeIdTokenForSession({ idToken: FAKE_ID_TOKEN, url: "http://api.example.test/oauth2/cli/session" }),
+      /https/,
+    );
+  });
+
+  test("SECURITY: without the loopback opt-in even a loopback http session URL is refused", async () => {
+    delete process.env.ALOMA_ALLOW_HTTP_LOOPBACK;
+    try {
+      await assert.rejects(exchangeIdTokenForSession({ idToken: FAKE_ID_TOKEN, url: `${api.origin}/oauth2/cli/session` }), /https/);
+      assert.equal(api.requests.length, 0);
+    } finally {
+      process.env.ALOMA_ALLOW_HTTP_LOOPBACK = "1";
+    }
   });
 }
 
@@ -184,24 +202,24 @@ function describeGraph() {
   const graph = (graphqlUrl, env = {}) =>
     runDriver(sb, { fn: "graphQuery" }, { env: { ALOMA_GRAPHQL_URL: graphqlUrl, ALOMA_KEYCLOAK_REALM_URL: "http://127.0.0.1:1/x", ...env } });
 
+  // SECURITY: an API call answered with a redirect is refused; the session goes nowhere else.
   for (const status of [301, 302, 307, 308]) {
-    // SECURITY: redirects to another host drop the Authorization header and the cookie.
-    test(`SECURITY: API call redirected (${status}) to another host does not forward the session`, async () => {
+    test(`SECURITY: API call redirected (${status}) to another host is refused, session not forwarded`, async () => {
       const r = await graph(`${api.origin}/graphql?status=${status}`);
-      assert.equal(r.result.ok, true, r.output);
-      assert.equal(other.requests.length, 1);
-      assert.equal(other.requests[0].headers.authorization, undefined);
-      assert.equal(other.requests[0].headers.cookie, undefined);
-      assert.deepEqual(leakedSecrets(other.requests[0].url + other.requests[0].body), []);
+      assert.equal(r.result.ok, false);
+      assert.match(r.result.error, /redirect/i);
+      assert.equal(other.requests.length, 0);
+      assert.deepEqual(leakedSecrets(r.output), []);
     });
   }
 
-  // PINS SUSPECT BEHAVIOUR: the same-host check ignores the port, so a redirect to another port
-  // (another service) on the same host does get the session.
-  test("PINS SUSPECT BEHAVIOUR: a redirect to another port on the same host forwards the session", async () => {
+  // SECURITY (was PINS SUSPECT BEHAVIOUR: the same-host check ignored the port, so a redirect to
+  // another port on the same host got the session). No redirect is followed, whatever the origin.
+  test("SECURITY: a redirect to another port on the same host does not forward the session", async () => {
     const r = await graph(`${api.origin}/same-host?status=307`);
-    assert.equal(r.result.ok, true, r.output);
-    assert.equal(sameHost.requests[0].headers.authorization, `Bearer ${FAKE.session}`);
+    assert.equal(r.result.ok, false);
+    assert.match(r.result.error, /redirect/i);
+    assert.equal(sameHost.requests.length, 0);
   });
 
   // SECURITY: TLS verification is on for API calls: an untrusted certificate is refused before the
@@ -218,9 +236,24 @@ function describeGraph() {
     assert.equal(tlsApi.requests[0].headers.authorization, `Bearer ${FAKE.session}`);
   });
 
-  // PINS SUSPECT BEHAVIOUR: plain http:// is accepted for the API, so the session can be sent
-  // unencrypted if the configuration (or ALOMA_GRAPHQL_URL) says http.
-  test("PINS SUSPECT BEHAVIOUR: an http:// API URL is used, sending the session unencrypted", async () => {
+  // SECURITY (was PINS SUSPECT BEHAVIOUR: plain http:// was accepted for the API, so the session
+  // could be sent unencrypted). http is refused before anything is sent.
+  test("SECURITY: an http:// API URL is refused before the session is sent", async () => {
+    const r = await graph(`http://127.0.0.1:${sameHost.port}/graphql`, { ALOMA_ALLOW_HTTP_LOOPBACK: undefined });
+    assert.equal(r.result.ok, false);
+    assert.match(r.result.error, /https/);
+    assert.equal(sameHost.requests.length, 0);
+    assert.deepEqual(leakedSecrets(r.output), []);
+  });
+
+  test("SECURITY: the loopback opt-in never allows http to another host", async () => {
+    const r = await graph("http://api.example.test/graphql");
+    assert.equal(r.result.ok, false);
+    assert.match(r.result.error, /https/);
+    assert.doesNotMatch(r.output, /test network guard/, "refused by the CLI, before any lookup");
+  });
+
+  test("the loopback opt-in allows a plain-http loopback API (local development only)", async () => {
     const r = await graph(`http://127.0.0.1:${sameHost.port}/graphql`);
     assert.equal(r.result.ok, true, r.output);
     assert.equal(sameHost.requests[0].headers.authorization, `Bearer ${FAKE.session}`);

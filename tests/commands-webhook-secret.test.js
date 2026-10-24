@@ -128,7 +128,8 @@ const CONFIG = {
   },
 };
 
-test("secret list: shows plain values, hides encrypted ones", sandboxTest(async (sb) => {
+// SECURITY (finding 7): values are masked unless --reveal is given.
+test("SECURITY: secret list masks plain values by default, hides encrypted ones", sandboxTest(async (sb) => {
   sb.api.on("GET_SECRET_QUERY", CONFIG);
   const r = await sb.run(["secret", "list"]);
   assert.equal(r.code, 0);
@@ -137,12 +138,27 @@ test("secret list: shows plain values, hides encrypted ones", sandboxTest(async 
     r.stdout,
     [
       "", "Secrets for workspace (ID: ws-sel):", "─".repeat(80),
-      "1. API_URL", "   Description: base url", "   Value: https://example.invalid", "   Encrypted: 🔓", "",
+      "1. API_URL", "   Description: base url", "   Value: ******** (hidden, use --reveal to show)", "   Encrypted: 🔓", "",
       "2. API_KEY", "   Description: No description", "   Value: [ENCRYPTED]", "   Encrypted: 🔒",
       '   Options: {"rotate":true}', "",
       "3. BARE", "   Description: No description", "   Value: [NO VALUE]", "   Encrypted: 🔓", "", "",
     ].join("\n"),
   );
+}));
+
+test("secret list --reveal shows plain values (encrypted ones stay hidden)", sandboxTest(async (sb) => {
+  sb.api.on("GET_SECRET_QUERY", CONFIG);
+  const r = await sb.run(["secret", "list", "--reveal"]);
+  assert.equal(r.code, 0);
+  assert.match(r.stdout, /^   Value: https:\/\/example\.invalid$/m);
+  assert.match(r.stdout, /^   Value: \[ENCRYPTED\]$/m);
+  assert.match(r.stdout, /^   Value: \[NO VALUE\]$/m);
+}));
+
+test("SECURITY: secret list output never contains a plain value without --reveal", sandboxTest(async (sb) => {
+  sb.api.on("GET_SECRET_QUERY", CONFIG);
+  const r = await sb.run(["secret", "list"]);
+  assert.doesNotMatch(r.out, /example\.invalid/);
 }));
 
 test("secret list: null or empty config", sandboxTest(async (sb) => {

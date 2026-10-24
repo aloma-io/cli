@@ -250,6 +250,42 @@ test("library pull -l <id>: one library; unknown id; empty workspace", sandboxTe
   assert.equal(r.stdout, "No libraries found in workspace.\n");
 }));
 
+// SECURITY: library pull never writes outside the target folder (finding 3; same code shape as
+// step pull).
+test("SECURITY: library pull never writes outside the target folder", sandboxTest(async (sb) => {
+  mockLibs(sb, [
+    FULL("l-1", "../escaped", "T", "x();"),
+    FULL("l-2", "ns/../../escaped2", "T", "x();"),
+    FULL("l-3", "/abs/escaped3", "T", "x();"),
+    FULL("l-4", "ok/inside", "T", "fine();"),
+  ]);
+  const r = await sb.run(["library", "pull", "-p", "out"]);
+  for (const f of ["escaped.js", "escaped2.js", "abs", "out/abs"]) assert.equal(sb.exists(f), false, f);
+  assert.deepEqual(sb.list(), ["out"]);
+  assert.deepEqual(sb.list("out"), ["ok"]);
+  assert.equal((r.out.match(/Skipped library l-\d: unsafe name/g) || []).length, 3, r.out);
+}));
+
+// SECURITY: a name or id cannot close the header comment and inject code at the top of the file.
+test("SECURITY: library pull: name and id cannot break out of the header comment", sandboxTest(async (sb) => {
+  mockLibs(sb, [FULL("l-1 */\nglobalThis.pwnedId = 1;\n/*", "x*/ globalThis.pwned = 1; /* y", "T", "x();")]);
+  await sb.run(["library", "pull", "-p", "out"]);
+  const file = "out/x*/ globalThis.pwned = 1; /* y.js";
+  assert.ok(sb.exists(file), sb.list("out").join());
+  const text = sb.read(file);
+  const header = text.slice(0, text.indexOf("export const types"));
+  assert.equal(header.split("*/").length, 2, "only the header's own closing */");
+  assert.doesNotMatch(text, /^globalThis\.pwned/m);
+  assert.doesNotMatch(header.slice(0, -4), /\*\//, "no early end of the comment");
+}));
+
+test("SECURITY: library pull: a name with control characters (newlines) is skipped", sandboxTest(async (sb) => {
+  mockLibs(sb, [FULL("l-1", "evil\nname", "T", "x();")]);
+  const r = await sb.run(["library", "pull", "-p", "out"]);
+  assert.deepEqual(sb.list("out"), []);
+  assert.match(r.out, /Skipped library l-1: unsafe name/);
+}));
+
 test("library pull: libraries with the same name overwrite each other", sandboxTest(async (sb) => {
   mockLibs(sb, [FULL("l-1", "dup", "T1", "one();"), FULL("l-2", "dup", "T2", "two();")]);
   const r = await sb.run(["library", "pull", "-p", "out"]);

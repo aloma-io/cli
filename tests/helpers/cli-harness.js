@@ -1,8 +1,7 @@
 // Test harness for the command regression tests.
 //
-// Runs the repo's own src/cli.js in a child process, inside a throw-away directory that
-// looks like an installed package (node_modules/@aloma.io/aloma/.cache/session.json holds
-// a FAKE token). The GraphQL endpoint is a local http server on 127.0.0.1 that records
+// Runs the repo's own src/cli.js in a child process with a throw-away HOME whose
+// .config/aloma/session.json holds a FAKE token, and a throw-away working directory. The GraphQL endpoint is a local http server on 127.0.0.1 that records
 // every request; nothing ever leaves the machine. `open` (browser/editor launch) is
 // replaced by a fake executable first on PATH.
 import http from "node:http";
@@ -122,17 +121,16 @@ export async function createSandbox({
   env = {},
 } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "aloma-cli-test-")));
-  // the CLI looks for its package (and session cache) in <cwd>/node_modules/@aloma.io/aloma
+  // the CLI keeps its configuration and session in <HOME>/.config/aloma
   const work = path.join(root, "work");
-  const pkg = path.join(work, "node_modules", "@aloma.io", "aloma");
-  fs.mkdirSync(path.join(pkg, ".config"), { recursive: true });
-  fs.mkdirSync(path.join(pkg, ".cache"), { recursive: true });
-  fs.writeFileSync(path.join(pkg, ".config", "config.json"), "{}");
-  const sessionFile = path.join(pkg, ".cache", "session.json");
-  if (session) fs.writeFileSync(sessionFile, JSON.stringify(session));
   const home = path.join(root, "home");
+  const configDir = path.join(home, ".config", "aloma");
+  fs.mkdirSync(work, { recursive: true });
+  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(configDir, "config.json"), "{}");
+  const sessionFile = path.join(configDir, "session.json");
+  if (session) fs.writeFileSync(sessionFile, JSON.stringify(session), { mode: 0o600 });
   const bin = path.join(root, "bin");
-  fs.mkdirSync(home);
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "open"), FAKE_OPEN, { mode: 0o755 });
   const openLog = path.join(root, "open.log");
@@ -189,6 +187,7 @@ export async function createSandbox({
         ALOMA_GRAPHQL_URL: api.url,
         ALOMA_GRAPHQL_HOST: "graphql.test.invalid",
         ALOMA_ENV: "test",
+        ALOMA_ALLOW_HTTP_LOOPBACK: "1",
         NODE_OPTIONS: `--import ${PRELOAD}`,
         TEST_AXIOS_LOG: axiosLog,
         TEST_OPEN_LOG: openLog,

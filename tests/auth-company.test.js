@@ -125,22 +125,26 @@ test("SECURITY: an untrusted certificate is refused; the session is not sent", a
   assert.equal(sb.readSession().token, FAKE.session);
 });
 
-// SECURITY: a redirect to another host does not carry the Authorization header along.
-test("SECURITY: a redirect to another host does not forward the session", async () => {
-  const other = await startServer((req, res) => json(res, 200, {}), {
-    host: "localhost",
-    tls: { key: cert.key, cert: cert.cert },
+// SECURITY: a redirect is never followed, to another host or to another port on the same host,
+// so the session goes only to the configured API origin (was: followed, header dropped by host).
+for (const [label, host] of [["another host", "localhost"], ["another port on the same host", "127.0.0.1"]]) {
+  test(`SECURITY: a redirect to ${label} is refused; the session is not forwarded`, async () => {
+    const other = await startServer((req, res) => json(res, 200, {}), {
+      host,
+      tls: { key: cert.key, cert: cert.cert },
+    });
+    try {
+      realmCtl.respond = (req, res) => {
+        res.writeHead(307, { location: `https://${host}:${other.port}/realm?realm=realm-b` });
+        res.end();
+      };
+      const r = await switchTo("realm-b");
+      assert.match(r.stdout, /Error switching company:.*redirect/i);
+      assert.equal(other.requests.length, 0, "redirect not followed");
+      assert.deepEqual(sb.readSession(), { token: FAKE.session, selectedWorkspace: "ws-old" });
+      assert.deepEqual(leakedSecrets(r.output), []);
+    } finally {
+      await other.close();
+    }
   });
-  try {
-    realmCtl.respond = (req, res) => {
-      res.writeHead(307, { location: `https://localhost:${other.port}/realm?realm=realm-b` });
-      res.end();
-    };
-    await switchTo("realm-b");
-    assert.equal(other.requests.length, 1, "redirect was followed");
-    assert.equal(other.requests[0].headers.authorization, undefined);
-    assert.equal(other.requests[0].headers.cookie, undefined);
-  } finally {
-    await other.close();
-  }
-});
+}

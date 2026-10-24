@@ -134,13 +134,27 @@ test("SECURITY: no token in the authorization URL", async () => {
   assert.ok(!/token=/i.test(r.opened[0]));
 });
 
-// PINS SUSPECT BEHAVIOUR: the callback server is started with listen(port) and no host, so it
-// listens on every network interface, not only loopback. Another machine on the network can reach
-// it during sign-in (it still needs the right state to do anything but abort the sign-in).
-test("PINS SUSPECT BEHAVIOUR: the callback server listens on all interfaces (no host given)", async () => {
+// SECURITY (was PINS SUSPECT BEHAVIOUR: the callback server was started with listen(port) and no
+// host, so it listened on every network interface during sign-in). It binds loopback only.
+test("SECURITY: the callback server listens on loopback only", async () => {
   const r = await runCli(sb, ["auth"], { onOpen: browser() });
   assert.equal(r.code, 0, r.output);
-  assert.deepEqual(r.listens, [[String(port)]]);
+  assert.ok(r.listens.length >= 1);
+  for (const l of r.listens) {
+    assert.equal(String(l[0]), String(port));
+    assert.ok(["127.0.0.1", "::1"].includes(l[1]), `bound to ${JSON.stringify(l)}`);
+  }
+  assert.ok(r.listens.some((l) => l[1] === "127.0.0.1"));
+});
+
+test("SECURITY: a redirect URI that is not loopback http is refused before anything listens", async () => {
+  for (const redirectUri of ["http://192.0.2.10:8989", "https://localhost:8989", "http://evil.example.test:8989"]) {
+    const r = await runCli(sb, ["auth"], { env: { ALOMA_REDIRECT_URI: redirectUri }, onOpen: browser() });
+    assert.equal(r.code, 1, redirectUri);
+    assert.match(r.stderr, /redirect URI must be http:\/\/localhost/i);
+    assert.deepEqual(r.listens, []);
+    assert.deepEqual(r.opened, []);
+  }
 });
 
 test("a callback with the wrong state is refused: no token request, no session, exit 1", async () => {
@@ -181,8 +195,9 @@ test("PINS SUSPECT BEHAVIOUR: one stray request to the callback port aborts the 
   assert.equal(sb.readSession(), null);
 });
 
-// PINS SUSPECT BEHAVIOUR: the error text is put into the browser page without HTML escaping.
-test("PINS SUSPECT BEHAVIOUR: an error from the login service is reflected unescaped into the page", async () => {
+// SECURITY (was PINS SUSPECT BEHAVIOUR: the error text was put into the browser page without HTML
+// escaping). It is escaped now.
+test("SECURITY: an error from the login service is HTML-escaped in the page", async () => {
   const r = await runCli(sb, ["auth"], {
     onOpen: async (authUrl) => {
       const state = new URL(authUrl).searchParams.get("state");
@@ -197,7 +212,8 @@ test("PINS SUSPECT BEHAVIOUR: an error from the login service is reflected unesc
   assert.equal(r.code, 1);
   assert.match(r.stderr, /OAuth2 error: <b id=x>denied<\/b>/);
   assert.equal(r.browser[0].status, 500);
-  assert.ok(r.browser[0].body.includes("<pre>OAuth2 error: <b id=x>denied</b></pre>"));
+  assert.ok(r.browser[0].body.includes("<pre>OAuth2 error: &lt;b id=x&gt;denied&lt;/b&gt;</pre>"));
+  assert.ok(!r.browser[0].body.includes("<b id=x>"));
   assert.equal(tokenCalls().length, 0);
   assert.equal(sb.readSession(), null);
 });

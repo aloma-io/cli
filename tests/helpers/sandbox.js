@@ -1,7 +1,9 @@
-// Test sandbox for the auth tests: a temporary HOME and project directory with a fake installed
-// package root (<project>/node_modules/@aloma.io/aloma), which is where the CLI keeps its
-// configuration (.config/config.json) and its session (.cache/session.json). A fake `npm` on PATH
-// stops the CLI from ever finding the real global install. All servers bind to loopback.
+// Test sandbox for the auth tests: a temporary HOME, where the CLI keeps its configuration and its
+// session (<HOME>/.config/aloma/config.json and session.json), and a project directory (the cwd)
+// that also holds a package tree (<project>/node_modules/@aloma.io/aloma) like the one a cloned
+// repository could ship: the CLI must ignore it. A fake `npm` on PATH stops the CLI from ever
+// finding the real global install. All servers bind to loopback; plain-http loopback mocks are
+// allowed through ALOMA_ALLOW_HTTP_LOOPBACK=1 (never any other host).
 import { spawn, execFileSync } from "node:child_process";
 import { realpathSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync } from "node:fs";
 import http from "node:http";
@@ -36,7 +38,8 @@ export function makeSandbox({ config } = {}) {
   writeFileSync(path.join(binDir, "npm"), `#!/bin/sh\necho ${path.join(root, "no-global-root")}\n`);
   chmodSync(path.join(binDir, "npm"), 0o755);
 
-  const configPath = path.join(pkgRoot, ".config", "config.json");
+  const configDir = path.join(home, ".config", "aloma");
+  const configPath = path.join(configDir, "config.json");
   if (config !== undefined) {
     mkdirSync(path.dirname(configPath), { recursive: true });
     writeFileSync(configPath, typeof config === "string" ? config : JSON.stringify(config));
@@ -47,9 +50,13 @@ export function makeSandbox({ config } = {}) {
     project,
     pkgRoot,
     binDir,
+    configDir,
     configPath,
-    cacheDir: path.join(pkgRoot, ".cache"),
-    sessionPath: path.join(pkgRoot, ".cache", "session.json"),
+    cacheDir: configDir,
+    sessionPath: path.join(configDir, "session.json"),
+    // where a cloned repository could plant a config and a session (must be ignored)
+    plantedConfigPath: path.join(pkgRoot, ".config", "config.json"),
+    plantedSessionPath: path.join(pkgRoot, ".cache", "session.json"),
     openLog: path.join(root, "open.log"),
     listenLog: path.join(root, "listen.log"),
     env: {
@@ -59,8 +66,19 @@ export function makeSandbox({ config } = {}) {
       TMPDIR: os.tmpdir(),
       FORCE_COLOR: "0",
       NO_UPDATE_NOTIFIER: "1",
+      ALOMA_ALLOW_HTTP_LOOPBACK: "1",
       ALOMA_TEST_OPEN_LOG: path.join(root, "open.log"),
       ALOMA_TEST_LISTEN_LOG: path.join(root, "listen.log"),
+    },
+    plant({ config: planted, session } = {}) {
+      if (planted !== undefined) {
+        mkdirSync(path.dirname(sb.plantedConfigPath), { recursive: true });
+        writeFileSync(sb.plantedConfigPath, JSON.stringify(planted));
+      }
+      if (session !== undefined) {
+        mkdirSync(path.dirname(sb.plantedSessionPath), { recursive: true });
+        writeFileSync(sb.plantedSessionPath, JSON.stringify(session));
+      }
     },
     writeSession(obj) {
       mkdirSync(sb.cacheDir, { recursive: true });
@@ -151,11 +169,11 @@ export function makeCert(dir) {
   return { keyPath: key, certPath: cert, key: readFileSync(key), cert: readFileSync(cert) };
 }
 
-function run(sb, argv, { env = {}, onOpen, timeoutMs = 30000 } = {}) {
+function run(sb, argv, { env = {}, onOpen, timeoutMs = 30000, cwd } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["--import", PRELOAD, ...argv], {
-      cwd: sb.project,
-      env: { ...sb.env, ...env },
+      cwd: cwd ?? sb.project,
+      env: Object.fromEntries(Object.entries({ ...sb.env, ...env }).filter(([, v]) => v !== undefined)),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -198,8 +216,10 @@ function run(sb, argv, { env = {}, onOpen, timeoutMs = 30000 } = {}) {
 export const runCli = (sb, args, opts) => run(sb, [CLI, ...args], opts);
 
 // Call one exported auth/session function in a sandboxed process; returns its result too.
-export async function runDriver(sb, action, opts) {
-  const r = await run(sb, [DRIVER, JSON.stringify(action)], opts);
+// `driver` runs the same driver from another copy of the package (an installed copy, for the
+// legacy-session migration tests).
+export async function runDriver(sb, action, { driver = DRIVER, ...opts } = {}) {
+  const r = await run(sb, [driver, JSON.stringify(action)], opts);
   const line = r.stdout.split("\n").find((l) => l.startsWith("@@RESULT "));
   r.result = line ? JSON.parse(line.slice(9)) : undefined;
   r.stdout = r.stdout
