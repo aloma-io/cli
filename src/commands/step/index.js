@@ -1,3 +1,9 @@
+import {
+  pullTargetFile,
+  headerText,
+  oneLine,
+  UnsafeNameError,
+} from "../../pull-safety.js";
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import {
@@ -219,8 +225,8 @@ export async function editStep(stepId, workspaceIdentifier) {
 
     // Prepare the file content
     const fileContent = `/**
- * Step: ${step.name}
- * ID: ${step.id}
+ * Step: ${headerText(step.name)}
+ * ID: ${headerText(step.id)}
  * 
  * Edit the condition and content below.
  * The condition should be a valid JavaScript object (trailing commas are allowed).
@@ -397,7 +403,16 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
         });
         const step = stepData.getAutomationStep;
         if (step) {
-          await createStepFile(step, workspaceFolder);
+          try {
+            await createStepFile(step, workspaceFolder);
+          } catch (error) {
+            if (!(error instanceof UnsafeNameError)) throw error;
+            console.log(
+              chalk.yellow(
+                `Skipped step ${oneLine(step.id)}: unsafe name ${JSON.stringify(step.name)}`,
+              ),
+            );
+          }
         }
       }
 
@@ -602,17 +617,13 @@ export async function syncStep(
 
 // Helper function to create step file
 async function createStepFile(step, workspaceFolder) {
-  // If the step name contains slashes, create subfolders accordingly
-  const stepSegments = step.name.split("/");
-  const fileName = `${stepSegments[stepSegments.length - 1]}.js`;
-  const subfolders = stepSegments.slice(0, -1);
-  const targetFolder = path.join(workspaceFolder, ...subfolders);
-  await fs.mkdir(targetFolder, { recursive: true });
-  const filePath = path.join(targetFolder, fileName);
+  // A name with slashes becomes subfolders, always inside workspaceFolder (see pull-safety.js)
+  const filePath = pullTargetFile(step.name, workspaceFolder, "step");
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
 
   const fileContent = `/**
- * Step: ${step.name}
- * ID: ${step.id}
+ * Step: ${headerText(step.name)}
+ * ID: ${headerText(step.id)}
  * 
  * Edit the condition and content below.
  * The condition should be a valid JavaScript object (trailing commas are allowed).
@@ -789,13 +800,13 @@ export async function generateStep(filePath, workspaceIdentifier) {
       }
 
       const descriptionLine = step.description
-        ? ` * ${step.description}\n`
+        ? ` * ${headerText(step.description)}\n`
         : "";
-      const idLine = step.id ? ` * ID: ${step.id}\n` : "";
+      const idLine = step.id ? ` * ID: ${headerText(step.id)}\n` : "";
       const hasMetaInfo = step.id || step.description;
 
       const fileContent = `/**
- * Step: ${step.name || "Generated Step"}
+ * Step: ${headerText(step.name || "Generated Step")}
 ${idLine}${descriptionLine}${hasMetaInfo ? " *\n" : ""} * Edit the condition and content below.
  * The condition should be a valid JavaScript object (trailing commas are allowed).
  * The content should be JavaScript code that will be executed.
