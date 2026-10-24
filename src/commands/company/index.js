@@ -4,6 +4,7 @@ import axios from "axios";
 import { GRAPHQL_HOST } from "../../config.js";
 import { graphQuery } from "../../utils.js";
 import { ME_QUERY } from "../auth/query.js";
+import { refuseRedirect } from "../../net-security.js";
 import {
   saveSelectedWorkspace,
   switchDefaultWorkspace,
@@ -197,8 +198,12 @@ export const switchCompany = async (identifier) => {
         headers: {
           Authorization: `Bearer ${await getSessionData("token")}`,
         },
+        // Never follow a redirect with the session (see net-security.js); a 3xx is an error.
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400,
       },
     );
+    refuseRedirect(response.status, "company switch");
 
     // Get the new token from the response cookies
     const cookies = response.headers["set-cookie"];

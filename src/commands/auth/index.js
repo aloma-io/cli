@@ -19,19 +19,46 @@ import {
   SESSION_URL,
 } from "../../config.js";
 import { exchangeIdTokenForSession } from "./session.js";
+import { assertSecureUrl, isLoopbackHost } from "../../net-security.js";
 import { switchDefaultWorkspace } from "../workspace/index.js";
 
 let server;
+let servers = []; // the callback server listens on 127.0.0.1 and, if available, ::1
 let codeVerifier; // For PKCE
-let sockets = new Set();
 let authTimeout; // Store the timeout ID
 let authCompleted = false; // Flag to prevent duplicate processing
 let stateGeneratedAt; // Track when state was generated
+
+const escapeHtml = (text) =>
+  String(text).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+
+// The sign-in callback must come back to this machine only: http on a loopback host with a port.
+function callbackAddress() {
+  let u;
+  try {
+    u = new URL(REDIRECT_URI);
+  } catch {
+    u = null;
+  }
+  if (!u || u.protocol !== "http:" || !isLoopbackHost(u.hostname) || !u.port) {
+    throw new Error(
+      "The redirect URI must be http://localhost:<port> (a loopback address)",
+    );
+  }
+  return { port: Number(u.port) };
+}
 
 async function getClient() {
   if (!KEYCLOAK_REALM_URL || KEYCLOAK_REALM_URL === "YOUR_KEYCLOAK_REALM_URL") {
     throw new Error("Keycloak Realm URL not configured. Run 'aloma setup'.");
   }
+  assertSecureUrl(KEYCLOAK_REALM_URL, "login service URL");
   if (!CLIENT_ID || CLIENT_ID === "YOUR_CLIENT_ID") {
     throw new Error("Keycloak Client ID not configured. Run 'aloma setup'.");
   }
@@ -76,6 +103,7 @@ async function getClient() {
 async function initiateAuth() {
   return new Promise(async (resolve, reject) => {
     try {
+      const { port: callbackPort } = callbackAddress();
       const client = await getClient();
 
       // Generate PKCE parameters
@@ -93,13 +121,12 @@ async function initiateAuth() {
         nonce: nonce,
       });
 
-      server = http
-        .createServer(async (req, res) => {
-          try {
-            // Check if authentication has already completed
-            if (authCompleted) {
-              res.writeHead(200, { "Content-Type": "text/html" });
-              res.end(`
+      const handleCallback = async (req, res) => {
+        try {
+          // Check if authentication has already completed
+          if (authCompleted) {
+            res.writeHead(200, { "Content-Type": "text/html" });
+            res.end(`
                 <!DOCTYPE html>
                 <html>
                 <head>
@@ -115,17 +142,17 @@ async function initiateAuth() {
                 </body>
                 </html>
               `);
-              return;
-            }
+            return;
+          }
 
-            const params = client.callbackParams(req);
+          const params = client.callbackParams(req);
 
-            // Verify state parameter
-            if (params.state !== state) {
-              // If authentication already completed, this might be a duplicate request
-              if (authCompleted) {
-                res.writeHead(200, { "Content-Type": "text/html" });
-                res.end(`
+          // Verify state parameter
+          if (params.state !== state) {
+            // If authentication already completed, this might be a duplicate request
+            if (authCompleted) {
+              res.writeHead(200, { "Content-Type": "text/html" });
+              res.end(`
                   <!DOCTYPE html>
                   <html>
                   <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
@@ -134,19 +161,19 @@ async function initiateAuth() {
                   </body>
                   </html>
                 `);
-                return;
-              }
+              return;
+            }
 
-              // Check if state has expired (5 minutes)
-              const stateAge = Date.now() - stateGeneratedAt;
-              if (stateAge > 5 * 60 * 1000) {
-                console.log(
-                  chalk.yellow(
-                    "⚠️  State parameter expired, this might be a duplicate or delayed request",
-                  ),
-                );
-                res.writeHead(400, { "Content-Type": "text/html" });
-                res.end(`
+            // Check if state has expired (5 minutes)
+            const stateAge = Date.now() - stateGeneratedAt;
+            if (stateAge > 5 * 60 * 1000) {
+              console.log(
+                chalk.yellow(
+                  "⚠️  State parameter expired, this might be a duplicate or delayed request",
+                ),
+              );
+              res.writeHead(400, { "Content-Type": "text/html" });
+              res.end(`
                   <!DOCTYPE html>
                   <html>
                   <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
@@ -155,46 +182,46 @@ async function initiateAuth() {
                   </body>
                   </html>
                 `);
-                return;
-              }
-
-              throw new Error("Invalid state parameter");
+              return;
             }
 
-            if (params.error) {
-              throw new Error(
-                `OAuth2 error: ${params.error_description || params.error}`,
-              );
-            }
+            throw new Error("Invalid state parameter");
+          }
 
-            const tokenSet = await client.callback(REDIRECT_URI, params, {
-              code_verifier: codeVerifier,
-              state: state,
-              nonce: nonce,
-            });
+          if (params.error) {
+            throw new Error(
+              `OAuth2 error: ${params.error_description || params.error}`,
+            );
+          }
 
-            if (!tokenSet.access_token) {
-              throw new Error(
-                "No access token received from authorization server",
-              );
-            }
+          const tokenSet = await client.callback(REDIRECT_URI, params, {
+            code_verifier: codeVerifier,
+            state: state,
+            nonce: nonce,
+          });
 
-            // The API checks the login service's ID token and issues the session
-            const sessionToken = await exchangeIdTokenForSession({
-              idToken: tokenSet.id_token,
-              url: SESSION_URL,
-            });
+          if (!tokenSet.access_token) {
+            throw new Error(
+              "No access token received from authorization server",
+            );
+          }
 
-            // Mark authentication as completed to prevent duplicate processing
-            authCompleted = true;
+          // The API checks the login service's ID token and issues the session
+          const sessionToken = await exchangeIdTokenForSession({
+            idToken: tokenSet.id_token,
+            url: SESSION_URL,
+          });
 
-            // Store the session data with the encrypted token
-            await updateSessionData("selectedWorkspace", null);
-            await updateSessionData("token", sessionToken);
-            await switchDefaultWorkspace();
+          // Mark authentication as completed to prevent duplicate processing
+          authCompleted = true;
 
-            res.writeHead(200, { "Content-Type": "text/html" });
-            res.end(`
+          // Store the session data with the encrypted token
+          await updateSessionData("selectedWorkspace", null);
+          await updateSessionData("token", sessionToken);
+          await switchDefaultWorkspace();
+
+          res.writeHead(200, { "Content-Type": "text/html" });
+          res.end(`
               <!DOCTYPE html>
               <html>
               <head>
@@ -234,21 +261,18 @@ async function initiateAuth() {
               </html>
             `);
 
-            shutdownServer();
-            console.log(
-              chalk.green("\n🎉 Authentication completed successfully!"),
-            );
-            console.log(chalk.white("You can now use the Aloma CLI:"));
-            console.log(chalk.gray("  ▶ aloma workspace list"));
-            console.log();
-            resolve(true);
-          } catch (err) {
-            console.error(
-              chalk.red("❌ Callback handling failed:"),
-              err.message,
-            );
-            res.writeHead(500, { "Content-Type": "text/html" });
-            res.end(`
+          shutdownServer();
+          console.log(
+            chalk.green("\n🎉 Authentication completed successfully!"),
+          );
+          console.log(chalk.white("You can now use the Aloma CLI:"));
+          console.log(chalk.gray("  ▶ aloma workspace list"));
+          console.log();
+          resolve(true);
+        } catch (err) {
+          console.error(chalk.red("❌ Callback handling failed:"), err.message);
+          res.writeHead(500, { "Content-Type": "text/html" });
+          res.end(`
               <!DOCTYPE html>
               <html>
               <head>
@@ -279,22 +303,44 @@ async function initiateAuth() {
                       <h1>❌ Authentication Failed</h1>
                       <p>The OAuth2 PKCE authentication process failed.</p>
                       <p>Check the CLI console for details.</p>
-                      <pre>${err.message}</pre>
+                      <pre>${escapeHtml(err.message)}</pre>
                       <p>You can close this window and try again.</p>
                   </div>
               </body>
               </html>
             `);
-            shutdownServer();
-            reject(err);
-          }
-        })
-        .listen(new URL(REDIRECT_URI).port);
+          shutdownServer();
+          reject(err);
+        }
+      };
 
-      server.on("connection", (socket) => {
-        sockets.add(socket);
-        socket.on("close", () => sockets.delete(socket));
-      });
+      // Loopback only: never reachable from the network during sign-in.
+      const listenOn = (host) => {
+        const srv = http.createServer(handleCallback);
+        srv.sockets = new Set(); // per server: closing one must not cut the other's answer
+        srv.on("connection", (socket) => {
+          srv.sockets.add(socket);
+          socket.on("close", () => srv.sockets.delete(socket));
+        });
+        srv.listen(callbackPort, host);
+        servers.push(srv);
+        return srv;
+      };
+      server = listenOn("127.0.0.1");
+      // IPv6 loopback too, since "localhost" can resolve to ::1 first; ignored where unavailable.
+      const server6 = listenOn("::1");
+      server6.on("error", () => {});
+      // Open the browser only once the callback can be received.
+      await Promise.all([
+        new Promise((ok, fail) => {
+          server.once("listening", ok);
+          server.once("error", fail);
+        }),
+        new Promise((ok) => {
+          server6.once("listening", ok);
+          server6.once("error", ok);
+        }),
+      ]);
 
       try {
         await open(authUrl);
@@ -331,13 +377,15 @@ function shutdownServer() {
     clearTimeout(authTimeout);
     authTimeout = null;
   }
-  if (server && server.listening) {
-    server.close(() => {
-      for (const socket of sockets) {
+  const open = servers.filter((s) => s.listening);
+  servers = [];
+  for (const s of open) {
+    s.close(() => {
+      for (const socket of s.sockets) {
         socket.destroy();
       }
-      sockets.clear();
-      server = null;
+      s.sockets.clear();
+      if (s === server) server = null;
     });
   }
   // Reset auth completed flag and state tracking for next authentication attempt
