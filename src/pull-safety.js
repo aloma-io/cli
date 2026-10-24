@@ -35,7 +35,12 @@ export function pullTargetFile(name, folder, kind = "step") {
     `${segments[segments.length - 1]}.js`,
   );
   const rel = path.relative(base, file);
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel))
+  if (
+    rel === "" ||
+    rel === ".." ||
+    rel.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(rel)
+  )
     throw unsafe();
   return file;
 }

@@ -317,6 +317,7 @@ test("SECURITY: step pull never writes outside the target folder", sandboxTest(a
     FULL("s-5", "..", "{}", "x();"),
     FULL("s-6", "grp\\..\\escaped4", "{}", "x();"),
     FULL("s-7", "ok/inside", "{}", "fine();"),
+    FULL("s-8", "ok/..dots", "{}", "dots();"),
   ]);
   const r = await sb.run(["step", "pull", "-p", "out"]);
   for (const f of ["escaped.js", "escaped2.js", "out/escaped.js", "abs", "out/abs", "escaped4.js"]) {
@@ -325,6 +326,7 @@ test("SECURITY: step pull never writes outside the target folder", sandboxTest(a
   assert.deepEqual(sb.list(), ["out"], "nothing next to the target folder");
   assert.deepEqual(sb.list("out"), ["ok"]);
   assert.match(sb.read("out/ok/inside.js"), /fine\(\);/);
+  assert.match(sb.read("out/ok/..dots.js"), /dots\(\);/, "a name merely starting with .. is fine");
   assert.equal((r.out.match(/Skipped step s-\d: unsafe name/g) || []).length, 6, r.out);
 }));
 
