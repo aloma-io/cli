@@ -3,7 +3,10 @@ import { graphQuery } from "../../utils.js";
 import { GET_SECRET_QUERY, SAVE_SECRET_MUTATION } from "./query.js";
 import { resolveWorkspaceId } from "../workspace/index.js";
 
-export async function listSecrets(workspaceId) {
+export const HIDDEN_VALUE = "******** (hidden, use --reveal to show)";
+
+// Values are masked unless the user explicitly asks to reveal them (scrollback, CI logs).
+export async function listSecrets(workspaceId, { reveal = false } = {}) {
   const targetWorkspaceId = await resolveWorkspaceId(workspaceId);
   if (!targetWorkspaceId) return;
 
@@ -37,7 +40,11 @@ export async function listSecrets(workspaceId) {
         : chalk.yellow("🔓");
       const valueDisplay = secret.encrypted
         ? "[ENCRYPTED]"
-        : secret.value || "[NO VALUE]";
+        : !secret.value
+          ? "[NO VALUE]"
+          : reveal
+            ? secret.value
+            : HIDDEN_VALUE;
 
       console.log(chalk.bold(`${index + 1}. ${key}`));
       console.log(`   Description: ${secret.description || "No description"}`);
