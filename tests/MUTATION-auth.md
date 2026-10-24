@@ -37,3 +37,6 @@ A mutation is **killed** when at least one test fails.
 
 Mutations 12 and 15 are the fixes for two pinned suspect behaviours: they are expected to be
 killed, and the pinned tests must be updated on purpose when those fixes are made.
+
+Update (security fixes): mutations 12 and 15 above are now the fixes for those pinned behaviours; their pinned
+tests were flipped to the fixed behaviour (callback on loopback only; session file 0600). See MUTATION-security.md.
