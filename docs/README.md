@@ -112,11 +112,11 @@ Initiates the browser-based OAuth 2.0 Authorization Code flow with Keycloak.
 2. Displays the authentication URL in the console and attempts to open your default browser
 3. After successful login, Keycloak redirects back to the local server
 4. The server receives the authorization code, exchanges it for tokens
-5. The access token is stored securely using the system keychain with fallback to `~/.aloma/token`
+5. The ID token is exchanged with the Aloma API for a session, stored in `~/.config/aloma/session.json` (owner-only; see the README for the folder on other systems)
 6. A success message is printed, and the local server shuts down
 
 #### `aloma logout`
-Removes the stored Aloma token from both the system keychain and the fallback file.
+Removes the stored session file.
 
 ### Workspace Management
 
@@ -364,10 +364,11 @@ Options:
 ### Secret Management
 
 #### `aloma secret list`
-Lists all secrets in the current workspace.
+Lists all secrets in the current workspace. Values are hidden unless `--reveal` is given.
 
 Options:
 - `-w, --workspace <id>` - Specify workspace ID
+- `--reveal` - Show the values of non-encrypted secrets
 
 #### `aloma secret add <name> <value>`
 Adds a new secret.
@@ -505,7 +506,7 @@ workspaces:
 ### Setup
 
 #### `aloma setup`
-Sets up Aloma CLI configuration.
+Writes an editable copy of the bundled configuration to `~/.config/aloma/config.json` (optional).
 
 Options:
 - `-f, --force` - Force overwrite existing configuration
@@ -571,7 +572,6 @@ The CLI uses the following configuration in `src/config.js`:
 - **cli-table3**: Formatted table display
 - **jose**: JWT handling
 - **js-yaml**: YAML file parsing
-- **keytar**: Secure credential storage
 - **open**: Browser opening
 - **openid-client**: OAuth 2.0 client
 - **ora**: Terminal spinners
@@ -588,7 +588,7 @@ The CLI uses the following configuration in `src/config.js`:
 - **Package Name**: `aloma`.
 - **CLI Implementation**: Using `commander` with modular command structure.
 - **Authentication Strategy**: OAuth 2.0 Authorization Code flow with PKCE via Keycloak.
-- **Token Storage**: Using `keytar` with fallback to file storage.
+- **Session Storage**: An owner-only JSON file in the per-user configuration folder (the OS keychain via `keytar` was dropped: archived upstream, native install script).
 - **Modularity**: Commands organized by feature in separate modules.
 - **Configuration**: Centralized configuration in `config.js`.
 - **Examples**: Comprehensive examples for all major features.
