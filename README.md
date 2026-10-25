@@ -12,8 +12,18 @@ npm install -g @aloma.io/aloma
 
 The Aloma CLI uses secure OAuth2 with PKCE (Proof Key for Code Exchange) - no client secrets needed!
 
+Nothing runs at install time and no setup is needed: the CLI uses the configuration bundled
+for the environment. Your own configuration (optional) and your session live in one folder that
+only you can read:
+
+- `$XDG_CONFIG_HOME/aloma/` if `XDG_CONFIG_HOME` is set, `%APPDATA%\aloma\` on Windows,
+  otherwise `~/.config/aloma/` (`config.json`, `session.json`; folder `0700`, files `0600`).
+
+The CLI never reads configuration or a session from the current directory. A session kept by an
+older version inside the installed package is moved there on first use.
+
 #### Manual Setup
-If you need to reconfigure or troubleshoot:
+To write an editable copy of the bundled configuration into that folder:
 ```bash
 aloma setup
 ```
@@ -22,7 +32,10 @@ aloma setup
 - 🔒 **OAuth2 + PKCE**: Industry-standard secure authentication
 - 🛡️ **No Client Secrets**: No credentials embedded in the package
 - 🔍 **JWKS Verification**: Tokens verified using public keys
-- 🌐 **Browser-based Auth**: Secure browser-based login flow
+- 🌐 **Browser-based Auth**: Secure browser-based login flow; the local callback listens on loopback only
+- 🔐 **https only**: API and login URLs must be https; redirects are never followed with your session
+  (for a local development API on loopback only, set `ALOMA_ALLOW_HTTP_LOOPBACK=1`)
+- 🙈 **Secrets masked**: `aloma secret list` hides values unless you pass `--reveal`
 
 #### Environment Selection
 By default, the CLI uses the production environment. For development:

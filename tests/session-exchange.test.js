@@ -8,6 +8,9 @@ import {
   sessionUrlFor,
 } from "../src/commands/auth/session.js";
 
+// The mock API is plain http on loopback: allowed only with this opt-in.
+process.env.ALOMA_ALLOW_HTTP_LOOPBACK = "1";
+
 let server;
 let base;
 const seen = [];

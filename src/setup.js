@@ -2,12 +2,13 @@ import fs from "fs";
 import path from "path";
 import chalk from "chalk";
 import ora from "ora";
-import { getPackageRoot } from "./package-utils.js";
+import { getConfigDir, PRIVATE_DIR_MODE, PRIVATE_FILE_MODE } from "./paths.js";
 
 /**
- * Setup CLI configuration
- * This function should be called during npm install via postinstall script
- * or when user runs "aloma setup"
+ * Setup CLI configuration: writes the bundled template for the environment to the user's own
+ * configuration folder (see paths.js), where it can be edited. Optional: without it the CLI uses
+ * the bundled template directly. Runs only when the user runs "aloma setup" (nothing runs at
+ * install time).
  *
  * @param {Object} options - Setup options
  * @param {boolean} options.force - Force overwrite existing config
@@ -21,14 +22,12 @@ export async function setupCLIConfig(options = {}) {
   const spinner = ora("Creating configuration directory\n").start();
 
   try {
-    // Get package root and create config directory
-    const packageRoot = await getPackageRoot();
-    console.log("packageRoot: ", packageRoot);
-    const configDir = path.join(packageRoot, ".config");
+    // The user's own configuration folder (owner-only)
+    const configDir = getConfigDir();
     const configFile = path.join(configDir, "config.json");
 
     if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
+      fs.mkdirSync(configDir, { recursive: true, mode: PRIVATE_DIR_MODE });
       spinner.text = "Configuration directory created";
     } else {
       spinner.text = "Configuration directory exists";
@@ -87,7 +86,9 @@ async function setupConfigFiles(force, configFile) {
     }
 
     // Write the configuration to config.json
-    fs.writeFileSync(configFile, JSON.stringify(configData, null, 2));
+    fs.writeFileSync(configFile, JSON.stringify(configData, null, 2), {
+      mode: PRIVATE_FILE_MODE,
+    });
   } catch (error) {
     console.warn(chalk.red(`\nError during setup: ${error.message}`));
     throw error;

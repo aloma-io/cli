@@ -5,23 +5,52 @@ import { GRAPHQL_URL } from "./config.js";
 import chalk from "chalk";
 import { ME_QUERY } from "./commands/auth/query.js";
 import * as jose from "jose";
-import { getPackageRoot } from "./package-utils.js";
+import {
+  getConfigDir,
+  ensurePrivateDir,
+  tighten,
+  OWN_PACKAGE_ROOT,
+  PRIVATE_FILE_MODE,
+} from "./paths.js";
+import { assertSecureUrl, refuseRedirect } from "./net-security.js";
 
-// Get the storage path
-export const getStoragePath = async (folder) => {
-  const packageRoot = await getPackageRoot();
-  const cachePath = path.join(packageRoot, ".cache");
+const SESSION_FILE = "session.json";
 
-  // Create .cache directory if it doesn't exist
+// Versions up to 0.1.0 kept the session in <package folder>/.cache/session.json, world-readable.
+// If the running package still has one, move it to the per-user folder (owner-only) and remove the
+// old copy. Only the running package's own folder is looked at, never the current directory, so a
+// session planted in a cloned repository is never imported. Best effort; never prints contents.
+async function migrateLegacySession(dir) {
+  const legacyPath = path.join(OWN_PACKAGE_ROOT, ".cache", SESSION_FILE);
+  let legacy;
   try {
-    await fs.mkdir(cachePath, { recursive: true });
-  } catch (e) {
-    if (e.code !== "EEXIST") {
-      throw e;
-    }
+    legacy = await fs.readFile(legacyPath, "utf-8");
+    JSON.parse(legacy);
+  } catch {
+    return; // none, unreadable or corrupt: leave it alone
   }
+  try {
+    await fs.writeFile(path.join(dir, SESSION_FILE), legacy, {
+      encoding: "utf-8",
+      mode: PRIVATE_FILE_MODE,
+      flag: "wx", // an existing session in the per-user folder wins
+    });
+  } catch (e) {
+    if (e.code !== "EEXIST") return;
+  }
+  try {
+    await fs.unlink(legacyPath);
+    await fs.rmdir(path.dirname(legacyPath));
+  } catch {
+    // folder not empty or not ours: fine
+  }
+}
 
-  return cachePath;
+// Get the storage path: the per-user configuration folder (see paths.js), owner-only.
+export const getStoragePath = async (folder) => {
+  const dir = await ensurePrivateDir(getConfigDir());
+  await migrateLegacySession(dir);
+  return dir;
 };
 
 // Execute a GraphQL query
@@ -42,14 +71,17 @@ export const graphQuery = async (query, variables = {}) => {
     headers.Authorization = `Bearer ${tokenData}`;
     headers.Cookie = `Authorization=Bearer%20${encodeURIComponent(tokenData)}`;
 
+    assertSecureUrl(GRAPHQL_URL, "API URL");
     const response = await fetch(GRAPHQL_URL, {
       method: "POST",
+      redirect: "manual",
       headers,
       body: JSON.stringify({
         query,
         variables,
       }),
     });
+    refuseRedirect(response.status, "API");
 
     const data = await response.json();
 
@@ -72,7 +104,7 @@ export const graphQuery = async (query, variables = {}) => {
 export const updateSessionData = async (prop, value) => {
   try {
     const cachePath = await getStoragePath("session");
-    const sessionPath = path.join(cachePath, "session.json");
+    const sessionPath = path.join(cachePath, SESSION_FILE);
     let sessionData = {};
 
     // Try to read existing session data
@@ -89,12 +121,12 @@ export const updateSessionData = async (prop, value) => {
     // Update the specified property
     sessionData[prop] = value;
 
-    // Write back to file
-    await fs.writeFile(
-      sessionPath,
-      JSON.stringify(sessionData, null, 2),
-      "utf-8",
-    );
+    // Write back to file, readable by its owner only (also when the file already existed)
+    await fs.writeFile(sessionPath, JSON.stringify(sessionData, null, 2), {
+      encoding: "utf-8",
+      mode: PRIVATE_FILE_MODE,
+    });
+    await tighten(sessionPath, PRIVATE_FILE_MODE);
     return true;
   } catch (error) {
     console.error(chalk.red("Failed to update session data:"), error.message);
@@ -106,7 +138,8 @@ export const updateSessionData = async (prop, value) => {
 export const getSessionData = async (prop = null) => {
   try {
     const cachePath = await getStoragePath("session");
-    const sessionPath = path.join(cachePath, "session.json");
+    const sessionPath = path.join(cachePath, SESSION_FILE);
+    await tighten(sessionPath, PRIVATE_FILE_MODE);
     const sessionData = await fs.readFile(sessionPath, "utf-8");
     const parsedData = JSON.parse(sessionData);
 

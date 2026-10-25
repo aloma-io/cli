@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { getPackageRoot } from "./package-utils.js";
+import { getConfigDir } from "./paths.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -11,38 +11,46 @@ const __dirname = dirname(__filename);
 const ENVIRONMENT =
   process.env.ALOMA_ENV || process.env.NODE_ENV || "production";
 
-// Default configuration templates path (for fallback)
+// Configuration templates bundled with the package (the default configuration)
 const TEMPLATE_DIR = join(__dirname, "..", "config");
 
-// Load configuration from package directory or fallback to templates
-async function loadConfig() {
+// The user's own configuration (<config dir>/config.json, see paths.js) if there is one, otherwise
+// the bundled template for the environment. Never read from the current directory or from the
+// installed package folder.
+function loadConfig() {
+  let corrupt = false;
   try {
-    // Try to load from package directory first
-    const packageRoot = await getPackageRoot();
-    const packageConfigPath = join(packageRoot, ".config", "config.json");
-    const configData = readFileSync(packageConfigPath, "utf8");
-    return JSON.parse(configData);
-  } catch (error) {
-    // Fallback to template configuration if available
+    const configData = readFileSync(
+      join(getConfigDir(), "config.json"),
+      "utf8",
+    );
     try {
-      const templatePath = join(TEMPLATE_DIR, `${ENVIRONMENT}.json`);
-      const templateData = readFileSync(templatePath, "utf8");
+      return JSON.parse(configData);
+    } catch {
+      corrupt = true;
+    }
+  } catch {
+    // no configuration of the user's own: the bundled template is the default
+  }
+  try {
+    const templatePath = join(TEMPLATE_DIR, `${ENVIRONMENT}.json`);
+    const templateData = readFileSync(templatePath, "utf8");
+    if (corrupt) {
       console.warn(
         `Using template configuration for ${ENVIRONMENT} environment.`,
       );
       console.warn('Run "aloma setup" to configure the CLI properly.');
-      return JSON.parse(templateData);
-    } catch (templateError) {
-      console.warn(
-        'No configuration found. Run "aloma setup" to configure the CLI.',
-      );
-      return {};
     }
+    return JSON.parse(templateData);
+  } catch (templateError) {
+    console.warn(
+      'No configuration found. Run "aloma setup" to configure the CLI.',
+    );
+    return {};
   }
 }
 
-// Load configuration using top-level await
-const config = await loadConfig();
+const config = loadConfig();
 
 // Export all configuration with environment variable overrides
 export const ENVIRONMENT_NAME = ENVIRONMENT;

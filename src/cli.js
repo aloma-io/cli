@@ -628,10 +628,15 @@ program
   .description("Manage secrets")
   .addCommand(
     new Command("list")
-      .description("List all secrets")
+      .description(
+        "List all secrets (values are hidden unless --reveal is given)",
+      )
       .option("-w, --workspace <id>", "Workspace ID")
+      .option("--reveal", "Show the values of non-encrypted secrets")
       .action(async (options) => {
-        await listSecrets(options.workspace);
+        await listSecrets(options.workspace, {
+          reveal: options.reveal === true,
+        });
       }),
   )
   .addCommand(

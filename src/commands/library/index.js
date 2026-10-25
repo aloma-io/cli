@@ -1,3 +1,9 @@
+import {
+  pullTargetFile,
+  headerText,
+  oneLine,
+  UnsafeNameError,
+} from "../../pull-safety.js";
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import {
@@ -288,7 +294,16 @@ export async function pullLibrary(workspaceIdentifier, libraryId, targetPath) {
         });
         const library = libraryData.getAutomationLib;
         if (library) {
-          await createLibraryFile(library, workspaceFolder);
+          try {
+            await createLibraryFile(library, workspaceFolder);
+          } catch (error) {
+            if (!(error instanceof UnsafeNameError)) throw error;
+            console.log(
+              chalk.yellow(
+                `Skipped library ${oneLine(library.id)}: unsafe name ${JSON.stringify(library.name)}`,
+              ),
+            );
+          }
         }
       }
 
@@ -497,17 +512,13 @@ export async function syncLibrary(
 
 // Helper function to create library file
 async function createLibraryFile(library, workspaceFolder) {
-  // If the library name contains slashes, create subfolders accordingly
-  const librarySegments = library.name.split("/");
-  const fileName = `${librarySegments[librarySegments.length - 1]}.js`;
-  const subfolders = librarySegments.slice(0, -1);
-  const targetFolder = path.join(workspaceFolder, ...subfolders);
-  await fs.mkdir(targetFolder, { recursive: true });
-  const filePath = path.join(targetFolder, fileName);
+  // A name with slashes becomes subfolders, always inside workspaceFolder (see pull-safety.js)
+  const filePath = pullTargetFile(library.name, workspaceFolder, "library");
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
 
   const fileContent = `/**
- * Library: ${library.name}
- * ID: ${library.id}
+ * Library: ${headerText(library.name)}
+ * ID: ${headerText(library.id)}
  * 
  * Edit the types and content below.
  * The types should be a function that returns type definitions.
