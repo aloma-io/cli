@@ -15,7 +15,7 @@ import {
 } from "./query.js";
 import fs from "fs/promises";
 import path from "path";
-import { resolveWorkspaceId } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../../context.js";
 import { CliError, UsageError, failure } from "../../runtime.js";
 import {
   uniqueByName,

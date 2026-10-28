@@ -316,6 +316,6 @@ test("connector oauth: no URL returned; invalid URL; API error — all exit 1", 
 test("connector commands: -w <name> is resolved first", sandboxTest(async (sb) => {
   sb.api.on("LIST_ENVIRONMENTS_QUERY", { listAutomationEnvironmentWithStats: [{ id: "ws-4", name: "Four" }] });
   sb.api.on("GET_CONNECTOR_LOGS_QUERY", { getAutomationConnectorLogs: "x" });
-  await sb.run(["connector", "logs", "c-1", "-w", "four"]);
+  await sb.run(["connector", "logs", "c-1", "-w", "Four"]); // PLAT-116: exact name
   assert.deepEqual(ops(sb), [["LIST_ENVIRONMENTS_QUERY", {}], ["GET_CONNECTOR_LOGS_QUERY", { environmentId: "ws-4", connectorId: "c-1" }]]);
 }));

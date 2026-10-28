@@ -25,7 +25,7 @@ test("deploy: a file without workspaces only prints the banners", sandboxTest(as
 test("deploy: existing workspace (matched by name) gets webhooks and secrets; an entry without a value fails the run", sandboxTest(async (sb) => {
   sb.write("d.yaml", [
     "workspaces:",
-    "  - name: dev space",
+    "  - name: Dev Space", // PLAT-116: exact name (was "dev space", matched case-insensitively)
     "    webhooks:",
     "      - name: orders",
     "    secrets:",
@@ -46,7 +46,7 @@ test("deploy: existing workspace (matched by name) gets webhooks and secrets; an
   const r = await sb.run(["deploy", "d.yaml"]);
   // PLAT-81: the NOVALUE entry is a failed item: the others are still deployed, the run exits 1.
   assert.equal(r.code, 1);
-  assert.match(r.stdout, /^🚀 Starting deployment\.\.\.\n\n\nProcessing workspace: dev space\n/);
+  assert.match(r.stdout, /^🚀 Starting deployment\.\.\.\n\n\nProcessing workspace: Dev Space\n/);
   assert.match(r.stdout, /Deploying webhooks\.\.\.\n {2}- orders\n/);
   assert.match(r.stdout, /Deploying secrets\.\.\.\n {2}- API_URL\n/);
   assert.match(r.stderr, /^Secret entry must have 'name' and 'value'\.\n/);
@@ -59,6 +59,29 @@ test("deploy: existing workspace (matched by name) gets webhooks and secrets; an
   assert.equal(saves[0].variables.environmentId, "ws-1");
   assert.deepEqual(saves[0].variables.values.API_URL, { encrypted: false, value: "https://example.invalid", description: "base", options: {}, hasValue: true });
   assert.ok(!sb.api.ops().includes("CREATE_WORKSPACE_MUTATION"));
+}));
+
+test("deploy: a workspace name that differs from an existing one only in case stops the deployment (no duplicate)", sandboxTest(async (sb) => {
+  sb.write("d.yaml", "workspaces:\n  - name: dev space\n    webhooks:\n      - name: hook\n");
+  sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev Space"]));
+  sb.api.on("CREATE_WORKSPACE_MUTATION", { createAutomationEnvironment: { id: "ws-dup" } });
+  sb.api.on("CREATE_WEBHOOK_MUTATION", { createAutomationWebhook: { id: "wh-1" } });
+  const r = await sb.run(["deploy", "d.yaml"]);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.stderr,
+    'Deployment failed: No workspace named "dev space"; not creating one that differs from an existing name only in case. Names are case-sensitive: did you mean "Dev Space" (id: ws-1)?\n',
+  );
+  assert.deepEqual(sb.api.ops(), ["LIST_ENVIRONMENTS_QUERY"]);
+}));
+
+test("deploy: two workspaces with the YAML name stop the deployment (no guess)", sandboxTest(async (sb) => {
+  sb.write("d.yaml", "workspaces:\n  - name: Dev\n    webhooks:\n      - name: hook\n");
+  sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"], ["ws-2", "Dev"]));
+  const r = await sb.run(["deploy", "d.yaml"]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, 'Deployment failed: The workspace name "Dev" is ambiguous among your workspaces (ids: ws-1, ws-2). Use the id.\n');
+  assert.deepEqual(sb.api.ops(), ["LIST_ENVIRONMENTS_QUERY"]);
 }));
 
 test("deploy: missing workspace is created (tags joined) and becomes the target", sandboxTest(async (sb) => {
@@ -159,8 +182,8 @@ test("deploy: connectors by id, by name, with neither, and unknown name", sandbo
     { id: "m-2", environmentId: "ws-1", name: "Chat" },
   ]);
   assert.match(r.stderr, /^No connectorId or connectorName provided for connector entry\.\n/m);
-  assert.match(r.stdout, /Connector with name 'Ghost' not found in available connectors\./);
-  assert.match(r.stderr, /^Connector 'Ghost' was not deployed: no available connector has that name\.\n/m);
+  // PLAT-116: connector names go through the one resolver (was a stdout notice plus its own wording)
+  assert.match(r.stderr, /^No connector with the id or name "Ghost" among the available connectors\.\n/m);
   assert.match(r.stderr, /Deployment failed: 2 item\(s\) could not be deployed\.\n$/);
 }));
 
@@ -247,7 +270,8 @@ test("deploy company: an unknown company stops the deployment before anything is
   sb.api.on("LIST_WEBHOOKS_QUERY", { listAutomationWebhooks: [] });
   const r = await sb.run(["deploy", "d.yaml"]);
   // PLAT-81: was "Company not found", then the resources went into whatever company the session was in.
-  assert.equal(r.stderr, "Deployment failed: Company not found\n");
+  // PLAT-116: one company resolver, one wording.
+  assert.equal(r.stderr, 'Deployment failed: No company with the id or name "Nope" among your companies.\n');
   assert.ok(!sb.api.ops().includes("CREATE_WEBHOOK_MUTATION"));
   assert.ok(!sb.api.ops().includes("LIST_ENVIRONMENTS_QUERY"));
   assert.equal(r.code, 1);

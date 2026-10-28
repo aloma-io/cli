@@ -4,8 +4,9 @@ import {
   REMOVE_WEBHOOK_MUTATION,
 } from "./query.js";
 import chalk from "chalk";
-import { graphQuery, urlForRegion } from "../../utils.js";
-import { resolveWorkspaceId } from "../workspace/index.js";
+import { graphQuery } from "../../utils.js";
+import { urlForRegion } from "../../context.js";
+import { resolveWorkspaceId } from "../../context.js";
 import { CliError, UsageError, failure } from "../../runtime.js";
 
 export async function listWebhooks(workspaceIdentifier) {
@@ -52,7 +53,7 @@ export async function addWebhook(name, workspaceIdentifier) {
 
     const webhook = response.createAutomationWebhook;
     console.log(chalk.green(`\n✓ Webhook "${name}" created successfully!`));
-    await showWebhook(webhook.id, workspaceId);
+    await showWebhook(webhook.id, { id: workspaceId });
   } catch (error) {
     throw failure("Error creating webhook:", error);
   }

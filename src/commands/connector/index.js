@@ -12,7 +12,7 @@ import {
 } from "./query.js";
 import { doEncrypt } from "../../utils.js";
 import chalk from "chalk";
-import { resolveWorkspaceId } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../../context.js";
 import { CliError, UsageError, failure } from "../../runtime.js";
 import fs from "fs/promises";
 import open from "open";
@@ -166,7 +166,7 @@ export async function addConnector(
           await new Promise((resolve) => setTimeout(resolve, 10000));
           await updateConnector(
             addedConnector.id,
-            workspaceId,
+            { id: workspaceId },
             null,
             null,
             tags,
@@ -427,50 +427,5 @@ export async function startConnectorOAuth(
     }
   } catch (error) {
     throw failure("Error starting OAuth process:", error);
-  }
-}
-
-export async function getConnectorByName(connectorName, workspaceIdentifier) {
-  try {
-    const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-
-    if (!connectorName) {
-      console.log(chalk.yellow("⚠ Connector name is required"));
-      return null;
-    }
-
-    const data = await graphQuery(LIST_AVAILABLE_CONNECTOR_QUERY, {
-      id: workspaceId,
-      mine: false,
-      name: connectorName,
-    });
-
-    if (
-      !data.listAutomationAvailableConnectors ||
-      data.listAutomationAvailableConnectors.length === 0
-    ) {
-      return null;
-    }
-
-    // Try to find exact match
-    const found = data.listAutomationAvailableConnectors.find(
-      (c) => c.name === connectorName,
-    );
-    if (found) {
-      return {
-        id: found.id,
-        name: found.name,
-        namespace: found.namespace,
-      };
-    } else {
-      console.log(
-        chalk.yellow(
-          `Connector with name '${connectorName}' not found in available connectors.`,
-        ),
-      );
-      return null;
-    }
-  } catch (error) {
-    throw failure("Error getting connector by name:", error);
   }
 }

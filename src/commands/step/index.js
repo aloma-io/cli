@@ -19,7 +19,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import open from "open";
-import { resolveWorkspaceId } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../../context.js";
 import { CliError, UsageError, failure } from "../../runtime.js";
 import {
   uniqueByName,

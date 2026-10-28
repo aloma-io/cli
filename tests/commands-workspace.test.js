@@ -178,24 +178,27 @@ test("no workspace selected: command stops with a hint and sends no request", sa
   assert.deepEqual(sb.api.calls, []);
 }));
 
-test("-w <name>: resolves the name case-insensitively through the list query", sandboxTest(async (sb) => {
+test("-w <name>: resolves the exact name through the list query", sandboxTest(async (sb) => {
   sb.api.on("LIST_ENVIRONMENTS_QUERY", ENVS);
   sb.api.on("GET_WORKSPACE_QUERY", { getAutomationEnvironment: { id: "ws-2", name: "Other" } });
-  const r = await sb.run(["workspace", "show", "-w", "oTHer"]);
+  // PLAT-116: names match exactly (was case-insensitive; see tests/context.test.js for the near-match hint)
+  const r = await sb.run(["workspace", "show", "-w", "Other"]);
   assert.equal(r.code, 0);
   assert.deepEqual(ops(sb), [["LIST_ENVIRONMENTS_QUERY", {}], ["GET_WORKSPACE_QUERY", { id: "ws-2" }]]);
 }));
 
-test("-w <unknown>: the raw value is used as the id when nothing matches", sandboxTest(async (sb) => {
+test("-w <unknown>: refused, the raw value is never used as the id", sandboxTest(async (sb) => {
   sb.api.on("LIST_ENVIRONMENTS_QUERY", ENVS);
   sb.api.on("GET_WORKSPACE_QUERY", { getAutomationEnvironment: null });
-  await sb.run(["workspace", "show", "-w", "nope"]);
-  assert.deepEqual(ops(sb)[1], ["GET_WORKSPACE_QUERY", { id: "nope" }]);
+  const r = await sb.run(["workspace", "show", "-w", "nope"]);
+  // PLAT-116: was GET_WORKSPACE_QUERY { id: "nope" }
+  assert.equal(r.code, 1);
+  assert.deepEqual(sb.api.ops(), ["LIST_ENVIRONMENTS_QUERY"]);
 }));
 
 test("workspace switch <name>: saves the id to the session file", sandboxTest(async (sb) => {
   sb.api.on("LIST_WORKSPACES_QUERY", ENVS);
-  const r = await sb.run(["workspace", "switch", "other"]);
+  const r = await sb.run(["workspace", "switch", "Other"]); // PLAT-116: exact name
   assert.equal(r.code, 0);
   assert.equal(r.stdout, "Switched to workspace [Other]\n");
   assert.equal(sb.readSession().selectedWorkspace, "ws-2");
@@ -213,7 +216,7 @@ test("workspace switch: unknown name and empty account leave the selection alone
   sb.api.on("LIST_WORKSPACES_QUERY", ENVS);
   let r = await sb.run(["workspace", "switch", "zzz"]);
   // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
-  assert.equal(r.stderr, "Workspace 'zzz' not found.\n");
+  assert.equal(r.stderr, 'No workspace with the id or name "zzz" among your workspaces.\n'); // PLAT-116 wording
   assert.equal(r.code, 1);
   assert.equal(sb.readSession().selectedWorkspace, "ws-sel");
   sb.api.on("LIST_WORKSPACES_QUERY", { listAutomationEnvironmentWithStats: [] });

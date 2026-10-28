@@ -76,6 +76,7 @@ import {
 import { setupCLIConfig } from "./setup.js";
 import { getPackageVersion } from "./package-utils.js";
 import { failure, run, UsageError } from "./runtime.js";
+import { workspaceRef } from "./context.js";
 
 const program = new Command();
 
@@ -892,6 +893,30 @@ program
       throw failure("Setup failed:", error);
     }
   });
+
+// PLAT-116: wherever a command takes a workspace (`-w` or a `[workspace]` argument), `--workspace-id <id>`
+// names it by id with no name lookup. Giving both is a usage error.
+function addWorkspaceIdOption(command) {
+  command.commands.forEach(addWorkspaceIdOption);
+  const byOption = command.options.some((o) => o.long === "--workspace");
+  const argIndex = command.registeredArguments.findIndex(
+    (a) => a.name() === "workspace",
+  );
+  if (!byOption && argIndex < 0) return;
+  command.option("--workspace-id <id>", "Workspace ID (no name lookup)");
+  command.hook("preAction", (cmd) => {
+    const { workspace, workspaceId } = cmd.opts();
+    if (byOption) {
+      cmd.setOptionValue("workspace", workspaceRef(workspace, workspaceId));
+    } else {
+      cmd.processedArgs[argIndex] = workspaceRef(
+        cmd.processedArgs[argIndex],
+        workspaceId,
+      );
+    }
+  });
+}
+addWorkspaceIdOption(program);
 
 await run(program, process.argv);
 

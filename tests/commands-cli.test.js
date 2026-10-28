@@ -77,11 +77,12 @@ test("not signed in: commands report the missing token instead of sending a requ
   assert.deepEqual(sb.api.calls, []);
 }));
 
-test("not signed in with -w: a warning is printed first, then the command fails the same way", sandboxTest({ session: null }, async (sb) => {
+test("not signed in with -w: the command fails once, on stderr", sandboxTest({ session: null }, async (sb) => {
   const r = await sb.run(["secret", "list", "-w", "dev"]);
   assert.equal(r.code, 1); // PLAT-81: was 0
-  assert.match(r.stdout, /^⚠ Not authenticated: No token found\. Run `aloma auth` to login\.\n/);
-  assert.match(r.stderr, /Error fetching secrets: Not authenticated/);
+  // PLAT-116: was a stdout warning, then the name sent on as an id; now one error from the workspace lookup.
+  assert.equal(r.stdout, "");
+  assert.equal(r.stderr, "Error: Not authenticated: No token found. Run `aloma auth` to login.\n");
   assert.deepEqual(sb.api.calls, []);
 }));
 

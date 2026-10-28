@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import { GET_SECRET_QUERY, SAVE_SECRET_MUTATION } from "./query.js";
-import { resolveWorkspaceId } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../../context.js";
 import { CliError, failure } from "../../runtime.js";
 
 export const HIDDEN_VALUE = "******** (hidden, use --reveal to show)";

@@ -77,7 +77,8 @@ test("company switch <name>: posts to the realm endpoint, stores the new token a
   assert.equal(s.selectedWorkspace, "ws-first");
   assert.match(r.stdout, /Switched to workspace \[First\]\n/);
   assert.match(r.stdout, /Successfully switched to company \[Beta Co\]\n$/);
-  assert.deepEqual(sb.api.ops(), ["ME_QUERY", "LIST_WORKSPACES_QUERY", "LIST_WORKSPACES_QUERY"]);
+  // PLAT-116: the default workspace is saved from the one list (was listed twice).
+  assert.deepEqual(sb.api.ops(), ["ME_QUERY", "LIST_WORKSPACES_QUERY"]);
 }));
 
 test("company switch <id>: matches by id; exact (case-sensitive) name", sandboxTest(async (sb) => {
@@ -86,7 +87,7 @@ test("company switch <id>: matches by id; exact (case-sensitive) name", sandboxT
   assert.equal(sb.axiosCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
   r = await sb.run(["company", "switch", "beta co"]);
   assert.equal(r.code, 1);
-  assert.equal(r.stderr, "Company not found\n");
+  assert.equal(r.stderr, 'No company with the id or name "beta co" among your companies. Names are case-sensitive: did you mean "Beta Co" (id: r-2)?\n');
   assert.equal(sb.axiosCalls().length, 1);
 }));
 

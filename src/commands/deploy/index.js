@@ -2,18 +2,16 @@ import fs from "fs";
 import yaml from "js-yaml";
 import chalk from "chalk";
 import { switchCompany } from "../company/index.js";
-import {
-  createWorkspace,
-  getWorkspaceId,
-  getSelectedWorkspace,
-} from "../workspace/index.js";
+import { createWorkspace } from "../workspace/index.js";
+import { findWorkspaceByName, resolveConnector } from "../../context.js";
 import { addStep, syncStep } from "../step/index.js";
 import { addLibrary, syncLibrary } from "../library/index.js";
 import { createTask } from "../task/index.js";
 import { addWebhook } from "../webhook/index.js";
-import { addConnector, getConnectorByName } from "../connector/index.js";
+import { addConnector } from "../connector/index.js";
 import { addSecret } from "../secret/index.js";
 import { CliError, reportError } from "../../runtime.js";
+import { oneLine } from "../../pull-safety.js";
 
 // The company and the target workspace decide where everything else goes: if either fails,
 // the deployment stops before anything is deployed.
@@ -53,20 +51,27 @@ export async function deployFromYaml(yamlPath, options = {}) {
     for (const workspace of config.workspaces) {
       console.log(chalk.blue(`\nProcessing workspace: ${workspace.name}`));
 
-      // Check if workspace exists
-      let workspaceId = await getWorkspaceId(workspace.name);
-      if (!workspaceId) {
-        // Create workspace if it doesn't exist
-        try {
-          await createWorkspace(
+      // The workspace with exactly this name, created if there is none (PLAT-116: never a guess)
+      let target;
+      try {
+        target = await findWorkspaceByName(workspace.name);
+        if (!target) {
+          const id = await createWorkspace(
             workspace.name,
             workspace.tags ? workspace.tags.join(",") : "",
           );
-        } catch (error) {
-          throw abort(error);
+          target = { id, name: workspace.name };
         }
-        workspaceId = await getSelectedWorkspace();
+      } catch (error) {
+        throw abort(error);
       }
+      console.log(
+        chalk.blue(
+          `Target workspace: ${oneLine(target.name)} (ID: ${oneLine(target.id)})`,
+        ),
+      );
+      // Already resolved: the commands below use the id without looking the name up again
+      const workspaceId = { id: target.id, name: target.name };
 
       // Process steps
       if (workspace.steps) {
@@ -129,15 +134,11 @@ export async function deployFromYaml(yamlPath, options = {}) {
             let namespace = connector.namespace;
             // If connectorId is not provided but connectorName is, search for it
             if (!connectorId && connectorName) {
-              const connectorData = await getConnectorByName(
+              // Exact id or exact unique name; ambiguity and no match are refused (PLAT-116)
+              const connectorData = await resolveConnector(
                 connectorName,
                 workspaceId,
               );
-              if (!connectorData) {
-                throw new CliError(
-                  `Connector '${connectorName}' was not deployed: no available connector has that name.`,
-                );
-              }
               connectorId = connectorData.id;
               namespace = namespace || connectorData.namespace;
             }
