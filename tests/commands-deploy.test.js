@@ -130,11 +130,15 @@ test("deploy: steps from name+file and from syncPath (no prompt)", sandboxTest(a
   const r = await sb.run(["deploy", "d.yaml"]);
   assert.equal(r.code, 0);
   assert.doesNotMatch(r.stdout, /\(y\/N\)/); // syncPath deploys without asking
-  assert.match(r.stdout, /Deploying steps\.\.\.\n {2}- single-step\nCreated step \[single-step\] with ID: s-new\n/);
+  // Flipped (PLAT-118, B2): one result table instead of each command's own lines and sync summaries.
+  assert.match(r.stdout, /Deploying steps\.\.\.\n/);
+  assert.match(r.stdout, /\n {2}step +single-step +created\n/);
+  assert.match(r.stdout, /\n {2}step +one +created\n/);
+  assert.match(r.stdout, /\n {2}step +sub\/two +created\n/);
   const creates = sb.api.calls.filter((c) => c.op === "CREATE_STEP_MUTATION").map((c) => c.variables);
   assert.deepEqual(creates.find((v) => v.name === "single-step"), { name: "single-step", environment_id: "ws-1", nocode_type: "http" });
   assert.deepEqual(creates.map((v) => v.name).sort(), ["one", "single-step", "sub/two"]);
-  assert.match(r.stdout, /Updated: 0, Created: 2\n/);
+  assert.doesNotMatch(r.stdout, /Updated: 0, Created: 2\n/); // was sync's own summary (PLAT-118, B2)
 }));
 
 test("deploy: libraries — namespace defaults to the first path segment of the name", sandboxTest(async (sb) => {
@@ -157,7 +161,122 @@ test("deploy: libraries — namespace defaults to the first path segment of the 
   assert.deepEqual(saves.find((v) => v.name === "util/strings"), { id: "l-new", name: "util/strings", namespace: "util", content: "l();", types: "T", version: 0, tags: ["t1"], enabled: true });
   assert.equal(saves.find((v) => v.name === "explicit").namespace, "ns1");
   assert.equal(saves.find((v) => v.name === "x").namespace, "x");
-  assert.match(r.stdout, /Updated: 0, Created: 1\n/);
+  // Flipped (PLAT-118, B2): was sync's "Updated: 0, Created: 1"; now one row per library.
+  assert.match(r.stdout, /\n {2}library +util\/strings +created\n/);
+  assert.match(r.stdout, /\n {2}library +x +created\n/);
+}));
+
+// ---------------------------------------------------------------- PLAT-118: ensure, table, --dry-run
+
+const RERUN_YAML = [
+  "workspaces:", "  - name: Dev",
+  "    steps:", "      - name: single-step", "        file: single.js",
+  "    libraries:", "      - name: util/strings", "        file: lib.js", "        tags: [t1]",
+].join("\n");
+const storedStep = (id, name, cond, body) => ({ id, name, enabled: true, version: 3, content: { if: cond, do: body } });
+const storedLib = (id, name, types, body) => ({ id, name, namespace: "util", enabled: true, tags: ["t1"], version: 4, types, content: { content: body } });
+const rerun = (sb, { steps, libs }) => {
+  sb.write("single.js", stepFile("{ s: 1 }", "data.s = 2;"));
+  sb.write("lib.js", libFile("T", "  l();"));
+  sb.write("d.yaml", RERUN_YAML);
+  sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
+  sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: steps.map(({ id, name }) => ({ id, name })) });
+  sb.api.on("GET_STEP_QUERY", (v) => ({ getAutomationStep: steps.find((x) => x.id === v.id) ?? null }));
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: libs.map(({ id, name }) => ({ id, name })) });
+  sb.api.on("GET_AUTOMATION_LIB_QUERY", (v) => ({ getAutomationLib: libs.find((x) => x.id === v.id) ?? null }));
+  sb.api.on("VALIDATE_IF_QUERY", ok);
+  sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-dup" });
+  sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
+  sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-dup" });
+  sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
+};
+
+// M16: a re-run created a second step and library every time.
+test("deploy: a re-run of the same YAML updates, never duplicates (M16)", sandboxTest(async (sb) => {
+  rerun(sb, {
+    steps: [storedStep("s-1", "Single-Step", "{ old: 1 }", "old();")], // stored in another case: the same step
+    libs: [storedLib("l-1", "UTIL/strings", "old", "old();")],
+  });
+  const r = await sb.run(["deploy", "d.yaml"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(!sb.api.ops().includes("CREATE_STEP_MUTATION"));
+  assert.ok(!sb.api.ops().includes("ADD_AUTOMATION_LIB_MUTATION"));
+  assert.deepEqual(sb.api.calls.find((c) => c.op === "SAVE_STEP_MUTATION").variables,
+    { id: "s-1", name: "Single-Step", if: "{\n  s: 1\n}", do: "data.s = 2;", enabled: true, version: 3 });
+  assert.deepEqual(sb.api.calls.find((c) => c.op === "UPDATE_AUTOMATION_LIB_MUTATION").variables,
+    { id: "l-1", name: "UTIL/strings", namespace: "util", content: "l();", types: "T", version: 4, tags: ["t1"], enabled: true });
+  assert.match(r.stdout, /\n {2}step +single-step +updated\n/);
+  assert.match(r.stdout, /\n {2}library +util\/strings +updated\n/);
+  assert.match(r.stdout, /completed successfully/);
+}));
+
+test("deploy: an item equal to the stored one is not saved (unchanged)", sandboxTest(async (sb) => {
+  rerun(sb, {
+    steps: [storedStep("s-1", "single-step", "{\n  s: 1\n}", "data.s = 2;")],
+    libs: [storedLib("l-1", "util/strings", "T", "l();")],
+  });
+  const r = await sb.run(["deploy", "d.yaml"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(!sb.api.ops().some((op) => op.endsWith("_MUTATION")), sb.api.ops().join());
+  assert.match(r.stdout, /\n {2}step +single-step +unchanged\n/);
+  assert.match(r.stdout, /\n {2}library +util\/strings +unchanged\n/);
+}));
+
+test("deploy: a name two steps share is refused with their ids; nothing is written for it; exit 1", sandboxTest(async (sb) => {
+  rerun(sb, {
+    steps: [storedStep("s-1", "single-step", "{}", "a();"), storedStep("s-2", "SINGLE-STEP", "{}", "b();")],
+    libs: [storedLib("l-1", "util/strings", "T", "l();")],
+  });
+  const r = await sb.run(["deploy", "d.yaml"]);
+  assert.equal(r.code, 1);
+  assert.ok(!sb.api.ops().some((op) => op.endsWith("STEP_MUTATION")), sb.api.ops().join());
+  assert.match(r.stderr, /The step name "single-step" is ambiguous in this workspace \(ids: s-1 "single-step", s-2 "SINGLE-STEP"\)\. Use the id\.\n/);
+  assert.match(r.stdout, /\n {2}step +single-step +refused\n/);
+  assert.match(r.stderr, /Deployment failed: 1 item\(s\) could not be deployed\.\n$/);
+  assert.doesNotMatch(r.stdout, /completed successfully/);
+}));
+
+test("deploy: a step whose save is refused fails the run (exit 1) and shows as failed", sandboxTest(async (sb) => {
+  rerun(sb, { steps: [storedStep("s-1", "single-step", "{}", "a();")], libs: [] });
+  sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: false });
+  const r = await sb.run(["deploy", "d.yaml"]);
+  assert.equal(r.code, 1);
+  assert.match(r.stdout, /\n {2}step +single-step +failed\n/);
+  assert.match(r.stdout, /\n {2}library +util\/strings +created\n/);
+  assert.match(r.stderr, /^Error updating step: single-step: Failed to save step: single-step\n/);
+  assert.match(r.stderr, /Deployment failed: 1 item\(s\) could not be deployed\.\n$/);
+}));
+
+test("deploy --dry-run sends no write and reports what would happen", sandboxTest(async (sb) => {
+  rerun(sb, { steps: [], libs: [storedLib("l-1", "util/strings", "old", "old();")] });
+  sb.write("steps/one.js", stepFile("{ a: 1 }", "data.a = 2;"));
+  sb.write("d.yaml", [
+    "workspaces:", "  - name: Dev",
+    "    steps:", "      - name: single-step", "        file: single.js", "      - syncPath: steps",
+    "    libraries:", "      - name: util/strings", "        file: lib.js",
+    "    webhooks:", "      - name: hook",
+    "  - name: Brand New", "    steps:", "      - name: x",
+  ].join("\n"));
+  const r = await sb.run(["deploy", "d.yaml", "--dry-run"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(!sb.api.ops().some((op) => op.endsWith("_MUTATION")), sb.api.ops().join());
+  assert.equal(sb.readSession().selectedWorkspace, "ws-sel");
+  assert.match(r.stdout, /\n {2}step +single-step +would create\n/);
+  assert.match(r.stdout, /\n {2}library +util\/strings +would update\n/);
+  assert.match(r.stdout, /\n {2}webhook +hook +skipped \(dry run\)\n/);
+  assert.match(r.stdout, /\n {2}workspace +Brand New +would create\n/);
+  assert.match(r.stdout, /\n {2}step +one +would create\n/);
+  assert.match(r.stdout, /\n {2}step +x +would create\n/);
+  assert.match(r.stdout, /Dry run: nothing was sent\.\n$/);
+}));
+
+test("deploy: a connector failure is a failed row in the table", sandboxTest(async (sb) => {
+  sb.write("d.yaml", "workspaces:\n  - name: Dev\n    connectors:\n      - connectorId: m-1\n        connectorName: Mailer\n");
+  sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
+  sb.api.on("ADD_CONNECTOR_MUTATION", gqlError("no licence"));
+  const r = await sb.run(["deploy", "d.yaml"]);
+  assert.equal(r.code, 1);
+  assert.match(r.stdout, /\n {2}connector +Mailer +failed\n/);
 }));
 
 test("deploy: connectors by id, by name, with neither, and unknown name", sandboxTest(async (sb) => {

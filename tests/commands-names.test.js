@@ -294,8 +294,10 @@ test("PLAT-115 deploy: an ambiguous step or library entry fails the deployment, 
   const r = await sb.run(["deploy", "d.yaml"]);
   assert.equal(r.code, 1);
   assert.doesNotMatch(r.stdout, /completed successfully/);
-  assert.match(r.stderr, /A step named "dup" already exists in this workspace \(ids: s-1, s-2\)/);
-  assert.match(r.stderr, /A library named "dup" already exists in this workspace \(ids: l-1, l-2\)/);
+  // Flipped (PLAT-118, B1): deploy finds by name (ensure) instead of adding, so two matches are an ambiguous
+  // name, not a taken one (was "A step named "dup" already exists ...").
+  assert.match(r.stderr, /The step name "dup" is ambiguous in this workspace \(ids: s-1, s-2\)\. Use the id\./);
+  assert.match(r.stderr, /The library name "dup" is ambiguous in this workspace \(ids: l-1, l-2\)\. Use the id\./);
   assert.match(r.stderr, /Deployment failed: 2 item\(s\) could not be deployed/);
   // the unambiguous new entry is still deployed
   assert.deepEqual(sb.api.calls.filter((c) => c.op === "CREATE_STEP_MUTATION").map((c) => c.variables.name), ["fresh"]);
