@@ -16,13 +16,35 @@ import {
 import fs from "fs/promises";
 import path from "path";
 import { resolveWorkspaceId } from "../workspace/index.js";
+import { CliError, UsageError, failure } from "../../runtime.js";
+import {
+  uniqueByName,
+  resolveByIdOrName,
+  assertNameFree,
+} from "../../names.js";
 import readline from "readline";
 import parser from "@babel/parser";
 import generate from "@babel/generator";
 
+// Every library in the workspace: what library names are resolved against (PLAT-115).
+async function listWorkspaceLibraries(workspaceId) {
+  const data = await graphQuery(LIST_AUTOMATION_LIBS_QUERY, {
+    id: workspaceId,
+  });
+  return data.listAutomationLibs || [];
+}
+
+// A library id or a library name (unique in the workspace) to the library's id; anything else is refused.
+async function resolveLibraryId(ref, workspaceId) {
+  return resolveByIdOrName(
+    await listWorkspaceLibraries(workspaceId),
+    ref,
+    "library",
+  ).id;
+}
+
 export async function listLibraries(workspaceIdentifier, filterName = null) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   try {
     const data = await graphQuery(LIST_AUTOMATION_LIBS_QUERY, {
@@ -50,25 +72,25 @@ export async function listLibraries(workspaceIdentifier, filterName = null) {
       console.log(`   Updated: ${library.updatedAt}\n`);
     });
   } catch (error) {
-    console.error(chalk.red("Error fetching libraries:"), error.message);
+    throw failure("Error fetching libraries:", error);
   }
 }
 
-export async function showLibrary(libraryId, workspaceIdentifier) {
-  if (!libraryId) {
-    console.log(chalk.yellow("⚠ Please provide a library ID."));
-    return;
+export async function showLibrary(libraryRef, workspaceIdentifier) {
+  if (!libraryRef) {
+    throw new UsageError("⚠ Please provide a library ID.");
   }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
 
   try {
+    const libraryId = await resolveLibraryId(libraryRef, workspaceId);
     const data = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
       id: libraryId,
     });
     const library = data.getAutomationLib;
 
     if (!library) {
-      console.log(chalk.yellow(`Library with ID ${libraryId} not found.`));
-      return;
+      throw new CliError(`Library with ID ${libraryId} not found.`);
     }
 
     console.log(chalk.blue("\n📚 Library Details\n"));
@@ -89,7 +111,7 @@ export async function showLibrary(libraryId, workspaceIdentifier) {
       console.log(`\n${chalk.bold("Content:")}\n${library.content.content}`);
     }
   } catch (error) {
-    console.error(chalk.red("Error fetching library details:"), error.message);
+    throw failure("Error fetching library details:", error);
   }
 }
 
@@ -102,9 +124,15 @@ export async function addLibrary(
   enabled = true,
 ) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   try {
+    // Names are unique per workspace
+    assertNameFree(
+      await listWorkspaceLibraries(workspaceId),
+      name.trim(),
+      "library",
+    );
+
     // Create the library first
     const data = await graphQuery(ADD_AUTOMATION_LIB_MUTATION, {
       name: name.trim(),
@@ -142,18 +170,16 @@ export async function addLibrary(
           );
         }
       } catch (error) {
-        console.error(
-          chalk.red(`Error reading or parsing file: ${error.message}`),
-        );
+        throw failure("Error reading or parsing file:", error);
       }
     }
   } catch (error) {
-    console.error(chalk.red("Error creating library:"), error.message);
+    throw failure("Error creating library:", error);
   }
 }
 
 export async function updateLibrary(
-  libraryId,
+  libraryRef,
   workspaceIdentifier,
   filePath = null,
   namespace = null,
@@ -161,14 +187,13 @@ export async function updateLibrary(
   enabled = null,
 ) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
-  if (!libraryId) {
-    console.log(chalk.yellow("⚠ Please provide a library ID."));
-    return;
+  if (!libraryRef) {
+    throw new UsageError("⚠ Please provide a library ID.");
   }
 
   try {
+    const libraryId = await resolveLibraryId(libraryRef, workspaceId);
     // Get current library details
     const currentData = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
       id: libraryId,
@@ -176,8 +201,7 @@ export async function updateLibrary(
     const currentLibrary = currentData.getAutomationLib;
 
     if (!currentLibrary) {
-      console.log(chalk.yellow(`Library with ID ${libraryId} not found.`));
-      return;
+      throw new CliError(`Library with ID ${libraryId} not found.`);
     }
 
     // Use provided values or fall back to current values
@@ -212,23 +236,22 @@ export async function updateLibrary(
         chalk.green(`Successfully updated library: ${currentLibrary.name}`),
       );
     } else {
-      console.log(chalk.red("Failed to update library."));
+      throw new CliError("Failed to update library.");
     }
   } catch (error) {
-    console.error(chalk.red("Error updating library:"), error.message);
+    throw failure("Error updating library:", error);
   }
 }
 
-export async function deleteLibrary(libraryId, workspaceIdentifier) {
+export async function deleteLibrary(libraryRef, workspaceIdentifier) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
-  if (!libraryId) {
-    console.log(chalk.yellow("⚠ Please provide a library ID."));
-    return;
+  if (!libraryRef) {
+    throw new UsageError("⚠ Please provide a library ID.");
   }
 
   try {
+    const libraryId = await resolveLibraryId(libraryRef, workspaceId);
     const data = await graphQuery(REMOVE_AUTOMATION_LIB_MUTATION, {
       id: libraryId,
       environment_id: workspaceId,
@@ -239,20 +262,17 @@ export async function deleteLibrary(libraryId, workspaceIdentifier) {
         chalk.green(`Successfully deleted library with ID: ${libraryId}`),
       );
     } else {
-      console.log(
-        chalk.yellow(
-          `Library with ID ${libraryId} not found or could not be deleted.`,
-        ),
+      throw new CliError(
+        `Library with ID ${libraryId} not found or could not be deleted.`,
       );
     }
   } catch (error) {
-    console.error(chalk.red("Error deleting library:"), error.message);
+    throw failure("Error deleting library:", error);
   }
 }
 
-export async function pullLibrary(workspaceIdentifier, libraryId, targetPath) {
+export async function pullLibrary(workspaceIdentifier, libraryRef, targetPath) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   // Use current directory if no path specified
   const workspaceFolder = targetPath || process.cwd();
@@ -261,16 +281,16 @@ export async function pullLibrary(workspaceIdentifier, libraryId, targetPath) {
     // Create workspace folder if it doesn't exist
     await fs.mkdir(workspaceFolder, { recursive: true });
 
-    if (libraryId) {
+    if (libraryRef) {
       // Pull specific library
+      const libraryId = await resolveLibraryId(libraryRef, workspaceId);
       const data = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
         id: libraryId,
       });
       const library = data.getAutomationLib;
 
       if (!library) {
-        console.log(chalk.yellow(`Library with ID ${libraryId} not found.`));
-        return;
+        throw new CliError(`Library with ID ${libraryId} not found.`);
       }
 
       await createLibraryFile(library, workspaceFolder);
@@ -287,8 +307,18 @@ export async function pullLibrary(workspaceIdentifier, libraryId, targetPath) {
         return;
       }
 
-      // Get full details for each library
+      // Get full details for each library; a name several libraries share is refused (it names one file)
+      const ambiguous = new Set();
       for (const librarySummary of libraries) {
+        try {
+          uniqueByName(libraries, librarySummary.name, "library");
+        } catch (error) {
+          if (!ambiguous.has(librarySummary.name)) {
+            ambiguous.add(librarySummary.name);
+            console.error(chalk.red(error.message));
+          }
+          continue;
+        }
         const libraryData = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
           id: librarySummary.id,
         });
@@ -307,6 +337,11 @@ export async function pullLibrary(workspaceIdentifier, libraryId, targetPath) {
         }
       }
 
+      if (ambiguous.size > 0) {
+        throw new CliError(
+          `Libraries with ${ambiguous.size} ambiguous name(s) were not pulled to: ${workspaceFolder}`,
+        );
+      }
       console.log(
         chalk.green(
           `Successfully pulled ${libraries.length} libraries to: ${workspaceFolder}`,
@@ -314,18 +349,17 @@ export async function pullLibrary(workspaceIdentifier, libraryId, targetPath) {
       );
     }
   } catch (error) {
-    console.error(chalk.red("Error pulling libraries:"), error.message);
+    throw failure("Error pulling libraries:", error);
   }
 }
 
 export async function syncLibrary(
   workspaceIdentifier,
-  libraryId,
+  libraryRef,
   sourcePath,
   noPrompt = false,
 ) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   // Use current directory if no path specified
   const workspaceFolder = sourcePath || process.cwd();
@@ -370,22 +404,19 @@ export async function syncLibrary(
     try {
       await fs.access(workspaceFolder);
     } catch (error) {
-      console.log(
-        chalk.yellow(`Workspace folder not found: ${workspaceFolder}`),
-      );
-      return;
+      throw new CliError(`Workspace folder not found: ${workspaceFolder}`);
     }
 
-    if (libraryId) {
+    if (libraryRef) {
       // Sync specific library
+      const libraryId = await resolveLibraryId(libraryRef, workspaceId);
       const data = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
         id: libraryId,
       });
       const library = data.getAutomationLib;
 
       if (!library) {
-        console.log(chalk.yellow(`Library with ID ${libraryId} not found.`));
-        return;
+        throw new CliError(`Library with ID ${libraryId} not found.`);
       }
 
       // If the library name contains slashes, create subfolders accordingly
@@ -397,39 +428,32 @@ export async function syncLibrary(
 
       try {
         await fs.access(libraryFilePath);
-        // Prompt for confirmation
-        let confirmed = true;
-        if (!noPrompt) {
-          confirmed = await promptConfirmation(
-            `Are you sure you want to overwrite the library '${library.name}' with the contents of '${libraryFilePath}'? (y/N): `,
-          );
-        }
-        if (!confirmed) {
-          console.log(chalk.yellow("Sync cancelled by user."));
-          return;
-        }
-        try {
-          await updateLibraryFromFile(library, libraryFilePath);
-          console.log(
-            chalk.green(`Successfully synced library: ${library.name}`),
-          );
-        } catch (error) {
-          console.log(chalk.red(`Error updating library: ${library.name}`));
-        }
       } catch (error) {
-        console.log(chalk.yellow(`Library file not found: ${libraryFilePath}`));
+        throw new CliError(`Library file not found: ${libraryFilePath}`);
       }
+
+      // Prompt for confirmation
+      let confirmed = true;
+      if (!noPrompt) {
+        confirmed = await promptConfirmation(
+          `Are you sure you want to overwrite the library '${library.name}' with the contents of '${libraryFilePath}'? (y/N): `,
+        );
+      }
+      if (!confirmed) {
+        throw new CliError("Sync cancelled by user.");
+      }
+      try {
+        await updateLibraryFromFile(library, libraryFilePath);
+      } catch (error) {
+        throw failure(`Error updating library: ${library.name}:`, error);
+      }
+      console.log(chalk.green(`Successfully synced library: ${library.name}`));
     } else {
       // Sync all libraries
       const data = await graphQuery(LIST_AUTOMATION_LIBS_QUERY, {
         id: workspaceId,
       });
       const libraries = data.listAutomationLibs || [];
-      // Map library name to library object for quick lookup
-      const libraryMap = new Map();
-      for (const librarySummary of libraries) {
-        libraryMap.set(librarySummary.name, librarySummary);
-      }
 
       // Get all .js files in workspaceFolder recursively
       const jsFiles = await getAllJsFiles(workspaceFolder);
@@ -448,16 +472,24 @@ export async function syncLibrary(
         );
       }
       if (!confirmed) {
-        console.log(chalk.yellow("Sync cancelled by user."));
-        return;
+        throw new CliError("Sync cancelled by user.");
       }
 
       let updatedCount = 0;
       let createdCount = 0;
+      let failedCount = 0;
       for (const { absPath, relPath } of jsFiles) {
         // Derive library name from relPath (remove .js extension, convert path separators to /)
         const libraryName = relPath.replace(/\\/g, "/").replace(/\.js$/, "");
-        const library = libraryMap.get(libraryName);
+        // Files are matched by name only; a name several libraries share is refused
+        let library;
+        try {
+          library = uniqueByName(libraries, libraryName, "library");
+        } catch (error) {
+          failedCount++;
+          console.error(chalk.red(`Error syncing library: ${error.message}`));
+          continue;
+        }
         if (library) {
           // Update existing library
           try {
@@ -469,7 +501,12 @@ export async function syncLibrary(
             await updateLibraryFromFile(fullLibrary, absPath);
             updatedCount++;
           } catch (error) {
-            console.log(chalk.red(`Error updating library: ${libraryName}`));
+            failedCount++;
+            console.error(
+              chalk.red(
+                `Error updating library: ${libraryName}: ${error.message}`,
+              ),
+            );
           }
         } else {
           // Create new library
@@ -495,9 +532,19 @@ export async function syncLibrary(
             });
             createdCount++;
           } catch (error) {
-            console.log(chalk.red(`Error creating library: ${libraryName}`));
+            failedCount++;
+            console.error(
+              chalk.red(
+                `Error creating library: ${libraryName}: ${error.message}`,
+              ),
+            );
           }
         }
+      }
+      if (failedCount > 0) {
+        throw new CliError(
+          `Library sync from ${workspaceFolder} failed for ${failedCount} file(s)\nUpdated: ${updatedCount}, Created: ${createdCount}, Failed: ${failedCount}`,
+        );
       }
       console.log(
         chalk.green(
@@ -506,7 +553,7 @@ export async function syncLibrary(
       );
     }
   } catch (error) {
-    console.error(chalk.red("Error syncing libraries:"), error.message);
+    throw failure("Error syncing libraries:", error);
   }
 }
 
@@ -568,12 +615,9 @@ async function updateLibraryFromFile(library, filePath) {
     });
 
     if (!updateData.saveAutomationLib) {
-      console.log(chalk.yellow(`Failed to update library: ${library.name}`));
+      throw new Error(`Failed to update library: ${library.name}`);
     }
   } catch (error) {
-    console.error(
-      chalk.red(`Error updating library from file: ${error.message}`),
-    );
     throw new Error(`Error updating library from file: ${error.message}`);
   }
 }

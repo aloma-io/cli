@@ -52,8 +52,9 @@ test("connector list: empty says 'No available connector types found.'; API erro
   assert.equal(r.stdout, "No available connector types found.\n");
   sb.api.on("LIST_CONNECTORS_QUERY", gqlError("denied"));
   r = await sb.run(["connector", "list"]);
-  assert.match(r.stderr, /Error listing available connectors: denied/);
-  assert.equal(r.code, 1); // the error is re-thrown -> unhandled rejection
+  // PLAT-81: printed once (was printed, then re-thrown as an unhandled rejection with a stack trace).
+  assert.equal(r.stderr, "Error listing available connectors: denied\n");
+  assert.equal(r.code, 1);
 }));
 
 test("connector list-available: uses the selected workspace, mine=false, empty name by default", sandboxTest(async (sb) => {
@@ -125,20 +126,22 @@ test("connector add <id> without --name: name and namespace are taken from the c
 test("connector add: unknown connector, refused by API, API error", sandboxTest(async (sb) => {
   sb.api.on("GET_CONNECTOR_QUERY", { getAutomationConnector: null });
   let r = await sb.run(["connector", "add", "m-9"]);
-  assert.equal(r.stdout, "Error: Connector not found\n");
+  assert.equal(r.stderr, "Error: Connector not found\n");
+  assert.equal(r.code, 1);
   sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: false });
   r = await sb.run(["connector", "add", "m-1", "-n", "x"]);
-  assert.equal(r.stdout, "Error: Failed to add connector\n");
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error: Failed to add connector\n");
+  assert.equal(r.code, 1);
   sb.api.on("ADD_CONNECTOR_MUTATION", gqlError("limit"));
   r = await sb.run(["connector", "add", "m-1", "-n", "x"]);
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Error creating connector: limit/);
+  assert.equal(r.stderr, "Error creating connector: limit\n");
 }));
 
 test("connector add --config with invalid JSON: nothing is sent", sandboxTest(async (sb) => {
   const r = await sb.run(["connector", "add", "m-1", "-n", "x", "-c", "{nope"]);
-  assert.equal(r.code, 0);
+  // PLAT-81: a refused option is a usage error, exit 2 (was 0).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /Error: -c\/--config must be a valid JSON string: /);
   assert.deepEqual(sb.api.calls, []);
 }));
@@ -190,10 +193,12 @@ test("connector update: refused by the API / unknown connector while looking up 
   sb.api.on("LIST_CONNECTORS_QUERY", CONNECTORS);
   sb.api.on("UPDATE_CONNECTOR_MUTATION", { updateAutomationConnector: false });
   let r = await sb.run(["connector", "update", "c-1", "-n", "x"]);
-  assert.equal(r.stdout, "Error: Failed to update connector\n");
+  assert.equal(r.stderr, "Error: Failed to update connector\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_CONNECTOR_QUERY", { getAutomationConnector: null });
   r = await sb.run(["connector", "update", "c-1", "-t", "x"]);
-  assert.equal(r.stdout, "Error: Connector not found\n");
+  assert.equal(r.stderr, "Error: Connector not found\n");
+  assert.equal(r.code, 1);
 }));
 
 test("connector update --config: values are encrypted for the connector's market id, plain fields are not", sandboxTest(async (sb) => {
@@ -220,7 +225,8 @@ test("connector update --config: refused by the API", sandboxTest(async (sb) => 
   sb.api.on("GET_CONNECTOR_QUERY", DETAIL());
   sb.api.on("UPDATE_CONNECTOR_CONFIG_SCHEMA_MUTATION", { updateAutomationConnectorConfigSchema: false });
   const r = await sb.run(["connector", "update", "c-1", "-c", '{"host":"h"}']);
-  assert.equal(r.stdout, "Error: Failed to update connector configuration\n");
+  assert.equal(r.stderr, "Error: Failed to update connector configuration\n");
+  assert.equal(r.code, 1);
 }));
 
 test("connector update --config: invalid JSON is refused before any request", sandboxTest(async (sb) => {
@@ -290,19 +296,21 @@ test("connector oauth --development", { skip: !canFakeOpen && "needs the fake `o
   assert.equal(sb.api.calls.at(-1).variables.isDevelopment, true);
 }));
 
-test("connector oauth: no URL returned; invalid URL; API error — all exit 0", sandboxTest(async (sb) => {
+test("connector oauth: no URL returned; invalid URL; API error — all exit 1", sandboxTest(async (sb) => {
+  // PLAT-81: all three were exit 0; the error object (with its stack) was printed, now only its message.
   sb.api.on("START_CONNECTOR_OAUTH_MUTATION", { startAutomationConnectorOAuth: null });
   let r = await sb.run(["connector", "oauth", "c-1"]);
-  assert.equal(r.stdout, "Error: Failed to start OAuth process\n");
+  assert.equal(r.stderr, "Error: Failed to start OAuth process\n");
+  assert.equal(r.code, 1);
   sb.api.on("START_CONNECTOR_OAUTH_MUTATION", { startAutomationConnectorOAuth: "not a url" });
   r = await sb.run(["connector", "oauth", "c-1"]);
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /Error starting OAuth process: TypeError/);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error starting OAuth process: Invalid URL\n");
   assert.deepEqual(sb.openCalls(), []);
   sb.api.on("START_CONNECTOR_OAUTH_MUTATION", gqlError("denied"));
   r = await sb.run(["connector", "oauth", "c-1"]);
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /Error starting OAuth process: Error: denied/);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error starting OAuth process: denied\n");
 }));
 
 test("connector commands: -w <name> is resolved first", sandboxTest(async (sb) => {

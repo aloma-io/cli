@@ -82,6 +82,10 @@ aloma task list
 - **Step Types**: Support for various step types and configurations
 - **File Integration**: Import step definitions from files
 - **Step Filtering**: Filter steps by name and status
+- **Unique Names**: Step and library names are unique per workspace. Commands that take a step or library
+  (`show`, `edit`, `update`, `delete`, `clone`, `pull -s/-l`, `sync -s/-l`) accept its id or its name. A name
+  that several items share is refused with their ids listed (use the id), a name that matches nothing is
+  refused, and `add` refuses a name that already exists
 
 ### 📋 Task Management
 - **Task Lifecycle**: Create, monitor, stop, and resume tasks
@@ -160,6 +164,16 @@ source_automatic: false
 url: "https://github.com/user/repo.git"
 username: "username"
 ```
+
+## Exit Codes
+
+Every `aloma` command exits with:
+
+- `0` when the operation succeeded
+- `1` when the operation failed (API error, not found, refused, or any item of a `deploy` failed)
+- `2` for a usage error (missing argument, unknown option or command, invalid option value)
+
+Errors are printed once, on stderr. Set `DEBUG=1` to add the stack trace.
 
 ## Documentation
 

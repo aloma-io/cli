@@ -7,23 +7,18 @@ import {
 } from "./query.js";
 import { rolesToGroups } from "./utils.js";
 import { ME_QUERY } from "../auth/query.js";
+import { CliError, UsageError, failure } from "../../runtime.js";
 
 async function checkAdminOrOwnerPermission(action) {
   const user = await graphQuery(ME_QUERY);
   if (!user?.me?.groups?.some((g) => g === "admin" || g === "owner")) {
-    console.log(
-      chalk.red(`Error: Only administrators or owners can ${action}`),
-    );
-    return false;
+    throw new CliError(`Error: Only administrators or owners can ${action}`);
   }
-  return true;
 }
 
 export async function listUsers() {
   try {
-    if (!(await checkAdminOrOwnerPermission("list users"))) {
-      return;
-    }
+    await checkAdminOrOwnerPermission("list users");
 
     const data = await graphQuery(FIND_COMPANY_MEMBERS_QUERY);
     const members = data.findCompanyMembers || [];
@@ -52,15 +47,13 @@ export async function listUsers() {
       });
     }
   } catch (error) {
-    console.error(chalk.red("Error listing users:"), error.message);
+    throw failure("Error listing users:", error);
   }
 }
 
 export async function inviteUsers(emails, roles = "developer") {
   try {
-    if (!(await checkAdminOrOwnerPermission("invite users"))) {
-      return;
-    }
+    await checkAdminOrOwnerPermission("invite users");
 
     // Parse multiple roles and convert to groups
     const roleList = roles
@@ -71,8 +64,7 @@ export async function inviteUsers(emails, roles = "developer") {
     try {
       groups = rolesToGroups(roles);
     } catch (error) {
-      console.log(chalk.red(error.message));
-      return;
+      throw new UsageError(error.message);
     }
 
     // Parse emails
@@ -81,8 +73,7 @@ export async function inviteUsers(emails, roles = "developer") {
       .map((e) => e.trim())
       .filter(Boolean);
     if (emailList.length === 0) {
-      console.log(chalk.red("No valid emails provided."));
-      return;
+      throw new UsageError("No valid emails provided.");
     }
     // Send invite mutation
     await graphQuery(INVITE_TO_COMPANY_MUTATION, {
@@ -95,19 +86,16 @@ export async function inviteUsers(emails, roles = "developer") {
       ),
     );
   } catch (error) {
-    console.error(chalk.red("Error inviting users:"), error.message);
+    throw failure("Error inviting users:", error);
   }
 }
 
 export async function updateUser(userId, roles) {
   try {
-    if (!(await checkAdminOrOwnerPermission("update users"))) {
-      return;
-    }
+    await checkAdminOrOwnerPermission("update users");
 
     if (!roles) {
-      console.log(chalk.red("Error: Roles parameter is required"));
-      return;
+      throw new UsageError("Error: Roles parameter is required");
     }
 
     // Parse multiple roles and convert to groups
@@ -115,8 +103,7 @@ export async function updateUser(userId, roles) {
     try {
       groups = rolesToGroups(roles);
     } catch (error) {
-      console.log(chalk.red(error.message));
-      return;
+      throw new UsageError(error.message);
     }
 
     await graphQuery(UPDATE_COMPANY_MEMBER_MUTATION, {
@@ -125,15 +112,13 @@ export async function updateUser(userId, roles) {
     });
     console.log(chalk.green(`Updated user ${userId}`));
   } catch (error) {
-    console.error(chalk.red("Error updating user:"), error.message);
+    throw failure("Error updating user:", error);
   }
 }
 
 export async function removeUser(userId) {
   try {
-    if (!(await checkAdminOrOwnerPermission("remove users"))) {
-      return;
-    }
+    await checkAdminOrOwnerPermission("remove users");
 
     await graphQuery(UPDATE_COMPANY_MEMBER_MUTATION, {
       id: userId,
@@ -141,6 +126,6 @@ export async function removeUser(userId) {
     });
     console.log(chalk.green(`Removed user ${userId}`));
   } catch (error) {
-    console.error(chalk.red("Error updating user:"), error.message);
+    throw failure("Error updating user:", error);
   }
 }

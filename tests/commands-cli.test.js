@@ -44,12 +44,13 @@ test("each group's help lists its sub-commands", sandboxTest(async (sb) => {
   assert.deepEqual(sb.api.calls, []);
 }));
 
-test("unknown command and unknown option exit 1 with a suggestion", sandboxTest(async (sb) => {
+test("unknown command and unknown option exit 2 with a suggestion", sandboxTest(async (sb) => {
   let r = await sb.run(["wrokspace"]);
-  assert.equal(r.code, 1);
+  // PLAT-81: usage errors exit 2 (was 1, commander's default).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /error: unknown command 'wrokspace'\n\(Did you mean workspace\?\)/);
   r = await sb.run(["workspace", "list", "--nope"]);
-  assert.equal(r.code, 1);
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /error: unknown option '--nope'/);
   assert.deepEqual(sb.api.calls, []);
 }));
@@ -67,8 +68,8 @@ test("every request is a POST with JSON body, bearer header and cookie", sandbox
 
 test("not signed in: commands report the missing token instead of sending a request", sandboxTest({ session: null }, async (sb) => {
   const r = await sb.run(["workspace", "list"]);
-  // PINS SUSPECT BEHAVIOUR: exit code 0 although nothing worked.
-  assert.equal(r.code, 0);
+  // PLAT-81: exit code 1 (was PINS SUSPECT BEHAVIOUR: exit code 0 although nothing worked).
+  assert.equal(r.code, 1);
   assert.equal(
     r.stderr,
     "Error fetching environments: Not authenticated: No token found. Run `aloma auth` to login.\n",
@@ -78,7 +79,7 @@ test("not signed in: commands report the missing token instead of sending a requ
 
 test("not signed in with -w: a warning is printed first, then the command fails the same way", sandboxTest({ session: null }, async (sb) => {
   const r = await sb.run(["secret", "list", "-w", "dev"]);
-  assert.equal(r.code, 0);
+  assert.equal(r.code, 1); // PLAT-81: was 0
   assert.match(r.stdout, /^⚠ Not authenticated: No token found\. Run `aloma auth` to login\.\n/);
   assert.match(r.stderr, /Error fetching secrets: Not authenticated/);
   assert.deepEqual(sb.api.calls, []);
@@ -87,8 +88,9 @@ test("not signed in with -w: a warning is printed first, then the command fails 
 test("server answers with something that is not JSON", sandboxTest(async (sb) => {
   sb.api.on("LIST_ENVIRONMENTS_QUERY", rawReply(502, "<html>Bad Gateway</html>"));
   const r = await sb.run(["workspace", "list"]);
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /^GraphQL Error: invalid json response body/);
+  assert.equal(r.code, 1); // PLAT-81: was 0
+  // PLAT-81: printed once, by the command (graphQuery no longer prints its own "GraphQL Error:" line).
+  assert.doesNotMatch(r.stderr, /GraphQL Error/);
   assert.match(r.stderr, /Error fetching environments: invalid json response body/);
 }));
 
@@ -108,7 +110,9 @@ test("server answers with data: null and no errors", sandboxTest(async (sb) => {
 test("API unreachable: the connection error is printed", sandboxTest(async (sb) => {
   await sb.api.close();
   const r = await sb.run(["workspace", "list"]);
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /GraphQL Error: request to http:\/\/127\.0\.0\.1:\d+\/graphql failed, reason: .*ECONNREFUSED/);
+  assert.equal(r.code, 1); // PLAT-81: a network error exits 1 (was 0)
+  // PLAT-81: printed once, with the command's label (was a "GraphQL Error:" line, then the label line).
+  assert.match(r.stderr, /^Error fetching environments: request to http:\/\/127\.0\.0\.1:\d+\/graphql failed, reason: .*ECONNREFUSED/);
+  assert.doesNotMatch(r.stderr, /GraphQL Error/);
   sb.api.close = async () => {}; // already closed
 }));

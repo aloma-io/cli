@@ -91,10 +91,12 @@ test("a corrupt session file is removed by logout (the way out of a broken sessi
   assert.equal(sb.readSession(), null);
 });
 
-// PINS SUSPECT BEHAVIOUR: when the session cannot be removed the CLI says so but exits 0.
-test("PINS SUSPECT BEHAVIOUR: a session that cannot be removed is reported, exit code still 0", async () => {
+// PLAT-81: when the session cannot be removed the CLI says so once, on stderr, and exits 1 (was 0).
+test("a session that cannot be removed is reported once, exit 1", async () => {
   mkdirSync(sb.sessionPath, { recursive: true }); // a directory where the file should be
   const r = await runCli(sb, ["logout"]);
-  assert.equal(r.code, 0);
-  assert.match(r.output, /Failed to clear session data:/);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /^❌ Failed to clear session data: /m);
+  assert.equal(r.stderr.match(/Failed to clear session data/g).length, 1);
+  assert.doesNotMatch(r.stdout, /Logout completed/);
 });

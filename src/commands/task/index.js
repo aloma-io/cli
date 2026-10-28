@@ -15,6 +15,7 @@ import { diffJson } from "diff";
 import yaml from "js-yaml";
 import path from "path";
 import { resolveWorkspaceId } from "../workspace/index.js";
+import { CliError, UsageError, failure } from "../../runtime.js";
 
 export async function listTasks(
   page = 1,
@@ -24,7 +25,6 @@ export async function listTasks(
 ) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     const limit = 10;
     const offset = (page - 1) * limit;
@@ -69,7 +69,7 @@ export async function listTasks(
       console.log(`   Created: ${new Date(task.createdAt).toLocaleString()}\n`);
     });
   } catch (error) {
-    console.error(chalk.red("Error listing tasks:"), error.message);
+    throw failure("Error listing tasks:", error);
   }
 }
 
@@ -177,8 +177,7 @@ function getNormalizedHistory(task, history) {
 export async function showTask(taskId, options = {}) {
   try {
     if (!taskId) {
-      console.log(chalk.yellow("⚠ Please provide a task ID"));
-      return;
+      throw new UsageError("⚠ Please provide a task ID");
     }
 
     const response = await graphQuery(GET_TASK_QUERY, {
@@ -189,8 +188,7 @@ export async function showTask(taskId, options = {}) {
     const history = response.getAutomationEnvironmentTaskHistory;
 
     if (!task) {
-      console.log(chalk.yellow(`⚠ Task with ID ${taskId} not found`));
-      return;
+      throw new CliError(`⚠ Task with ID ${taskId} not found`);
     }
 
     // Map task state to status
@@ -237,8 +235,7 @@ export async function showTask(taskId, options = {}) {
         if (!isNaN(stepIdx) && stepIdx >= 0 && stepIdx < normalized.length) {
           entriesToShow = [normalized[stepIdx].id];
         } else {
-          console.log(chalk.red("Invalid step number specified."));
-          return;
+          throw new UsageError("Invalid step number specified.");
         }
       }
 
@@ -350,7 +347,7 @@ export async function showTask(taskId, options = {}) {
       });
     }
   } catch (error) {
-    console.error(chalk.red("Error showing task:"), error.message);
+    throw failure("Error showing task:", error);
   }
 }
 
@@ -362,11 +359,9 @@ export async function createTask(
 ) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     if (!name) {
-      console.log(chalk.yellow("⚠ Please provide a task name"));
-      return;
+      throw new UsageError("⚠ Please provide a task name");
     }
 
     let data = null;
@@ -380,20 +375,16 @@ export async function createTask(
         } else if (ext === ".yaml" || ext === ".yml") {
           data = yaml.load(await fs.readFile(taskFile, "utf8"));
         } else {
-          console.log(
-            chalk.yellow(
-              "⚠ Unsupported file extension. Only .json and .yaml/.yml are supported.",
-            ),
+          throw new UsageError(
+            "⚠ Unsupported file extension. Only .json and .yaml/.yml are supported.",
           );
-          return;
         }
       } else {
-        console.log(chalk.yellow("⚠ No data provided"));
-        return;
+        throw new UsageError("⚠ No data provided");
       }
     } catch (e) {
-      console.error(chalk.red("Error parsing JSON/YAML data:"), e.message);
-      return;
+      if (e instanceof UsageError) throw e;
+      throw new UsageError(`Error parsing JSON/YAML data: ${e.message}`);
     }
 
     const response = await graphQuery(CREATE_TASK_MUTATION, {
@@ -408,15 +399,14 @@ export async function createTask(
     // // Show the newly created task
     // await showTask(taskId);
   } catch (error) {
-    console.error(chalk.red("Error creating task:"), error.message);
+    throw failure("Error creating task:", error);
   }
 }
 
 export async function cloneTask(taskId, step = null) {
   try {
     if (!taskId) {
-      console.log(chalk.yellow("⚠ Please provide a task ID"));
-      return;
+      throw new UsageError("⚠ Please provide a task ID");
     }
 
     if (step) {
@@ -437,8 +427,7 @@ export async function cloneTask(taskId, step = null) {
           chalk.green(`✓ Task created successfully with ID: ${newTaskId}`),
         );
       } else {
-        console.log(chalk.red("Invalid step number specified."));
-        return;
+        throw new UsageError("Invalid step number specified.");
       }
     } else {
       const response = await graphQuery(CLONE_TASK_MUTATION, {
@@ -454,15 +443,14 @@ export async function cloneTask(taskId, step = null) {
     // // Show the newly cloned task
     // await showTask(newTaskId);
   } catch (error) {
-    console.error(chalk.red("Error cloning task:"), error.message);
+    throw failure("Error cloning task:", error);
   }
 }
 
 export async function stopTask(taskId) {
   try {
     if (!taskId) {
-      console.log(chalk.yellow("⚠ Please provide a task ID"));
-      return;
+      throw new UsageError("⚠ Please provide a task ID");
     }
 
     const response = await graphQuery(STOP_TASK_MUTATION, {
@@ -472,18 +460,17 @@ export async function stopTask(taskId) {
     if (response.stopAutomationTask) {
       console.log(chalk.green(`✓ Task ${taskId} stopped successfully`));
     } else {
-      console.log(chalk.yellow(`⚠ Task ${taskId} could not be stopped`));
+      throw new CliError(`⚠ Task ${taskId} could not be stopped`);
     }
   } catch (error) {
-    console.error(chalk.red("Error stopping task:"), error.message);
+    throw failure("Error stopping task:", error);
   }
 }
 
 export async function resumeTask(taskId) {
   try {
     if (!taskId) {
-      console.log(chalk.yellow("⚠ Please provide a task ID"));
-      return;
+      throw new UsageError("⚠ Please provide a task ID");
     }
 
     const response = await graphQuery(RESUME_TASK_MUTATION, {
@@ -493,9 +480,9 @@ export async function resumeTask(taskId) {
     if (response.resumeAutomationTaskFromHistory) {
       console.log(chalk.green(`✓ Task ${taskId} resumed successfully`));
     } else {
-      console.log(chalk.yellow(`⚠ Task ${taskId} could not be resumed`));
+      throw new CliError(`⚠ Task ${taskId} could not be resumed`);
     }
   } catch (error) {
-    console.error(chalk.red("Error resuming task:"), error.message);
+    throw failure("Error resuming task:", error);
   }
 }

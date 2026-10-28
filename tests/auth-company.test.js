@@ -61,7 +61,8 @@ test("switch by name works the same", async () => {
 
 test("unknown company: says so, nothing requested, session unchanged", async () => {
   const r = await switchTo("No Such Company");
-  assert.match(r.stdout, /Company not found/);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /Company not found/);
   assert.equal(realm.requests.length, 0);
   assert.equal(sb.readSession().token, FAKE.session);
 });
@@ -69,7 +70,8 @@ test("unknown company: says so, nothing requested, session unchanged", async () 
 test("not signed in: the company list cannot be fetched, nothing requested", async () => {
   sb.writeSession({});
   const r = await switchTo("realm-b");
-  assert.match(r.stdout, /Error switching company: Not authenticated: No token found/);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /Error switching company: Not authenticated: No token found/);
   assert.equal(realm.requests.length, 0);
   assert.equal(api.requests.length, 0);
 });
@@ -82,12 +84,12 @@ test("SECURITY: the session is not put in the URL, the body, or the output", asy
   assert.deepEqual(leakedSecrets(r.output), []);
 });
 
-// PINS SUSPECT BEHAVIOUR: the API refusing the switch prints an error but the exit code is 0.
-test("PINS SUSPECT BEHAVIOUR: a refused switch prints the error, keeps the session, exits 0", async () => {
+// PLAT-81: the API refusing the switch prints the error on stderr and exits 1 (was exit 0, stdout).
+test("a refused switch prints the error, keeps the session, exits 1", async () => {
   realmCtl.respond = (req, res) => json(res, 403, { error: "forbidden" });
   const r = await switchTo("realm-b");
-  assert.equal(r.code, 0);
-  assert.match(r.stdout, /Error switching company: Request failed with status code 403/);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /Error switching company: Request failed with status code 403/);
   assert.deepEqual(sb.readSession(), { token: FAKE.session, selectedWorkspace: "ws-old" });
   assert.deepEqual(leakedSecrets(r.output), []);
 });
@@ -120,7 +122,8 @@ test("PINS SUSPECT BEHAVIOUR: the cookie is parsed loosely: cut at '=', not URL-
 // (and the session) is sent.
 test("SECURITY: an untrusted certificate is refused; the session is not sent", async () => {
   const r = await runCli(sb, ["company", "switch", "realm-b"], untrusted);
-  assert.match(r.stdout, /Error switching company: self[- ]signed certificate/);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /Error switching company: self[- ]signed certificate/);
   assert.equal(realm.requests.length, 0);
   assert.equal(sb.readSession().token, FAKE.session);
 });
@@ -139,7 +142,8 @@ for (const [label, host] of [["another host", "localhost"], ["another port on th
         res.end();
       };
       const r = await switchTo("realm-b");
-      assert.match(r.stdout, /Error switching company:.*redirect/i);
+      assert.equal(r.code, 1);
+      assert.match(r.stderr, /Error switching company:.*redirect/i);
       assert.equal(other.requests.length, 0, "redirect not followed");
       assert.deepEqual(sb.readSession(), { token: FAKE.session, selectedWorkspace: "ws-old" });
       assert.deepEqual(leakedSecrets(r.output), []);

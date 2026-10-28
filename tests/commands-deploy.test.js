@@ -22,7 +22,7 @@ test("deploy: a file without workspaces only prints the banners", sandboxTest(as
   assert.deepEqual(sb.api.calls, []);
 }));
 
-test("deploy: existing workspace (matched by name) gets webhooks and secrets", sandboxTest(async (sb) => {
+test("deploy: existing workspace (matched by name) gets webhooks and secrets; an entry without a value fails the run", sandboxTest(async (sb) => {
   sb.write("d.yaml", [
     "workspaces:",
     "  - name: dev space",
@@ -44,13 +44,15 @@ test("deploy: existing workspace (matched by name) gets webhooks and secrets", s
   sb.api.on("GET_SECRET_QUERY", { getAutomationEnvironmentConfig: {} });
   sb.api.on("SAVE_SECRET_MUTATION", { saveAutomationEnvironmentConfig: true });
   const r = await sb.run(["deploy", "d.yaml"]);
-  assert.equal(r.code, 0);
+  // PLAT-81: the NOVALUE entry is a failed item: the others are still deployed, the run exits 1.
+  assert.equal(r.code, 1);
   assert.match(r.stdout, /^🚀 Starting deployment\.\.\.\n\n\nProcessing workspace: dev space\n/);
   assert.match(r.stdout, /Deploying webhooks\.\.\.\n {2}- orders\n/);
   assert.match(r.stdout, /Deploying secrets\.\.\.\n {2}- API_URL\n/);
-  assert.match(r.stdout, /Secret entry must have 'name' and 'value'\./);
+  assert.match(r.stderr, /^Secret entry must have 'name' and 'value'\.\n/);
   assert.match(r.stdout, /Secret "EMPTY" added successfully/); // empty string is a value
-  assert.match(r.stdout, /Deployment completed successfully!\n$/);
+  assert.doesNotMatch(r.stdout, /completed successfully/);
+  assert.match(r.stderr, /\nDeployment failed: 1 item\(s\) could not be deployed\.\n$/);
   assert.equal(sb.api.calls.find((c) => c.op === "CREATE_WEBHOOK_MUTATION").variables.environmentId, "ws-1");
   const saves = sb.api.calls.filter((c) => c.op === "SAVE_SECRET_MUTATION");
   assert.equal(saves.length, 2);
@@ -73,19 +75,18 @@ test("deploy: missing workspace is created (tags joined) and becomes the target"
   assert.equal(sb.readSession().selectedWorkspace, "ws-fresh");
 }));
 
-test("deploy: when workspace creation fails the previously selected workspace receives the resources", sandboxTest(async (sb) => {
+test("deploy: when workspace creation fails the deployment stops (nothing goes to the selected workspace), exit 1", sandboxTest(async (sb) => {
   sb.write("d.yaml", "workspaces:\n  - name: Fresh\n    webhooks:\n      - name: hook\n");
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Other"]));
   sb.api.on("CREATE_WORKSPACE_MUTATION", gqlError("quota"));
   sb.api.on("CREATE_WEBHOOK_MUTATION", { createAutomationWebhook: { id: "wh-1" } });
   sb.api.on("LIST_WEBHOOKS_QUERY", { listAutomationWebhooks: [] });
   const r = await sb.run(["deploy", "d.yaml"]);
-  // PINS SUSPECT BEHAVIOUR: createWorkspace swallows its error; deploy then falls back to
-  // the session's current workspace (ws-sel) and deploys the webhook there. Exit code 0.
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /Error creating workspace: quota/);
-  assert.equal(sb.api.calls.find((c) => c.op === "CREATE_WEBHOOK_MUTATION").variables.environmentId, "ws-sel");
-  assert.match(r.stdout, /Deployment completed successfully!\n$/);
+  // PLAT-81: was exit 0 with the webhook deployed into the session's current workspace (ws-sel).
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Deployment failed: Error creating workspace: quota\n");
+  assert.ok(!sb.api.ops().includes("CREATE_WEBHOOK_MUTATION"));
+  assert.doesNotMatch(r.stdout, /completed successfully/);
 }));
 
 test("deploy: steps from name+file and from syncPath (no prompt)", sandboxTest(async (sb) => {
@@ -149,18 +150,21 @@ test("deploy: connectors by id, by name, with neither, and unknown name", sandbo
   }));
   sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: true });
   const r = await sb.run(["deploy", "d.yaml"]);
-  assert.equal(r.code, 0);
+  // PLAT-81: the entry with neither and the unknown name are failed items (were skipped silently, exit 0).
+  assert.equal(r.code, 1);
   const adds = sb.api.calls.filter((c) => c.op === "ADD_CONNECTOR_MUTATION").map((c) => c.variables);
   // namespace of a connector found by name is lost: the available-connectors query does not return one
   assert.deepEqual(adds, [
     { id: "m-1", environmentId: "ws-1", name: "Mailer", namespace: "mail" },
     { id: "m-2", environmentId: "ws-1", name: "Chat" },
   ]);
-  assert.match(r.stdout, /No connectorId or connectorName provided for connector entry\./);
+  assert.match(r.stderr, /^No connectorId or connectorName provided for connector entry\.\n/m);
   assert.match(r.stdout, /Connector with name 'Ghost' not found in available connectors\./);
+  assert.match(r.stderr, /^Connector 'Ghost' was not deployed: no available connector has that name\.\n/m);
+  assert.match(r.stderr, /Deployment failed: 2 item\(s\) could not be deployed\.\n$/);
 }));
 
-test("deploy: a failing connector add is swallowed and the deploy goes on", sandboxTest(async (sb) => {
+test("deploy: a failing connector add is reported, the deploy goes on, and the run exits 1", sandboxTest(async (sb) => {
   sb.write("d.yaml", "workspaces:\n  - name: Dev\n    connectors:\n      - connectorId: m-1\n        connectorName: Mailer\n    webhooks:\n      - name: after\n");
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
   sb.api.on("ADD_CONNECTOR_MUTATION", gqlError("no licence"));
@@ -168,12 +172,11 @@ test("deploy: a failing connector add is swallowed and the deploy goes on", sand
   sb.api.on("LIST_WEBHOOKS_QUERY", { listAutomationWebhooks: [{ id: "wh-1", name: "after", key: "k" }] });
   sb.api.on("ME_QUERY", { me: { realm: { region: null } } });
   const r = await sb.run(["deploy", "d.yaml"]);
-  // PINS SUSPECT BEHAVIOUR: the connector error is printed by addConnector, then dropped by an
-  // empty catch in deploy; the run still ends with "completed successfully" and exit code 0.
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /Error creating connector: no licence/);
+  // PLAT-81: was dropped by an empty catch; the run ended "completed successfully" with exit code 0.
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error creating connector: no licence\n\nDeployment failed: 1 item(s) could not be deployed.\n");
   assert.ok(sb.api.ops().includes("CREATE_WEBHOOK_MUTATION"));
-  assert.match(r.stdout, /Deployment completed successfully!\n$/);
+  assert.doesNotMatch(r.stdout, /completed successfully/);
 }));
 
 test("deploy: tasks are created with inline data or from a file", sandboxTest(async (sb) => {
@@ -207,6 +210,9 @@ test("deploy: sections run in the order steps, libraries, webhooks, connectors, 
     "    steps:", "      - name: st", "        file: s.js",
   ].join("\n"));
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
+  // PLAT-115: step and library entries first check that the name is free in the workspace
+  sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: [] });
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: [] });
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s" });
   sb.api.on("VALIDATE_IF_QUERY", ok);
   sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
@@ -233,45 +239,42 @@ test("deploy company: switches company first (through the realm endpoint)", sand
   assert.equal(sb.axiosCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
 }));
 
-test("deploy company: an unknown company does not stop the deployment", sandboxTest(async (sb) => {
+test("deploy company: an unknown company stops the deployment before anything is deployed", sandboxTest(async (sb) => {
   sb.write("d.yaml", "company: Nope\nworkspaces:\n  - name: Dev\n    webhooks:\n      - name: w\n");
   sb.api.on("ME_QUERY", { me: { realms: [{ id: "r-2", name: "Beta Co" }], realm: {} } });
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
   sb.api.on("CREATE_WEBHOOK_MUTATION", { createAutomationWebhook: { id: "w" } });
   sb.api.on("LIST_WEBHOOKS_QUERY", { listAutomationWebhooks: [] });
   const r = await sb.run(["deploy", "d.yaml"]);
-  // PINS SUSPECT BEHAVIOUR: "Company not found" is printed, then resources are deployed into
-  // whatever company the session is currently in.
-  assert.match(r.stdout, /Company not found\n/);
-  assert.ok(sb.api.ops().includes("CREATE_WEBHOOK_MUTATION"));
-  assert.equal(r.code, 0);
+  // PLAT-81: was "Company not found", then the resources went into whatever company the session was in.
+  assert.equal(r.stderr, "Deployment failed: Company not found\n");
+  assert.ok(!sb.api.ops().includes("CREATE_WEBHOOK_MUTATION"));
+  assert.ok(!sb.api.ops().includes("LIST_ENVIRONMENTS_QUERY"));
+  assert.equal(r.code, 1);
 }));
 
-test("deploy: task and secret API failures do not change the exit code or the final banner", sandboxTest(async (sb) => {
+test("deploy: task and secret API failures exit 1 without the success banner", sandboxTest(async (sb) => {
   sb.write("d.yaml", "workspaces:\n  - name: Dev\n    secrets:\n      - name: S\n        value: v\n    tasks:\n      - name: t\n        data: {}\n");
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
   sb.api.on("GET_SECRET_QUERY", gqlError("denied"));
   sb.api.on("CREATE_TASK_MUTATION", gqlError("denied"));
   const r = await sb.run(["deploy", "d.yaml"]);
-  // PINS SUSPECT BEHAVIOUR: nothing was deployed, yet the run ends "completed successfully", exit 0.
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /Error adding secret: denied/);
-  assert.match(r.stderr, /Error creating task: denied/);
-  assert.match(r.stdout, /Deployment completed successfully!\n$/);
+  // PLAT-81: was "completed successfully" and exit 0 although nothing was deployed.
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error adding secret: denied\nError creating task: denied\n\nDeployment failed: 2 item(s) could not be deployed.\n");
+  assert.doesNotMatch(r.stdout, /completed successfully/);
 }));
 
-test("deploy: a webhook failure terminates the whole process with exit 1", sandboxTest(async (sb) => {
+test("deploy: a webhook failure is reported, the other sections still run, exit 1", sandboxTest(async (sb) => {
   sb.write("d.yaml", "workspaces:\n  - name: Dev\n    webhooks:\n      - name: w\n    tasks:\n      - name: t\n        data: {}\n");
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
   sb.api.on("CREATE_WEBHOOK_MUTATION", gqlError("denied"));
   sb.api.on("CREATE_TASK_MUTATION", { createAutomationTask: "t" });
   const r = await sb.run(["deploy", "d.yaml"]);
-  // PINS SUSPECT BEHAVIOUR: addWebhook calls process.exit(1) itself, so the remaining sections
-  // never run and the "Deployment failed" handler is bypassed. Other resources only log.
+  // PLAT-81: addWebhook called process.exit(1) itself, so the remaining sections never ran.
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Error creating webhook: denied/);
-  assert.doesNotMatch(r.stderr, /Deployment failed/);
-  assert.ok(!sb.api.ops().includes("CREATE_TASK_MUTATION"));
+  assert.equal(r.stderr, "Error creating webhook: denied\n\nDeployment failed: 1 item(s) could not be deployed.\n");
+  assert.ok(sb.api.ops().includes("CREATE_TASK_MUTATION"));
   assert.doesNotMatch(r.stdout, /Deployment completed/);
 }));
 
@@ -301,6 +304,7 @@ test("deploy: missing file, invalid YAML and empty file all fail with exit code 
 
 test("deploy: the yaml path argument is required", sandboxTest(async (sb) => {
   const r = await sb.run(["deploy"]);
-  assert.equal(r.code, 1);
+  // PLAT-81: a usage error exits 2 (was commander's 1).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /missing required argument 'yamlPath'/);
 }));

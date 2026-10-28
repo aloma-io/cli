@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { initiateAuth, clearSessionData } from "./commands/auth/index.js";
-import chalk from "chalk";
 import {
   listWorkspaces,
   createWorkspace,
@@ -76,6 +75,7 @@ import {
 } from "./commands/user/index.js";
 import { setupCLIConfig } from "./setup.js";
 import { getPackageVersion } from "./package-utils.js";
+import { failure, run, UsageError } from "./runtime.js";
 
 const program = new Command();
 
@@ -95,9 +95,7 @@ program
       await initiateAuth();
       // Success message is printed within initiateAuth/callback handler
     } catch (error) {
-      console.error("\nAuthentication failed:", error.message);
-      // More detailed error might be logged within initiateAuth
-      process.exit(1); // Exit with error code
+      throw failure("\nAuthentication failed:", error);
     }
   });
 
@@ -308,7 +306,7 @@ program
   .addCommand(
     new Command("show")
       .description("Show step details")
-      .argument("<id>", "Step ID")
+      .argument("<id>", "Step ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await showStep(id, options.workspace);
@@ -331,7 +329,7 @@ program
   .addCommand(
     new Command("delete")
       .description("Delete a step")
-      .argument("<id>", "Step ID")
+      .argument("<id>", "Step ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await deleteStep(id, options.workspace);
@@ -340,7 +338,7 @@ program
   .addCommand(
     new Command("edit")
       .description("Edit a step")
-      .argument("<id>", "Step ID")
+      .argument("<id>", "Step ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await editStep(id, options.workspace);
@@ -349,7 +347,7 @@ program
   .addCommand(
     new Command("clone")
       .description("Clone a step")
-      .argument("<id>", "Step ID")
+      .argument("<id>", "Step ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await cloneStep(id, options.workspace);
@@ -359,7 +357,10 @@ program
     new Command("pull")
       .description("Pull steps from workspace to local files")
       .option("-w, --workspace <id>", "Workspace ID")
-      .option("-s, --step <id>", "Step ID (if not specified, pulls all steps)")
+      .option(
+        "-s, --step <id>",
+        "Step ID or name (if not specified, pulls all steps)",
+      )
       .option("-p, --path <path>", "Target path (default: current directory)")
       .action(async (options) => {
         await pullStep(options.workspace, options.step, options.path);
@@ -369,7 +370,10 @@ program
     new Command("sync")
       .description("Sync local step files to workspace")
       .option("-w, --workspace <id>", "Workspace ID")
-      .option("-s, --step <id>", "Step ID (if not specified, syncs all steps)")
+      .option(
+        "-s, --step <id>",
+        "Step ID or name (if not specified, syncs all steps)",
+      )
       .option("-p, --path <path>", "Source path (default: current directory)")
       .action(async (options) => {
         await syncStep(options.workspace, options.step, options.path);
@@ -404,7 +408,7 @@ program
   .addCommand(
     new Command("show")
       .description("Show library details")
-      .argument("<id>", "Library ID")
+      .argument("<id>", "Library ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await showLibrary(id, options.workspace);
@@ -444,7 +448,7 @@ program
   .addCommand(
     new Command("update")
       .description("Update a library")
-      .argument("<id>", "Library ID")
+      .argument("<id>", "Library ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .option(
         "-f, --file <path>",
@@ -474,7 +478,7 @@ program
   .addCommand(
     new Command("delete")
       .description("Delete a library")
-      .argument("<id>", "Library ID")
+      .argument("<id>", "Library ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await deleteLibrary(id, options.workspace);
@@ -486,7 +490,7 @@ program
       .option("-w, --workspace <id>", "Workspace ID")
       .option(
         "-l, --library <id>",
-        "Library ID (if not specified, pulls all libraries)",
+        "Library ID or name (if not specified, pulls all libraries)",
       )
       .option("-p, --path <path>", "Target path (default: current directory)")
       .action(async (options) => {
@@ -499,7 +503,7 @@ program
       .option("-w, --workspace <id>", "Workspace ID")
       .option(
         "-l, --library <id>",
-        "Library ID (if not specified, syncs all libraries)",
+        "Library ID or name (if not specified, syncs all libraries)",
       )
       .option("-p, --path <path>", "Source path (default: current directory)")
       .action(async (options) => {
@@ -654,8 +658,7 @@ program
           try {
             secretOptions = yaml.load(options.options);
           } catch (error) {
-            console.error(chalk.red("Invalid JSON in options:"), error.message);
-            return;
+            throw new UsageError(`Invalid JSON in options: ${error.message}`);
           }
         }
         await addSecret(
@@ -732,11 +735,9 @@ program
           try {
             config = JSON.parse(options.config);
           } catch (e) {
-            console.error(
-              chalk.red("Error: -c/--config must be a valid JSON string:"),
-              e.message,
+            throw new UsageError(
+              `Error: -c/--config must be a valid JSON string: ${e.message}`,
             );
-            return;
           }
         }
 
@@ -782,11 +783,9 @@ program
           try {
             config = JSON.parse(options.config);
           } catch (e) {
-            console.error(
-              chalk.red("Error: -c/--config must be a valid JSON string:"),
-              e.message,
+            throw new UsageError(
+              `Error: -c/--config must be a valid JSON string: ${e.message}`,
             );
-            return;
           }
         }
 
@@ -877,8 +876,7 @@ program
       await deployFromYaml(yamlPath);
       // await deployFromYaml(yamlPath, { force: options.force });
     } catch (error) {
-      console.error(chalk.red("Deployment failed:"), error.message);
-      process.exit(1);
+      throw failure("Deployment failed:", error);
     }
   });
 
@@ -891,12 +889,11 @@ program
     try {
       await setupCLIConfig({ force: options.force });
     } catch (error) {
-      console.error(chalk.red("Setup failed:"), error.message);
-      process.exit(1);
+      throw failure("Setup failed:", error);
     }
   });
 
-program.parse(process.argv);
+await run(program, process.argv);
 
 // Export for programmatic use
 export default program;

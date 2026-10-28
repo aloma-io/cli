@@ -6,11 +6,11 @@ import {
 import chalk from "chalk";
 import { graphQuery, urlForRegion } from "../../utils.js";
 import { resolveWorkspaceId } from "../workspace/index.js";
+import { CliError, UsageError, failure } from "../../runtime.js";
 
 export async function listWebhooks(workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     const response = await graphQuery(LIST_WEBHOOKS_QUERY, {
       id: workspaceId,
@@ -33,19 +33,16 @@ export async function listWebhooks(workspaceIdentifier) {
       console.log(`URL: ${webhookUrl + webhook.key}`);
     });
   } catch (error) {
-    console.error(chalk.red(`Error listing webhooks: ${error.message}`));
-    process.exit(1);
+    throw failure("Error listing webhooks:", error);
   }
 }
 
 export async function addWebhook(name, workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     if (!name) {
-      console.log(chalk.yellow("⚠ Please provide name for the webhook"));
-      return;
+      throw new UsageError("⚠ Please provide name for the webhook");
     }
 
     const response = await graphQuery(CREATE_WEBHOOK_MUTATION, {
@@ -57,19 +54,16 @@ export async function addWebhook(name, workspaceIdentifier) {
     console.log(chalk.green(`\n✓ Webhook "${name}" created successfully!`));
     await showWebhook(webhook.id, workspaceId);
   } catch (error) {
-    console.error(chalk.red(`Error creating webhook: ${error.message}`));
-    process.exit(1);
+    throw failure("Error creating webhook:", error);
   }
 }
 
 export async function showWebhook(webhookId, workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     if (!webhookId) {
-      console.log(chalk.yellow("⚠ Please provide a webhook ID"));
-      return;
+      throw new UsageError("⚠ Please provide a webhook ID");
     }
 
     const response = await graphQuery(LIST_WEBHOOKS_QUERY, {
@@ -80,8 +74,7 @@ export async function showWebhook(webhookId, workspaceIdentifier) {
     const webhook = webhooks.find((w) => w.id === webhookId);
 
     if (!webhook) {
-      console.log(chalk.yellow(`⚠ Webhook with ID ${webhookId} not found`));
-      return;
+      throw new CliError(`⚠ Webhook with ID ${webhookId} not found`);
     }
 
     const webhookUrl = await urlForRegion(`https://connect.aloma.io/event/`);
@@ -92,18 +85,16 @@ export async function showWebhook(webhookId, workspaceIdentifier) {
     console.log(`Last Used: ${webhook.last_used_at || "Never"}`);
     console.log(`URL: ${webhookUrl + webhook.key}`);
   } catch (error) {
-    console.error(chalk.red("Error showing webhook:"), error.message);
+    throw failure("Error showing webhook:", error);
   }
 }
 
 export async function deleteWebhook(webhookId, workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     if (!webhookId) {
-      console.log(chalk.yellow("⚠ Please provide a webhook ID"));
-      return;
+      throw new UsageError("⚠ Please provide a webhook ID");
     }
 
     const response = await graphQuery(REMOVE_WEBHOOK_MUTATION, {
@@ -114,10 +105,9 @@ export async function deleteWebhook(webhookId, workspaceIdentifier) {
     if (response.deleteAutomationWebhook) {
       console.log(chalk.green(`✓ Webhook ${webhookId} deleted successfully`));
     } else {
-      console.log(chalk.yellow(`⚠ Webhook ${webhookId} could not be deleted`));
+      throw new CliError(`⚠ Webhook ${webhookId} could not be deleted`);
     }
   } catch (error) {
-    console.error(chalk.red(`Error deleting webhook: ${error.message}`));
-    process.exit(1);
+    throw failure("Error deleting webhook:", error);
   }
 }

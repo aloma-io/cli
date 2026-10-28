@@ -21,6 +21,7 @@ import {
 import { exchangeIdTokenForSession } from "./session.js";
 import { assertSecureUrl, isLoopbackHost } from "../../net-security.js";
 import { switchDefaultWorkspace } from "../workspace/index.js";
+import { failure } from "../../runtime.js";
 
 let server;
 let servers = []; // the callback server listens on 127.0.0.1 and, if available, ::1
@@ -270,7 +271,7 @@ async function initiateAuth() {
           console.log();
           resolve(true);
         } catch (err) {
-          console.error(chalk.red("❌ Callback handling failed:"), err.message);
+          // Printed once, by the auth command ("Authentication failed: ..."), see src/runtime.js.
           res.writeHead(500, { "Content-Type": "text/html" });
           res.end(`
               <!DOCTYPE html>
@@ -352,20 +353,13 @@ async function initiateAuth() {
       authTimeout = setTimeout(
         () => {
           if (server && server.listening) {
-            console.error(
-              chalk.red("❌ Authentication timed out after 5 minutes."),
-            );
             shutdownServer();
-            reject(new Error("Authentication timed out"));
+            reject(new Error("Authentication timed out after 5 minutes."));
           }
         },
         5 * 60 * 1000,
       ); // 5 minutes timeout
     } catch (err) {
-      console.error(
-        chalk.red("❌ Authentication initialization failed:"),
-        err.message,
-      );
       shutdownServer(); // Ensure server is closed on initial error
       reject(err);
     }
@@ -459,10 +453,7 @@ async function clearSessionData() {
       console.log(chalk.yellow("ℹ️  No local session data found to clear"));
       return false;
     } else {
-      console.error(
-        chalk.red(`❌ Failed to clear session data: ${error.message}`),
-      );
-      return false;
+      throw failure("❌ Failed to clear session data:", error);
     }
   }
 }

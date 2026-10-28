@@ -95,7 +95,8 @@ export const graphQuery = async (query, variables = {}) => {
 
     return data.data;
   } catch (error) {
-    console.error(chalk.red("GraphQL Error:"), error.message);
+    // Printed once, by the command's error handler (src/runtime.js); this prefix is used when no command label is added.
+    error.prefix = "GraphQL Error:";
     throw error;
   }
 };

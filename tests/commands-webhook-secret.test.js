@@ -53,9 +53,11 @@ test("webhook list: errors exit with code 1", sandboxTest(async (sb) => {
   assert.match(r.stderr, /Error listing webhooks: denied/);
 }));
 
-test("webhook list: no selected workspace", sandboxTest({ session: { token: "t" } }, async (sb) => {
+test("webhook list: no selected workspace exits 1", sandboxTest({ session: { token: "t" } }, async (sb) => {
   const r = await sb.run(["webhook", "list"]);
-  assert.equal(r.stdout, "No workspace selected. Use `aloma workspace switch` to select one.\n");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "No workspace selected. Use `aloma workspace switch` to select one.\n");
+  assert.equal(r.stdout, "");
   assert.deepEqual(sb.api.calls, []);
 }));
 
@@ -91,16 +93,16 @@ test("webhook show: found, not found", sandboxTest(async (sb) => {
   let r = await sb.run(["webhook", "show", "wh-2"]);
   assert.match(r.stdout, /Name: refunds\nID: wh-2\nKey: key-two\nLast Used: Never\nURL: https:\/\/connect\.aloma\.io\/event\/key-two\n$/);
   r = await sb.run(["webhook", "show", "wh-404"]);
-  assert.equal(r.stdout, "⚠ Webhook with ID wh-404 not found\n");
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "⚠ Webhook with ID wh-404 not found\n");
+  assert.equal(r.code, 1);
 }));
 
-test("webhook show: errors are reported with exit code 0 (list/add/delete use 1)", sandboxTest(async (sb) => {
+test("webhook show: errors exit 1, like list/add/delete", sandboxTest(async (sb) => {
   sb.api.on("LIST_WEBHOOKS_QUERY", gqlError("denied"));
   const r = await sb.run(["webhook", "show", "wh-1"]);
-  // PINS SUSPECT BEHAVIOUR: inconsistent exit codes within the webhook group.
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /Error showing webhook: denied/);
+  // PLAT-81: was exit 0, inconsistent with the rest of the webhook group.
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error showing webhook: denied\n");
 }));
 
 test("webhook delete: success, refusal by API, error", sandboxTest(async (sb) => {
@@ -110,8 +112,8 @@ test("webhook delete: success, refusal by API, error", sandboxTest(async (sb) =>
   assert.deepEqual(ops(sb), [["REMOVE_WEBHOOK_MUTATION", { id: "wh-1", environmentId: "ws-sel" }]]);
   sb.api.on("REMOVE_WEBHOOK_MUTATION", { deleteAutomationWebhook: false });
   r = await sb.run(["webhook", "delete", "wh-1"]);
-  assert.equal(r.stdout, "⚠ Webhook wh-1 could not be deleted\n");
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "⚠ Webhook wh-1 could not be deleted\n");
+  assert.equal(r.code, 1);
   sb.api.on("REMOVE_WEBHOOK_MUTATION", gqlError("gone"));
   r = await sb.run(["webhook", "delete", "wh-1"]);
   assert.equal(r.code, 1);
@@ -173,8 +175,8 @@ test("secret list: null or empty config", sandboxTest(async (sb) => {
 test("secret list: API error", sandboxTest(async (sb) => {
   sb.api.on("GET_SECRET_QUERY", gqlError("denied"));
   const r = await sb.run(["secret", "list"]);
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /Error fetching secrets: denied/);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error fetching secrets: denied\n");
 }));
 
 test("secret add: merges the new secret into the existing config and saves the whole object", sandboxTest(async (sb) => {
@@ -212,8 +214,8 @@ test("secret add: an existing secret with the same name is overwritten without a
 test("secret add --options <yaml> always fails: cli.js never imports js-yaml", sandboxTest(async (sb) => {
   const r = await sb.run(["secret", "add", "A", "1", "-o", "k: v"]);
   // PINS SUSPECT BEHAVIOUR: ReferenceError is caught and shown as "Invalid JSON in options";
-  // nothing is sent and the exit code is 0.
-  assert.equal(r.code, 0);
+  // nothing is sent. PLAT-81: the refused option now exits 2 (was 0); the missing import is left for a later slice.
+  assert.equal(r.code, 2);
   assert.equal(r.stderr, "Invalid JSON in options: yaml is not defined\n");
   assert.deepEqual(sb.api.calls, []);
 }));
@@ -222,13 +224,14 @@ test("secret add: API error on save", sandboxTest(async (sb) => {
   sb.api.on("GET_SECRET_QUERY", CONFIG);
   sb.api.on("SAVE_SECRET_MUTATION", gqlError("too big"));
   const r = await sb.run(["secret", "add", "A", "1"]);
-  assert.match(r.stderr, /Error adding secret: too big/);
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error adding secret: too big\n");
+  assert.equal(r.code, 1);
 }));
 
 test("secret add: value and name are required arguments", sandboxTest(async (sb) => {
   const r = await sb.run(["secret", "add", "A"]);
-  assert.equal(r.code, 1);
+  // PLAT-81: a usage error exits 2 (was commander's 1).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /missing required argument 'value'/);
 }));
 
@@ -244,15 +247,16 @@ test("secret delete: removes the key and saves the rest", sandboxTest(async (sb)
 test("secret delete: unknown name saves nothing", sandboxTest(async (sb) => {
   sb.api.on("GET_SECRET_QUERY", CONFIG);
   const r = await sb.run(["secret", "delete", "NOPE"]);
-  assert.equal(r.stdout, '❌ Secret "NOPE" not found. Use `aloma secret list` to see available secrets.\n');
+  assert.equal(r.stderr, '❌ Secret "NOPE" not found. Use `aloma secret list` to see available secrets.\n');
   assert.deepEqual(sb.api.ops(), ["GET_SECRET_QUERY"]);
-  assert.equal(r.code, 0);
+  assert.equal(r.code, 1);
 }));
 
 test("secret delete: API error", sandboxTest(async (sb) => {
   sb.api.on("GET_SECRET_QUERY", gqlError("denied"));
   const r = await sb.run(["secret", "delete", "A"]);
-  assert.match(r.stderr, /Error deleting secret: denied/);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error deleting secret: denied\n");
 }));
 
 test("secret commands: explicit -w name is resolved before use", sandboxTest(async (sb) => {
