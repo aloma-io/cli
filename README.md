@@ -161,6 +161,16 @@ url: "https://github.com/user/repo.git"
 username: "username"
 ```
 
+## Exit Codes
+
+Every `aloma` command exits with:
+
+- `0` when the operation succeeded
+- `1` when the operation failed (API error, not found, refused, or any item of a `deploy` failed)
+- `2` for a usage error (missing argument, unknown option or command, invalid option value)
+
+Errors are printed once, on stderr. Set `DEBUG=1` to add the stack trace.
+
 ## Documentation
 
 For detailed command reference, examples, and advanced usage, see [docs/README.md](docs/README.md).
