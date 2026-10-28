@@ -29,6 +29,7 @@ const CLI = "src/cli.js";
 const UT = "src/utils.js";
 const RT = "src/runtime.js";
 const A = "src/commands/auth/index.js";
+const N = "src/names.js";
 
 // [id, file, find (must occur exactly once), replace, tests expected to catch it, description]
 export const MUTATIONS = [
@@ -89,6 +90,20 @@ export const MUTATIONS = [
   ["E15", D, "      failed++;\n      reportError(error);\n", "      reportError(error);\n", "exit-codes", "deploy: failed items are not counted (success banner, exit 0)"],
   ["E16", T, 'throw new UsageError("⚠ No data provided");', 'throw new CliError("⚠ No data provided");', "exit-codes", "task: missing data is an operation failure (exit 1), not a usage error"],
   ["E17", U, "      throw new UsageError(error.message);\n    }\n\n    await graphQuery(UPDATE_COMPANY_MEMBER_MUTATION", "      throw new CliError(error.message);\n    }\n\n    await graphQuery(UPDATE_COMPANY_MEMBER_MUTATION", "exit-codes", "user: an invalid role exits 1, not 2"],
+  // PLAT-115: one resolver for step and library names (tests/commands-names.test.js). Each mutant puts back
+  // first-hit, the raw-name-as-id fall-through, or an add without the uniqueness check.
+  ["N01", N, "  if (matches.length > 1) {\n    throw new CliError(\n      `The ${kind} name", "  if (false) {\n    throw new CliError(\n      `The ${kind} name", "names", "resolver: first name match wins (ambiguity not refused)"],
+  ["N02", N, "  if (byName) return byName;\n  throw new CliError(", "  if (byName) return byName;\n  return { id: ref };\n  throw new CliError(", "names", "resolver: an unknown name is passed on as an id"],
+  ["N03", N, "  if (byId) return byId;\n", "", "names", "resolver: an exact id is no longer tried first"],
+  ["N04", S, '    assertNameFree(await listWorkspaceSteps(workspaceId), name.trim(), "step");\n', "", "names", "step add without the uniqueness check"],
+  ["N05", L, '    assertNameFree(\n      await listWorkspaceLibraries(workspaceId),\n      name.trim(),\n      "library",\n    );\n', "", "names", "library add without the uniqueness check"],
+  ["N06", S, '    assertNameFree(\n      await listWorkspaceSteps(workspaceId),\n      sourceStep.name,\n      "step",\n    );\n', "", "names", "step clone without the uniqueness check in the target"],
+  ["N07", S, '  return resolveByIdOrName(await listWorkspaceSteps(workspaceId), ref, "step")\n    .id;', "  return ref;", "names", "step commands send the raw name on as the id"],
+  ["N08", L, '  return resolveByIdOrName(\n    await listWorkspaceLibraries(workspaceId),\n    ref,\n    "library",\n  ).id;', "  return ref;", "names", "library commands send the raw name on as the id"],
+  ["N09", S, '          step = uniqueByName(steps, stepName, "step");', "          step = steps.find((s) => s.name === stepName) ?? null;", "names", "step sync (all): first name match wins"],
+  ["N10", L, '          library = uniqueByName(libraries, libraryName, "library");', "          library = libraries.find((l) => l.name === libraryName) ?? null;", "names", "library sync (all): first name match wins"],
+  ["N11", S, '          uniqueByName(steps, stepSummary.name, "step");', "", "names", "step pull (all): same-named steps overwrite each other again"],
+  ["N12", L, '          uniqueByName(libraries, librarySummary.name, "library");', "", "names", "library pull (all): same-named libraries overwrite each other again"],
 ];
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));

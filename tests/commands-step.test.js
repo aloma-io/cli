@@ -7,6 +7,9 @@ import { sandboxTest, gqlError, canFakeOpen } from "./helpers/cli-harness.js";
 
 const ops = (sb) => sb.api.calls.map((c) => [c.op, c.variables]);
 const ok = { validateAutomationIf: true };
+// PLAT-115: commands that take a step by id or name first list the workspace's steps to resolve it.
+const LISTED = (...steps) => ({ listAutomationSteps: steps.map(([id, name]) => ({ id, name })) });
+const LIST = ["LIST_STEPS_QUERY", { id: "ws-sel", includeDisabled: true }];
 const stepFile = (cond, body) =>
   `export const condition = ${cond};\n\nexport const content = async () => {\n${body}\n};\n`;
 
@@ -69,17 +72,18 @@ test("step list: API error is printed once, exit 1", sandboxTest(async (sb) => {
 
 // -------------------------------------------------------------------- show
 
-test("step show: prints details and JSON content; ignores the workspace option", sandboxTest(async (sb) => {
+test("step show: prints details and JSON content; the step is resolved in the workspace", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-1", "first"]));
   sb.api.on("GET_STEP_QUERY", {
     getAutomationStep: {
       id: "s-1", name: "first", valid: true, enabled: true, version: 4, nocode_type: null,
       content: { if: "{}", do: "x" }, nocode_content: { a: 1 },
     },
   });
-  const r = await sb.run(["step", "show", "s-1", "-w", "whatever"]);
+  const r = await sb.run(["step", "show", "s-1"]);
   assert.equal(r.code, 0);
-  // -w is accepted but unused: no workspace lookup happens.
-  assert.deepEqual(ops(sb), [["GET_STEP_QUERY", { id: "s-1" }]]);
+  // PLAT-115: was a bare GET with -w unused; the id is now resolved against the workspace's steps.
+  assert.deepEqual(ops(sb), [LIST, ["GET_STEP_QUERY", { id: "s-1" }]]);
   assert.equal(
     r.stdout,
     [
@@ -91,6 +95,7 @@ test("step show: prints details and JSON content; ignores the workspace option",
 }));
 
 test("step show: not found; API error", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-9", "gone"]));
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: null });
   let r = await sb.run(["step", "show", "s-9"]);
   assert.equal(r.stderr, "Step with ID s-9 not found.\n");
@@ -104,13 +109,15 @@ test("step show: not found; API error", sandboxTest(async (sb) => {
 // --------------------------------------------------------------------- add
 
 test("step add: creates the step with a trimmed name and the nocode type", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED());
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-new" });
   const r = await sb.run(["step", "add", "  my step ", "-t", "http"]);
   assert.equal(r.stdout, "Created step [my step] with ID: s-new\n");
-  assert.deepEqual(ops(sb), [["CREATE_STEP_MUTATION", { name: "my step", environment_id: "ws-sel", nocode_type: "http" }]]);
+  assert.deepEqual(ops(sb), [LIST, ["CREATE_STEP_MUTATION", { name: "my step", environment_id: "ws-sel", nocode_type: "http" }]]);
 }));
 
 test("step add -f: parses the file, validates the condition, saves content as version 0", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED());
   sb.write("s.js", stepFile("{ status: 'new', }", "  data.x = 1;\n  data.y = 2;"));
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-new" });
   sb.api.on("VALIDATE_IF_QUERY", ok);
@@ -119,6 +126,7 @@ test("step add -f: parses the file, validates the condition, saves content as ve
   assert.equal(r.code, 0);
   assert.equal(r.stdout, "Created step [s] with ID: s-new\nSuccessfully added step content from file: s.js\n");
   assert.deepEqual(ops(sb), [
+    LIST,
     ["CREATE_STEP_MUTATION", { name: "s", environment_id: "ws-sel", nocode_type: null }],
     ["VALIDATE_IF_QUERY", { content: "{\n  status: 'new'\n}" }],
     ["SAVE_STEP_MUTATION", {
@@ -129,6 +137,7 @@ test("step add -f: parses the file, validates the condition, saves content as ve
 }));
 
 test("step add -f: file without condition/content, or invalid condition, leaves an empty step", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED());
   sb.write("bad.js", "export const nothing = 1;\n");
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-new" });
   let r = await sb.run(["step", "add", "s", "-f", "bad.js"]);
@@ -136,7 +145,7 @@ test("step add -f: file without condition/content, or invalid condition, leaves 
   // PINS SUSPECT BEHAVIOUR: the step is created first; a bad file only prints an error, so an
   // empty step remains in the workspace. PLAT-81: the exit code is now 1 (was 0).
   assert.match(r.stderr, /Error reading or parsing file: Error parsing step file\. Could not parse condition from file/);
-  assert.deepEqual(sb.api.ops(), ["CREATE_STEP_MUTATION"]);
+  assert.deepEqual(sb.api.ops(), ["LIST_STEPS_QUERY", "CREATE_STEP_MUTATION"]);
 
   sb.write("inv.js", stepFile("{ a: 1 }", "data.a = 2;"));
   sb.api.on("VALIDATE_IF_QUERY", { validateAutomationIf: false });
@@ -150,6 +159,7 @@ test("step add -f: file without condition/content, or invalid condition, leaves 
 }));
 
 test("step add: save refused by API prints no success line", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED());
   sb.write("s.js", stepFile("{ a: 1 }", "data.a = 2;"));
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-new" });
   sb.api.on("VALIDATE_IF_QUERY", ok);
@@ -159,6 +169,7 @@ test("step add: save refused by API prints no success line", sandboxTest(async (
 }));
 
 test("step add: create error", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED());
   sb.api.on("CREATE_STEP_MUTATION", gqlError("exists"));
   const r = await sb.run(["step", "add", "s"]);
   assert.equal(r.stderr, "Error creating step: exists\n");
@@ -168,10 +179,11 @@ test("step add: create error", sandboxTest(async (sb) => {
 // ------------------------------------------------------------------ delete
 
 test("step delete: sends id and workspace; reports success and refusal", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-1", "one"]));
   sb.api.on("DELETE_STEP_MUTATION", { deleteAutomationStep: true });
   let r = await sb.run(["step", "delete", "s-1"]);
   assert.equal(r.stdout, "Successfully deleted step with ID: s-1\n");
-  assert.deepEqual(ops(sb), [["DELETE_STEP_MUTATION", { id: "s-1", environment_id: "ws-sel" }]]);
+  assert.deepEqual(ops(sb), [LIST, ["DELETE_STEP_MUTATION", { id: "s-1", environment_id: "ws-sel" }]]);
   sb.api.on("DELETE_STEP_MUTATION", { deleteAutomationStep: false });
   r = await sb.run(["step", "delete", "s-1"]);
   assert.equal(r.stderr, "Step with ID s-1 not found or could not be deleted.\n");
@@ -184,29 +196,37 @@ test("step delete: sends id and workspace; reports success and refusal", sandbox
 
 // ------------------------------------------------------------------- clone
 
-test("step clone: creates a same-named step in the workspace and copies content at version 0", sandboxTest(async (sb) => {
+test("step clone: creates a same-named step in the target workspace and copies content at version 0", sandboxTest(async (sb) => {
+  sb.api.on("LIST_ENVIRONMENTS_QUERY", { listAutomationEnvironmentWithStats: [{ id: "ws-2", name: "Two" }] });
+  sb.api.on("LIST_STEPS_QUERY", (v) => (v.id === "ws-sel" ? LISTED(["s-1", "orig"]) : LISTED()));
   sb.api.on("GET_STEP_QUERY", {
     getAutomationStep: { id: "s-1", name: "orig", enabled: false, version: 7, nocode_type: "http",
       content: { if: "{ a: 1 }", do: "data.a = 2;" }, nocode_content: { n: 1 }, config_content: { c: 1 } },
   });
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-copy" });
   sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
-  const r = await sb.run(["step", "clone", "s-1"]);
-  assert.equal(r.stdout, "Successfully cloned step to workspace: ws-sel\n");
+  const r = await sb.run(["step", "clone", "s-1", "-w", "ws-2"]);
+  assert.equal(r.stdout, "Successfully cloned step to workspace: ws-2\n");
+  // PLAT-115: the source is resolved in the selected workspace, the name must be free in the target.
   assert.deepEqual(ops(sb), [
+    ["LIST_ENVIRONMENTS_QUERY", {}],
+    LIST,
     ["GET_STEP_QUERY", { id: "s-1" }],
-    ["CREATE_STEP_MUTATION", { name: "orig", environment_id: "ws-sel", nocode_type: "http" }],
+    ["LIST_STEPS_QUERY", { id: "ws-2", includeDisabled: true }],
+    ["CREATE_STEP_MUTATION", { name: "orig", environment_id: "ws-2", nocode_type: "http" }],
     ["SAVE_STEP_MUTATION", { id: "s-copy", name: "orig", if: "{ a: 1 }", do: "data.a = 2;", enabled: false, version: 0, nocode_content: { n: 1 }, config_content: { c: 1 } }],
   ]);
 }));
 
 test("step clone: a step without content is created empty; unknown id", sandboxTest(async (sb) => {
+  sb.api.on("LIST_ENVIRONMENTS_QUERY", { listAutomationEnvironmentWithStats: [{ id: "ws-2", name: "Two" }] });
+  sb.api.on("LIST_STEPS_QUERY", (v) => (v.id === "ws-sel" ? LISTED(["s-1", "orig"]) : LISTED()));
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-1", name: "orig", enabled: true, content: null } });
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-copy" });
-  await sb.run(["step", "clone", "s-1"]);
-  assert.deepEqual(sb.api.ops(), ["GET_STEP_QUERY", "CREATE_STEP_MUTATION"]);
+  await sb.run(["step", "clone", "s-1", "-w", "ws-2"]);
+  assert.deepEqual(sb.api.ops().filter((op) => op !== "LIST_ENVIRONMENTS_QUERY" && op !== "LIST_STEPS_QUERY"), ["GET_STEP_QUERY", "CREATE_STEP_MUTATION"]);
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: null });
-  const r = await sb.run(["step", "clone", "s-1"]);
+  const r = await sb.run(["step", "clone", "s-1", "-w", "ws-2"]);
   assert.equal(r.stderr, "Step with ID s-1 not found.\n");
   assert.equal(r.code, 1);
 }));
@@ -217,6 +237,7 @@ const editorScript = (sb, from, to) =>
   sb.write("editor.mjs", `import fs from "node:fs"; const f = process.argv[2]; fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(${JSON.stringify(from)}, ${JSON.stringify(to)}));\n`);
 
 test("step edit: writes a temp file, waits for the editor, saves the edit, removes the temp file", { skip: !canFakeOpen && "needs the fake `open` (macOS only)" }, sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-1", "group/orig"]));
   sb.api.on("GET_STEP_QUERY", {
     getAutomationStep: { id: "s-1", name: "group/orig", enabled: true, version: 3, nocode_content: null, config_content: { k: 1 },
       content: { if: "{ a: 1 }", do: "data.old = 1;" } },
@@ -239,6 +260,7 @@ test("step edit: writes a temp file, waits for the editor, saves the edit, remov
 }));
 
 test("step edit: an unparsable edit is reported and nothing is saved", { skip: !canFakeOpen && "needs the fake `open` (macOS only)" }, sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-1", "orig"]));
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-1", name: "orig", enabled: true, version: 1, content: { if: "{}", do: "x" } } });
   const script = editorScript(sb, "export const condition", "export const nothing");
   const r = await sb.run(["step", "edit", "s-1"], { env: { TEST_EDITOR_SCRIPT: script } });
@@ -248,9 +270,10 @@ test("step edit: an unparsable edit is reported and nothing is saved", { skip: !
 }));
 
 test("step edit: unknown step never opens an editor", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED());
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: null });
   const r = await sb.run(["step", "edit", "s-1"]);
-  assert.equal(r.stderr, "Step with ID s-1 not found.\n");
+  assert.equal(r.stderr, 'No step with the id or name "s-1" in this workspace.\n');
   assert.equal(r.code, 1);
   assert.deepEqual(sb.openCalls(), []);
 }));
@@ -286,7 +309,7 @@ test("step pull -p <dir>: creates the directory; -s pulls one step", sandboxTest
   const r = await sb.run(["step", "pull", "-s", "s-2", "-p", "out/deep"]);
   assert.equal(r.stdout, "Successfully pulled step: beta\n");
   assert.deepEqual(sb.list("out/deep"), ["beta.js"]);
-  assert.deepEqual(ops(sb), [["GET_STEP_QUERY", { id: "s-2" }]]);
+  assert.deepEqual(ops(sb), [LIST, ["GET_STEP_QUERY", { id: "s-2" }]]);
 }));
 
 test("step pull: a step without content becomes an empty condition and body", sandboxTest(async (sb) => {
@@ -295,20 +318,20 @@ test("step pull: a step without content becomes an empty condition and body", sa
   assert.equal(sb.read("empty.js"), HEADER("empty", "s-1") + "\nexport const condition = {};\n\nexport const content = async () => {\n\n};\n");
 }));
 
-test("step pull: steps with the same name overwrite each other (last one wins)", sandboxTest(async (sb) => {
+test("step pull: steps with the same name are refused, not written over each other (PLAT-115)", sandboxTest(async (sb) => {
   mockSteps(sb, [
     FULL("s-1", "dup", "{ first: 1 }", "first();"),
     FULL("s-2", "dup", "{ second: 1 }", "second();"),
     FULL("s-3", "other", "{}", "o();"),
   ]);
   const r = await sb.run(["step", "pull", "-p", "out"]);
-  // PINS SUSPECT BEHAVIOUR (known gap): one file is written per step *name*, so same-named
-  // steps silently overwrite each other, yet the summary still reports all three steps.
-  assert.deepEqual(sb.list("out"), ["dup.js", "other.js"]);
-  assert.match(sb.read("out/dup.js"), /ID: s-2/);
-  assert.match(sb.read("out/dup.js"), /second\(\);/);
-  assert.doesNotMatch(sb.read("out/dup.js"), /first/);
-  assert.match(r.stdout, /Successfully pulled 3 steps to:/);
+  // PLAT-115: was "last one wins" with all three reported pulled. One file is written per step
+  // *name*, so a name two steps share is refused (ids listed); the rest are pulled; exit 1.
+  assert.deepEqual(sb.list("out"), ["other.js"]);
+  assert.match(r.stderr, /The step name "dup" is ambiguous in this workspace \(ids: s-1, s-2\)\. Use the id\.\n/);
+  assert.match(r.stderr, /Steps with 1 ambiguous name\(s\) were not pulled to: out\n$/);
+  assert.doesNotMatch(r.stdout, /Successfully pulled/);
+  assert.equal(r.code, 1);
 }));
 
 // SECURITY (was PINS SUSPECT BEHAVIOUR: names come from the server and were not sanitised, so
@@ -371,7 +394,7 @@ test("step pull: empty workspace, unknown step id, API error", sandboxTest(async
   assert.equal(r.code, 0);
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: null });
   r = await sb.run(["step", "pull", "-s", "nope"]);
-  assert.equal(r.stderr, "Step with ID nope not found.\n");
+  assert.equal(r.stderr, 'No step with the id or name "nope" in this workspace.\n');
   assert.equal(r.code, 1);
   sb.api.on("LIST_STEPS_QUERY", gqlError("denied"));
   r = await sb.run(["step", "pull"]);
@@ -466,6 +489,7 @@ test("step sync: an update refused by the API counts as failed (exit 1)", sandbo
 
 test("step sync -s <id>: syncs one step from <path>/<last name segment>.js", sandboxTest(async (sb) => {
   sb.write("src/beta.js", stepFile("{ b: 1 }", "data.b = 2;"));
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-2", "group/beta"]));
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-2", name: "group/beta", enabled: true, version: 5 } });
   sb.api.on("VALIDATE_IF_QUERY", ok);
   sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
@@ -484,10 +508,11 @@ test("step sync -s <id>: syncs one step from <path>/<last name segment>.js", san
 }));
 
 test("step sync -s: unknown id", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", LISTED());
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: null });
   sb.write("src/x.js", "");
   const r = await sb.run(["step", "sync", "-s", "nope", "-p", "src"]);
-  assert.equal(r.stderr, "Step with ID nope not found.\n");
+  assert.equal(r.stderr, 'No step with the id or name "nope" in this workspace.\n');
   assert.equal(r.code, 1);
 }));
 

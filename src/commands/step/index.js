@@ -21,9 +21,29 @@ import os from "os";
 import open from "open";
 import { resolveWorkspaceId } from "../workspace/index.js";
 import { CliError, UsageError, failure } from "../../runtime.js";
+import {
+  uniqueByName,
+  resolveByIdOrName,
+  assertNameFree,
+} from "../../names.js";
 import readline from "readline";
 import parser from "@babel/parser";
 import generate from "@babel/generator";
+
+// Every step in the workspace, disabled ones too: what step names are resolved against (PLAT-115).
+async function listWorkspaceSteps(workspaceId) {
+  const data = await graphQuery(LIST_STEPS_QUERY, {
+    id: workspaceId,
+    includeDisabled: true,
+  });
+  return data.listAutomationSteps || [];
+}
+
+// A step id or a step name (unique in the workspace) to the step's id; anything else is refused.
+async function resolveStepId(ref, workspaceId) {
+  return resolveByIdOrName(await listWorkspaceSteps(workspaceId), ref, "step")
+    .id;
+}
 
 export async function addStep(
   name,
@@ -34,6 +54,9 @@ export async function addStep(
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
 
   try {
+    // Names are unique per workspace
+    assertNameFree(await listWorkspaceSteps(workspaceId), name.trim(), "step");
+
     // Create the step first
     const data = await graphQuery(CREATE_STEP_MUTATION, {
       name: name.trim(),
@@ -118,12 +141,14 @@ export async function listSteps(
   }
 }
 
-export async function showStep(stepId) {
-  if (!stepId) {
+export async function showStep(stepRef, workspaceIdentifier) {
+  if (!stepRef) {
     throw new UsageError("⚠ Please provide a step ID.");
   }
+  const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
 
   try {
+    const stepId = await resolveStepId(stepRef, workspaceId);
     const data = await graphQuery(GET_STEP_QUERY, {
       id: stepId,
     });
@@ -161,14 +186,15 @@ export async function showStep(stepId) {
   }
 }
 
-export async function deleteStep(stepId, workspaceIdentifier) {
+export async function deleteStep(stepRef, workspaceIdentifier) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
 
-  if (!stepId) {
+  if (!stepRef) {
     throw new UsageError("⚠ Please provide a step ID.");
   }
 
   try {
+    const stepId = await resolveStepId(stepRef, workspaceId);
     const data = await graphQuery(DELETE_STEP_MUTATION, {
       id: stepId,
       environment_id: workspaceId, // TODO: remove this
@@ -186,14 +212,15 @@ export async function deleteStep(stepId, workspaceIdentifier) {
   }
 }
 
-export async function editStep(stepId, workspaceIdentifier) {
+export async function editStep(stepRef, workspaceIdentifier) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
 
-  if (!stepId) {
+  if (!stepRef) {
     throw new UsageError("⚠ Please provide a step ID.");
   }
 
   try {
+    const stepId = await resolveStepId(stepRef, workspaceId);
     // Get step details
     const data = await graphQuery(GET_STEP_QUERY, {
       id: stepId,
@@ -294,14 +321,16 @@ ${step.content?.do || ""}
   }
 }
 
-export async function cloneStep(stepId, workspaceIdentifier) {
+export async function cloneStep(stepRef, workspaceIdentifier) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
 
-  if (!stepId) {
+  if (!stepRef) {
     throw new UsageError("Please provide a step ID to clone.");
   }
 
   try {
+    // The source is resolved in the selected workspace; -w names the target
+    const stepId = await resolveStepId(stepRef, await resolveWorkspaceId());
     // Get source step details
     const sourceData = await graphQuery(GET_STEP_QUERY, {
       id: stepId,
@@ -311,6 +340,13 @@ export async function cloneStep(stepId, workspaceIdentifier) {
     if (!sourceStep) {
       throw new CliError(`Step with ID ${stepId} not found.`);
     }
+
+    // Names are unique per workspace
+    assertNameFree(
+      await listWorkspaceSteps(workspaceId),
+      sourceStep.name,
+      "step",
+    );
 
     // Create the step in the target workspace
     const data = await graphQuery(CREATE_STEP_MUTATION, {
@@ -344,7 +380,7 @@ export async function cloneStep(stepId, workspaceIdentifier) {
   }
 }
 
-export async function pullStep(workspaceIdentifier, stepId, targetPath) {
+export async function pullStep(workspaceIdentifier, stepRef, targetPath) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
 
   // Use current directory if no path specified
@@ -354,8 +390,9 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
     // Create workspace folder if it doesn't exist
     await fs.mkdir(workspaceFolder, { recursive: true });
 
-    if (stepId) {
+    if (stepRef) {
       // Pull specific step
+      const stepId = await resolveStepId(stepRef, workspaceId);
       const data = await graphQuery(GET_STEP_QUERY, { id: stepId });
       const step = data.getAutomationStep;
 
@@ -378,8 +415,18 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
         return;
       }
 
-      // Get full details for each step
+      // Get full details for each step; a name several steps share is refused (it names one file)
+      const ambiguous = new Set();
       for (const stepSummary of steps) {
+        try {
+          uniqueByName(steps, stepSummary.name, "step");
+        } catch (error) {
+          if (!ambiguous.has(stepSummary.name)) {
+            ambiguous.add(stepSummary.name);
+            console.error(chalk.red(error.message));
+          }
+          continue;
+        }
         const stepData = await graphQuery(GET_STEP_QUERY, {
           id: stepSummary.id,
         });
@@ -398,6 +445,11 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
         }
       }
 
+      if (ambiguous.size > 0) {
+        throw new CliError(
+          `Steps with ${ambiguous.size} ambiguous name(s) were not pulled to: ${workspaceFolder}`,
+        );
+      }
       console.log(
         chalk.green(
           `Successfully pulled ${steps.length} steps to: ${workspaceFolder}`,
@@ -411,7 +463,7 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
 
 export async function syncStep(
   workspaceIdentifier,
-  stepId,
+  stepRef,
   sourcePath,
   noPrompt,
 ) {
@@ -463,8 +515,9 @@ export async function syncStep(
       throw new CliError(`Workspace folder not found: ${workspaceFolder}`);
     }
 
-    if (stepId) {
+    if (stepRef) {
       // Sync specific step
+      const stepId = await resolveStepId(stepRef, workspaceId);
       const data = await graphQuery(GET_STEP_QUERY, { id: stepId });
       const step = data.getAutomationStep;
 
@@ -508,11 +561,6 @@ export async function syncStep(
         includeDisabled: true,
       });
       const steps = data.listAutomationSteps || [];
-      // Map step name to step object for quick lookup
-      const stepMap = new Map();
-      for (const stepSummary of steps) {
-        stepMap.set(stepSummary.name, stepSummary);
-      }
 
       // Get all .js files in workspaceFolder recursively
       const jsFiles = await getAllJsFiles(workspaceFolder);
@@ -540,7 +588,15 @@ export async function syncStep(
       for (const { absPath, relPath } of jsFiles) {
         // Derive step name from relPath (remove .js extension, convert path separators to /)
         const stepName = relPath.replace(/\\/g, "/").replace(/\.js$/, "");
-        const step = stepMap.get(stepName);
+        // Files are matched by name only; a name several steps share is refused
+        let step;
+        try {
+          step = uniqueByName(steps, stepName, "step");
+        } catch (error) {
+          failedCount++;
+          console.error(chalk.red(`Error syncing step: ${error.message}`));
+          continue;
+        }
         if (step) {
           // Update existing step
           try {

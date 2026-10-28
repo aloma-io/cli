@@ -306,7 +306,7 @@ program
   .addCommand(
     new Command("show")
       .description("Show step details")
-      .argument("<id>", "Step ID")
+      .argument("<id>", "Step ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await showStep(id, options.workspace);
@@ -329,7 +329,7 @@ program
   .addCommand(
     new Command("delete")
       .description("Delete a step")
-      .argument("<id>", "Step ID")
+      .argument("<id>", "Step ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await deleteStep(id, options.workspace);
@@ -338,7 +338,7 @@ program
   .addCommand(
     new Command("edit")
       .description("Edit a step")
-      .argument("<id>", "Step ID")
+      .argument("<id>", "Step ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await editStep(id, options.workspace);
@@ -347,7 +347,7 @@ program
   .addCommand(
     new Command("clone")
       .description("Clone a step")
-      .argument("<id>", "Step ID")
+      .argument("<id>", "Step ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await cloneStep(id, options.workspace);
@@ -357,7 +357,10 @@ program
     new Command("pull")
       .description("Pull steps from workspace to local files")
       .option("-w, --workspace <id>", "Workspace ID")
-      .option("-s, --step <id>", "Step ID (if not specified, pulls all steps)")
+      .option(
+        "-s, --step <id>",
+        "Step ID or name (if not specified, pulls all steps)",
+      )
       .option("-p, --path <path>", "Target path (default: current directory)")
       .action(async (options) => {
         await pullStep(options.workspace, options.step, options.path);
@@ -367,7 +370,10 @@ program
     new Command("sync")
       .description("Sync local step files to workspace")
       .option("-w, --workspace <id>", "Workspace ID")
-      .option("-s, --step <id>", "Step ID (if not specified, syncs all steps)")
+      .option(
+        "-s, --step <id>",
+        "Step ID or name (if not specified, syncs all steps)",
+      )
       .option("-p, --path <path>", "Source path (default: current directory)")
       .action(async (options) => {
         await syncStep(options.workspace, options.step, options.path);
@@ -402,7 +408,7 @@ program
   .addCommand(
     new Command("show")
       .description("Show library details")
-      .argument("<id>", "Library ID")
+      .argument("<id>", "Library ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await showLibrary(id, options.workspace);
@@ -442,7 +448,7 @@ program
   .addCommand(
     new Command("update")
       .description("Update a library")
-      .argument("<id>", "Library ID")
+      .argument("<id>", "Library ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .option(
         "-f, --file <path>",
@@ -472,7 +478,7 @@ program
   .addCommand(
     new Command("delete")
       .description("Delete a library")
-      .argument("<id>", "Library ID")
+      .argument("<id>", "Library ID or name")
       .option("-w, --workspace <id>", "Workspace ID")
       .action(async (id, options) => {
         await deleteLibrary(id, options.workspace);
@@ -484,7 +490,7 @@ program
       .option("-w, --workspace <id>", "Workspace ID")
       .option(
         "-l, --library <id>",
-        "Library ID (if not specified, pulls all libraries)",
+        "Library ID or name (if not specified, pulls all libraries)",
       )
       .option("-p, --path <path>", "Target path (default: current directory)")
       .action(async (options) => {
@@ -497,7 +503,7 @@ program
       .option("-w, --workspace <id>", "Workspace ID")
       .option(
         "-l, --library <id>",
-        "Library ID (if not specified, syncs all libraries)",
+        "Library ID or name (if not specified, syncs all libraries)",
       )
       .option("-p, --path <path>", "Source path (default: current directory)")
       .action(async (options) => {

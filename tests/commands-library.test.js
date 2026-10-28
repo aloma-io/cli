@@ -35,6 +35,9 @@ const mockLibs = (sb, libs) => {
   sb.api.on("GET_AUTOMATION_LIB_QUERY", (v) => ({ getAutomationLib: libs.find((l) => l.id === v.id) ?? null }));
 };
 const YES = [{ when: /\(y\/N\): /, send: "y\n" }];
+// PLAT-115: commands that take a library by id or name first list the workspace's libraries to resolve it.
+const LISTED = (...libs) => ({ listAutomationLibs: libs.map(([id, name]) => ({ id, name })) });
+const LIST = ["LIST_AUTOMATION_LIBS_QUERY", { id: "ws-sel" }];
 
 test("library list: default and --name filter", sandboxTest(async (sb) => {
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", {
@@ -68,12 +71,14 @@ test("library list: empty and error", sandboxTest(async (sb) => {
   assert.equal(r.code, 1);
 }));
 
-test("library show: details, types and code; the workspace option is unused", sandboxTest(async (sb) => {
+test("library show: details, types and code; the library is resolved in the workspace", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED(["l-1", "util"]));
   sb.api.on("GET_AUTOMATION_LIB_QUERY", {
     getAutomationLib: { id: "l-1", name: "util", namespace: null, version: 4, enabled: false, tags: [], types: "declare const x: 1;", content: { content: "const x = 1;" } },
   });
-  const r = await sb.run(["library", "show", "l-1", "-w", "anything"]);
-  assert.deepEqual(ops(sb), [["GET_AUTOMATION_LIB_QUERY", { id: "l-1" }]]);
+  const r = await sb.run(["library", "show", "l-1"]);
+  // PLAT-115: was a bare GET with -w unused; the id is now resolved against the workspace's libraries.
+  assert.deepEqual(ops(sb), [LIST, ["GET_AUTOMATION_LIB_QUERY", { id: "l-1" }]]);
   assert.equal(
     r.stdout,
     ["", "📚 Library Details", "", "Name: util", "ID: l-1", "Namespace: N/A", "Version: 4", "Enabled: No", "Tags: None",
@@ -82,6 +87,7 @@ test("library show: details, types and code; the workspace option is unused", sa
 }));
 
 test("library show: not found / error", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED(["l-9", "gone"]));
   sb.api.on("GET_AUTOMATION_LIB_QUERY", { getAutomationLib: null });
   let r = await sb.run(["library", "show", "l-9"]);
   assert.equal(r.stderr, "Library with ID l-9 not found.\n");
@@ -93,6 +99,7 @@ test("library show: not found / error", sandboxTest(async (sb) => {
 }));
 
 test("library add: creates the library; with --file also saves types and content", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED());
   sb.write("lib.js", libFile("declare function f(): void;", "  const f = () => 1;\n  module.exports = { f };"));
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
   sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
@@ -100,6 +107,7 @@ test("library add: creates the library; with --file also saves types and content
   assert.equal(r.code, 0);
   assert.equal(r.stdout, "Created library [util/f] with ID: l-new\nSuccessfully added library content from file: lib.js\n");
   assert.deepEqual(ops(sb), [
+    LIST,
     ["ADD_AUTOMATION_LIB_MUTATION", { name: "util/f", environment_id: "ws-sel" }],
     ["UPDATE_AUTOMATION_LIB_MUTATION", {
       id: "l-new", name: "util/f", namespace: "util", content: "const f = () => 1;\nmodule.exports = {\n  f\n};",
@@ -109,14 +117,16 @@ test("library add: creates the library; with --file also saves types and content
 }));
 
 test("library add: without --file the namespace, tags and enabled flag are dropped", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED());
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
   const r = await sb.run(["library", "add", "x", "ns", "-t", "a", "-e", "false"]);
   // PINS SUSPECT BEHAVIOUR: only the name reaches the API; the other options are ignored silently.
   assert.equal(r.stdout, "Created library [x] with ID: l-new\n");
-  assert.deepEqual(ops(sb), [["ADD_AUTOMATION_LIB_MUTATION", { name: "x", environment_id: "ws-sel" }]]);
+  assert.deepEqual(ops(sb), [LIST, ["ADD_AUTOMATION_LIB_MUTATION", { name: "x", environment_id: "ws-sel" }]]);
 }));
 
 test("library add: enabled defaults to true, anything but 'true' is false", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED());
   sb.write("lib.js", libFile("t", "  const a = 1;"));
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
   sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
@@ -135,6 +145,7 @@ test("library add: both name and namespace are required", sandboxTest(async (sb)
 }));
 
 test("library add --file: bad file leaves the created library empty", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED());
   sb.write("bad.js", "export const types = () => { return ''; };\n");
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
   let r = await sb.run(["library", "add", "x", "ns", "-f", "bad.js"]);
@@ -142,7 +153,7 @@ test("library add --file: bad file leaves the created library empty", sandboxTes
   // PLAT-81: the failed file step now exits 1 (was 0).
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Error reading or parsing file: Error parsing library file\. Could not parse types from file/);
-  assert.deepEqual(sb.api.ops(), ["ADD_AUTOMATION_LIB_MUTATION"]);
+  assert.deepEqual(sb.api.ops(), ["LIST_AUTOMATION_LIBS_QUERY", "ADD_AUTOMATION_LIB_MUTATION"]);
   sb.write("bad2.js", "export const types = () => { return 'T'; };\nexport const content = () => {};\n");
   r = await sb.run(["library", "add", "x", "ns", "-f", "bad2.js"]);
   assert.match(r.stderr, /Could not parse content from file/);
@@ -153,6 +164,7 @@ test("library add --file: bad file leaves the created library empty", sandboxTes
 }));
 
 test("library file parser: string literal / arrow-return forms of types", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED());
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
   sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
   const cases = [
@@ -171,6 +183,7 @@ test("library file parser: string literal / arrow-return forms of types", sandbo
 }));
 
 test("library update: only the given fields change; content/types/version come from the stored library", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED(["l-1", "util"]));
   sb.api.on("GET_AUTOMATION_LIB_QUERY", { getAutomationLib: FULL("l-1", "util", "T", "const a = 1;") });
   sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
   let r = await sb.run(["library", "update", "l-1", "-n", "newns"]);
@@ -187,6 +200,7 @@ test("library update: only the given fields change; content/types/version come f
 }));
 
 test("library update --file: replaces content and types; a failing parse sends nothing", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED(["l-1", "util"]));
   sb.api.on("GET_AUTOMATION_LIB_QUERY", { getAutomationLib: FULL("l-1", "util", "T", "old();") });
   sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
   sb.write("new.js", libFile("NT", "  new_();"));
@@ -204,6 +218,7 @@ test("library update --file: replaces content and types; a failing parse sends n
 }));
 
 test("library update: not found; refused by API", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED(["l-1", "util"], ["l-9", "gone"]));
   sb.api.on("GET_AUTOMATION_LIB_QUERY", { getAutomationLib: null });
   let r = await sb.run(["library", "update", "l-9"]);
   assert.equal(r.stderr, "Library with ID l-9 not found.\n");
@@ -218,10 +233,11 @@ test("library update: not found; refused by API", sandboxTest(async (sb) => {
 }));
 
 test("library delete: success, refusal, error", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED(["l-1", "util"]));
   sb.api.on("REMOVE_AUTOMATION_LIB_MUTATION", { deleteAutomationLib: true });
   let r = await sb.run(["library", "delete", "l-1"]);
   assert.equal(r.stdout, "Successfully deleted library with ID: l-1\n");
-  assert.deepEqual(ops(sb), [["REMOVE_AUTOMATION_LIB_MUTATION", { id: "l-1", environment_id: "ws-sel" }]]);
+  assert.deepEqual(ops(sb), [LIST, ["REMOVE_AUTOMATION_LIB_MUTATION", { id: "l-1", environment_id: "ws-sel" }]]);
   sb.api.on("REMOVE_AUTOMATION_LIB_MUTATION", { deleteAutomationLib: false });
   r = await sb.run(["library", "delete", "l-1"]);
   assert.equal(r.stderr, "Library with ID l-1 not found or could not be deleted.\n");
@@ -254,7 +270,7 @@ test("library pull -l <id>: one library; unknown id; empty workspace", sandboxTe
   let r = await sb.run(["library", "pull", "-l", "l-1", "-p", "out"]);
   assert.equal(r.stdout, "Successfully pulled library: flat\n");
   r = await sb.run(["library", "pull", "-l", "nope", "-p", "out"]);
-  assert.equal(r.stderr, "Library with ID nope not found.\n");
+  assert.equal(r.stderr, 'No library with the id or name "nope" in this workspace.\n');
   assert.equal(r.code, 1);
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: [] });
   r = await sb.run(["library", "pull", "-p", "out"]);
@@ -297,13 +313,15 @@ test("SECURITY: library pull: a name with control characters (newlines) is skipp
   assert.match(r.out, /Skipped library l-1: unsafe name/);
 }));
 
-test("library pull: libraries with the same name overwrite each other", sandboxTest(async (sb) => {
+test("library pull: libraries with the same name are refused, not written over each other (PLAT-115)", sandboxTest(async (sb) => {
   mockLibs(sb, [FULL("l-1", "dup", "T1", "one();"), FULL("l-2", "dup", "T2", "two();")]);
   const r = await sb.run(["library", "pull", "-p", "out"]);
-  // PINS SUSPECT BEHAVIOUR: same gap as `step pull`; two libraries, one file, "pulled 2" printed.
-  assert.deepEqual(sb.list("out"), ["dup.js"]);
-  assert.match(sb.read("out/dup.js"), /two\(\);/);
-  assert.match(r.stdout, /Successfully pulled 2 libraries/);
+  // PLAT-115: was "two libraries, one file, 'pulled 2' printed". Now refused with the ids, exit 1.
+  assert.deepEqual(sb.list("out"), []);
+  assert.match(r.stderr, /The library name "dup" is ambiguous in this workspace \(ids: l-1, l-2\)\. Use the id\.\n/);
+  assert.match(r.stderr, /Libraries with 1 ambiguous name\(s\) were not pulled to: out\n$/);
+  assert.doesNotMatch(r.stdout, /Successfully pulled/);
+  assert.equal(r.code, 1);
 }));
 
 test("library pull: a library without stored content aborts the whole pull", sandboxTest(async (sb) => {
@@ -396,7 +414,7 @@ test("library sync -l <id>: nested name maps to a nested file; missing file; upd
   });
   mockLibs(sb, []);
   r = await sb.run(["library", "sync", "-l", "zzz", "-p", "src"]);
-  assert.equal(r.stderr, "Library with ID zzz not found.\n");
+  assert.equal(r.stderr, 'No library with the id or name "zzz" in this workspace.\n');
   assert.equal(r.code, 1);
 }));
 

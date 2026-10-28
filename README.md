@@ -82,6 +82,10 @@ aloma task list
 - **Step Types**: Support for various step types and configurations
 - **File Integration**: Import step definitions from files
 - **Step Filtering**: Filter steps by name and status
+- **Unique Names**: Step and library names are unique per workspace. Commands that take a step or library
+  (`show`, `edit`, `update`, `delete`, `clone`, `pull -s/-l`, `sync -s/-l`) accept its id or its name. A name
+  that several items share is refused with their ids listed (use the id), a name that matches nothing is
+  refused, and `add` refuses a name that already exists
 
 ### 📋 Task Management
 - **Task Lifecycle**: Create, monitor, stop, and resume tasks

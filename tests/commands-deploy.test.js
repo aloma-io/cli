@@ -210,6 +210,9 @@ test("deploy: sections run in the order steps, libraries, webhooks, connectors, 
     "    steps:", "      - name: st", "        file: s.js",
   ].join("\n"));
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
+  // PLAT-115: step and library entries first check that the name is free in the workspace
+  sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: [] });
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: [] });
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s" });
   sb.api.on("VALIDATE_IF_QUERY", ok);
   sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
