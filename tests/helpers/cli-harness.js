@@ -24,7 +24,7 @@ import * as USER_Q from "../../src/commands/user/query.js";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REPO = path.resolve(HERE, "..", "..");
 const CLI = path.join(REPO, "src", "cli.js");
-const PRELOAD = pathToFileURL(path.join(HERE, "preload-axios.mjs")).href;
+const PRELOAD = pathToFileURL(path.join(HERE, "preload-fetch.mjs")).href;
 
 // query text -> exported constant name (e.g. LIST_STEPS_QUERY)
 const OPS = new Map();
@@ -134,7 +134,7 @@ export async function createSandbox({
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "open"), FAKE_OPEN, { mode: 0o755 });
   const openLog = path.join(root, "open.log");
-  const axiosLog = path.join(root, "axios.log");
+  const realmLog = path.join(root, "realm.log");
   const api = await startApi();
 
   const sb = {
@@ -143,7 +143,7 @@ export async function createSandbox({
     api,
     sessionFile,
     openLog,
-    axiosLog,
+    realmLog,
     readSession: () => JSON.parse(fs.readFileSync(sessionFile, "utf8")),
     write(rel, text) {
       const p = path.isAbsolute(rel) ? rel : path.join(work, rel);
@@ -164,10 +164,10 @@ export async function createSandbox({
       fs.existsSync(openLog)
         ? fs.readFileSync(openLog, "utf8").trim().split("\n")
         : [],
-    axiosCalls: () =>
-      fs.existsSync(axiosLog)
+    realmCalls: () =>
+      fs.existsSync(realmLog)
         ? fs
-            .readFileSync(axiosLog, "utf8")
+            .readFileSync(realmLog, "utf8")
             .trim()
             .split("\n")
             .map((l) => JSON.parse(l))
@@ -189,7 +189,7 @@ export async function createSandbox({
         ALOMA_ENV: "test",
         ALOMA_ALLOW_HTTP_LOOPBACK: "1",
         NODE_OPTIONS: `--import ${PRELOAD}`,
-        TEST_AXIOS_LOG: axiosLog,
+        TEST_REALM_LOG: realmLog,
         TEST_OPEN_LOG: openLog,
         TEST_NODE: process.execPath,
         ...env,

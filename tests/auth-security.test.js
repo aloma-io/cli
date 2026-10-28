@@ -29,6 +29,18 @@ test("harness: the network guard blocks non-loopback connections and lookups", a
   );
 });
 
+// The "another host" mocks below listen on "localhost". They must be reachable by the CLI's client (Node's fetch),
+// or every "the redirect target is never contacted" check would pass without proving anything (PLAT-117).
+test("harness: a mock on localhost is reachable by fetch (so 'never contacted' checks mean something)", async () => {
+  const s = await startServer((req, res) => json(res, 200, {}), { host: "localhost" });
+  try {
+    assert.equal((await fetch(`${s.origin}/x`)).status, 200);
+    assert.equal(s.requests.length, 1);
+  } finally {
+    await s.close();
+  }
+});
+
 // ---- static checks over the source --------------------------------------------------------------
 
 const srcFiles = (dir) =>
@@ -53,6 +65,20 @@ test("SECURITY: no code disables TLS certificate verification", () => {
     ),
   );
   assert.deepEqual(offenders, []);
+});
+
+// SECURITY (PLAT-117): every request the CLI makes itself goes through src/http.js, which checks the URL and
+// refuses redirects by construction. No other file calls fetch or an HTTP library (the sign-in library,
+// openid-client, keeps its own stack; the sign-in callback only listens, through http.createServer).
+test("SECURITY: only src/http.js sends HTTP requests; no file imports node-fetch or axios", () => {
+  const HTTP_JS = path.join(REPO, "src", "http.js");
+  const sends = /(?<![\w.])fetch\s*\(|globalThis\.fetch|\bhttps?\.(request|get)\s*\(|from\s+["'](node-fetch|axios|undici|got)["']|import\s*\(\s*["'](node-fetch|axios|undici|got)["']|require\s*\(\s*["'](node-fetch|axios|undici|got)["']/;
+  const offenders = SRC.filter((f) => f !== HTTP_JS && sends.test(readFileSync(f, "utf8"))).map((f) => path.relative(REPO, f));
+  assert.deepEqual(offenders, []);
+  const http = readFileSync(HTTP_JS, "utf8");
+  assert.match(http, /assertSecureUrl\(url/, "http.js checks every URL");
+  assert.match(http, /redirect: "manual"/, "http.js never lets fetch follow a redirect");
+  assert.match(http, /refuseRedirect\(response\.status/, "http.js refuses every 3xx");
 });
 
 // SECURITY: no console/log call in the auth code passes a token variable.

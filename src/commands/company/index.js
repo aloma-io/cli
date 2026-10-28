@@ -1,6 +1,5 @@
 import { getSessionData, updateSessionData } from "../../utils.js";
 import chalk from "chalk";
-import axios from "axios";
 import { GRAPHQL_HOST } from "../../config.js";
 import {
   getMe,
@@ -9,7 +8,7 @@ import {
   saveSelectedWorkspace,
   selectDefaultWorkspace,
 } from "../../context.js";
-import { refuseRedirect } from "../../net-security.js";
+import { postJson } from "../../http.js";
 import readline from "readline";
 import { CliError, failure } from "../../runtime.js";
 
@@ -170,24 +169,19 @@ export const switchCompany = async (identifier) => {
 
     // Switch to the selected company
     const companyId = company.id;
-    const response = await axios.post(
+    // https only, no redirect, session attached: see src/http.js
+    const response = await postJson(
       `https://${GRAPHQL_HOST}/realm?realm=${encodeURIComponent(companyId)}`,
       {},
-      {
-        withCredentials: true,
-        headers: {
-          Authorization: `Bearer ${await getSessionData("token")}`,
-        },
-        // Never follow a redirect with the session (see net-security.js); a 3xx is an error.
-        maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400,
-      },
+      { auth: await getSessionData("token"), what: "company switch" },
     );
-    refuseRedirect(response.status, "company switch");
+    if (!response.ok) {
+      throw new Error(`Request failed with status code ${response.status}`);
+    }
 
     // Get the new token from the response cookies
-    const cookies = response.headers["set-cookie"];
-    if (cookies) {
+    const cookies = response.headers.getSetCookie();
+    if (cookies.length) {
       const authCookie = cookies.find((cookie) =>
         cookie.startsWith("Authorization="),
       );

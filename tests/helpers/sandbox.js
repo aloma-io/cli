@@ -117,7 +117,9 @@ export async function startServer(handler, { host = "127.0.0.1", tls } = {}) {
     sockets.add(s);
     s.on("close", () => sockets.delete(s));
   });
-  await new Promise((r) => server.listen(0, host, r));
+  // "localhost" is a second host name for the same machine. Listening on it can bind ::1 only, which Node's fetch
+  // does not try (it connects to 127.0.0.1), so bind 127.0.0.1 and keep "localhost" in the origin (PLAT-117).
+  await new Promise((r) => server.listen(0, host === "localhost" ? "127.0.0.1" : host, r));
   const port = server.address().port;
   const shownHost = host.includes(":") ? `[${host}]` : host;
   return {

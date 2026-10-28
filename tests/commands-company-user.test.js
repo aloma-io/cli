@@ -63,15 +63,18 @@ test("company switch <name>: posts to the realm endpoint, stores the new token a
   sb.api.on("ME_QUERY", me(["developer"]));
   sb.api.on("LIST_WORKSPACES_QUERY", WORKSPACES);
   const r = await sb.run(["company", "switch", "Beta Co"], {
-    env: { TEST_AXIOS_HEADERS: COOKIE("Bearer%20new-token-fake") },
+    env: { TEST_REALM_HEADERS: COOKIE("Bearer%20new-token-fake") },
   });
   assert.equal(r.code, 0);
-  const calls = sb.axiosCalls();
+  const calls = sb.realmCalls();
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://graphql.test.invalid/realm?realm=r-2");
+  assert.equal(calls[0].method, "POST");
   assert.deepEqual(calls[0].body, {});
-  assert.equal(calls[0].config.withCredentials, true);
-  assert.equal(calls[0].config.headers.Authorization, `Bearer ${FAKE_TOKEN}`);
+  // PLAT-117: sent through src/http.js: never follows a redirect; the session as bearer header and cookie.
+  assert.equal(calls[0].redirect, "manual");
+  assert.equal(calls[0].headers.authorization, `Bearer ${FAKE_TOKEN}`);
+  assert.equal(calls[0].headers.cookie, `Authorization=Bearer%20${FAKE_TOKEN}`);
   const s = sb.readSession();
   assert.equal(s.token, "new-token-fake");
   assert.equal(s.selectedWorkspace, "ws-first");
@@ -84,11 +87,11 @@ test("company switch <name>: posts to the realm endpoint, stores the new token a
 test("company switch <id>: matches by id; a name in any case", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
   let r = await sb.run(["company", "switch", "r-2"]);
-  assert.equal(sb.axiosCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
+  assert.equal(sb.realmCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
   // Flipped (Patrick, 28 Oct): names match regardless of case when one company matches (was refused with a hint).
   r = await sb.run(["company", "switch", "beta co"]);
-  assert.equal(sb.axiosCalls().length, 2);
-  assert.equal(sb.axiosCalls()[1].url, "https://graphql.test.invalid/realm?realm=r-2");
+  assert.equal(sb.realmCalls().length, 2);
+  assert.equal(sb.realmCalls()[1].url, "https://graphql.test.invalid/realm?realm=r-2");
 }));
 
 test("company switch: reply without an Authorization cookie keeps the session untouched", sandboxTest(async (sb) => {
@@ -103,7 +106,7 @@ test("company switch: reply without an Authorization cookie keeps the session un
 test("company switch: a token containing '=' is cut off at the first '='", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
   sb.api.on("LIST_WORKSPACES_QUERY", WORKSPACES);
-  await sb.run(["company", "switch", "Beta Co"], { env: { TEST_AXIOS_HEADERS: COOKIE("Bearer%20abc=def==") } });
+  await sb.run(["company", "switch", "Beta Co"], { env: { TEST_REALM_HEADERS: COOKIE("Bearer%20abc=def==") } });
   // PINS SUSPECT BEHAVIOUR: cookie.split("=")[1] drops everything after the next '=',
   // here leaving "abc".
   assert.equal(sb.readSession().token, "abc");
@@ -111,10 +114,18 @@ test("company switch: a token containing '=' is cut off at the first '='", sandb
 
 test("company switch: errors from the realm endpoint are printed to stderr, exit 1", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
-  const r = await sb.run(["company", "switch", "Beta Co"], { env: { TEST_AXIOS_FAIL: "Request failed with status code 403" } });
+  const r = await sb.run(["company", "switch", "Beta Co"], { env: { TEST_REALM_STATUS: "403" } });
   assert.equal(r.code, 1);
   assert.equal(r.stderr, "Error switching company: Request failed with status code 403\n");
   assert.equal(r.stdout, "");
+  assert.equal(sb.readSession().token, FAKE_TOKEN);
+}));
+
+test("company switch: a network error from the realm endpoint is printed with its reason, exit 1", sandboxTest(async (sb) => {
+  sb.api.on("ME_QUERY", me(["developer"]));
+  const r = await sb.run(["company", "switch", "Beta Co"], { env: { TEST_REALM_FAIL: "connect ECONNREFUSED" } });
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error switching company: request to https://graphql.test.invalid/realm?realm=r-2 failed, reason: connect ECONNREFUSED\n");
   assert.equal(sb.readSession().token, FAKE_TOKEN);
 }));
 
@@ -123,7 +134,7 @@ test("company switch: empty account", sandboxTest(async (sb) => {
   const r = await sb.run(["company", "switch", "x"]);
   assert.equal(r.code, 1);
   assert.equal(r.stderr, "No companies found.\n");
-  assert.deepEqual(sb.axiosCalls(), []);
+  assert.deepEqual(sb.realmCalls(), []);
 }));
 
 test("company switch without argument needs a terminal", sandboxTest(async (sb) => {
@@ -131,7 +142,7 @@ test("company switch without argument needs a terminal", sandboxTest(async (sb) 
   const r = await sb.run(["company", "switch"]);
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Error fetching companies: process\.stdin\.setRawMode is not a function/);
-  assert.deepEqual(sb.axiosCalls(), []);
+  assert.deepEqual(sb.realmCalls(), []);
 }));
 
 // ------------------------------------------------------------------- user

@@ -260,7 +260,7 @@ test("deploy company: switches company first (through the realm endpoint)", sand
   const r = await sb.run(["deploy", "d.yaml"]);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /^🚀 Starting deployment\.\.\.\n\nSwitching to company: Beta Co\nSuccessfully switched to company \[Beta Co\]\n/);
-  assert.equal(sb.axiosCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
+  assert.equal(sb.realmCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
 }));
 
 test("deploy company: an unknown company stops the deployment before anything is deployed", sandboxTest(async (sb) => {

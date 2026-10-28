@@ -1,7 +1,5 @@
 import path from "path";
 import { promises as fs } from "fs";
-import fetch from "node-fetch";
-import { GRAPHQL_URL } from "./config.js";
 import chalk from "chalk";
 import * as jose from "jose";
 import {
@@ -11,7 +9,7 @@ import {
   OWN_PACKAGE_ROOT,
   PRIVATE_FILE_MODE,
 } from "./paths.js";
-import { assertSecureUrl, refuseRedirect } from "./net-security.js";
+import { graphql } from "./http.js";
 
 const SESSION_FILE = "session.json";
 
@@ -62,37 +60,8 @@ export const graphQuery = async (query, variables = {}) => {
   }
 
   try {
-    // Set up headers based on token type
-    const headers = {
-      "Content-Type": "application/json",
-    };
-
-    headers.Authorization = `Bearer ${tokenData}`;
-    headers.Cookie = `Authorization=Bearer%20${encodeURIComponent(tokenData)}`;
-
-    assertSecureUrl(GRAPHQL_URL, "API URL");
-    const response = await fetch(GRAPHQL_URL, {
-      method: "POST",
-      redirect: "manual",
-      headers,
-      body: JSON.stringify({
-        query,
-        variables,
-      }),
-    });
-    refuseRedirect(response.status, "API");
-
-    const data = await response.json();
-
-    if (data.errors) {
-      // console.error(chalk.red("GraphQL Errors:"), data.errors);
-      const errorMessages = data.errors
-        .map((error) => error.message)
-        .join("\n");
-      throw new Error(errorMessages);
-    }
-
-    return data.data;
+    // https only, no redirect, session attached: see src/http.js
+    return await graphql(query, variables, { auth: tokenData });
   } catch (error) {
     // Printed once, by the command's error handler (src/runtime.js); this prefix is used when no command label is added.
     error.prefix = "GraphQL Error:";

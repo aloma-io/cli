@@ -162,7 +162,7 @@ test("case rule, deploy workspace: other case uses it (no duplicate); case twins
 test("case rule, company switch: other case resolves; case twins refused; id wins; no match refused", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", { me: { id: "u-1", groups: [], realm: { id: "c-9", name: "Home" }, realms: items("c") } });
   sb.api.on("LIST_WORKSPACES_QUERY", { listAutomationEnvironmentWithStats: [{ id: "ws-first", name: "First" }] });
-  const env = { TEST_AXIOS_HEADERS: JSON.stringify({ "set-cookie": ["Authorization=Bearer%20new-token-fake; Path=/"] }) };
+  const env = { TEST_REALM_HEADERS: JSON.stringify({ "set-cookie": ["Authorization=Bearer%20new-token-fake; Path=/"] }) };
   let r = await sb.run(["company", "switch", "mixed case"], { env });
   assert.equal(r.code, 0, r.stderr);
   r = await sb.run(["company", "switch", "PAIR"], { env });
@@ -172,7 +172,7 @@ test("case rule, company switch: other case resolves; case twins refused; id win
   r = await sb.run(["company", "switch", "nope"], { env });
   assert.equal(r.code, 1);
   assert.equal(r.stderr, 'No company with the id or name "nope" among your companies.\n');
-  assert.deepEqual(sb.axiosCalls().map((c) => c.url.split("realm=")[1]), ["c-1", "c-4"]);
+  assert.deepEqual(sb.realmCalls().map((c) => c.url.split("realm=")[1]), ["c-1", "c-4"]);
 }));
 
 // ---------------------------------------------------------------- connectors

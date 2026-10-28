@@ -12,6 +12,8 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 
 const AUTH = ["tests/auth-storage.test.js", "tests/auth-config.test.js", "tests/auth-signin.test.js", "tests/auth-security.test.js", "tests/auth-company.test.js", "tests/auth-logout.test.js", "tests/session-exchange.test.js"];
 const PKG = ["tests/package-security.test.js"];
+// PLAT-117: the HTTP client's own tests, the auth suites, and the company switch through the commands harness
+const HTTP = ["tests/http.test.js", ...AUTH, "tests/commands-company-user.test.js"];
 
 // [id, finding, file, description, from, to, tests]
 const MUTANTS = [
@@ -66,24 +68,28 @@ const MUTANTS = [
     "      - name: Audit dependencies\n        run: npm audit --audit-level=low\n", "", PKG],
   ["S21", 4, ".github/workflows/publish.yml", "audit step removed before publish",
     "      - name: Audit dependencies\n        run: npm audit --audit-level=low\n", "", PKG],
-  ["S22", 5, "src/utils.js", "API calls follow redirects again",
-    '      redirect: "manual",\n', "", AUTH],
-  ["S23", 5, "src/utils.js", "a 3xx from the API is not refused",
-    '    refuseRedirect(response.status, "API");\n', "", AUTH],
-  ["S24", 5, "src/commands/auth/session.js", "session exchange follows redirects again",
-    '    redirect: "manual", // never resend the ID token to a redirect target\n', "", AUTH],
-  ["S25", 5, "src/commands/auth/session.js", "a 3xx from the session exchange is not refused",
-    '  refuseRedirect(response.status, "Aloma sign-in");\n', "", AUTH],
+  // PLAT-117: the transport rules live in src/http.js only; S22-S25, S29, S30 and S37 are the deliberate breaks.
+  ["S22", 5, "src/http.js", "http.js lets fetch follow redirects (redirect: \"follow\")",
+    'redirect: "manual",', 'redirect: "follow",', HTTP],
+  ["S23", 5, "src/http.js", "http.js does not refuse a 3xx",
+    "  refuseRedirect(response.status, what);\n", "", HTTP],
+  ["S24", 5, "src/commands/auth/session.js", "session exchange skips http.js (calls fetch directly)",
+    '  const response = await postJson(\n    url,\n    { id_token: idToken },\n    {\n      headers: { Accept: "application/json", "User-Agent": "Aloma CLI" },\n      what: "Aloma sign-in",\n    },\n  );',
+    '  const response = await fetch(url, {\n    method: "POST",\n    redirect: "manual",\n    headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "Aloma CLI" },\n    body: JSON.stringify({ id_token: idToken }),\n  });', HTTP],
+  ["S25", 5, "src/utils.js", "graphQuery skips http.js (calls fetch directly)",
+    "    return await graphql(query, variables, { auth: tokenData });",
+    '    const response = await fetch(process.env.ALOMA_GRAPHQL_URL, {\n      method: "POST",\n      redirect: "manual",\n      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenData}` },\n      body: JSON.stringify({ query, variables }),\n    });\n    return (await response.json()).data;', HTTP],
   ["S26", 5, "src/net-security.js", "http accepted for any host",
     'if (u.protocol === "https:") return u;', 'if (u.protocol === "https:" || u.protocol === "http:") return u;', AUTH],
   ["S27", 5, "src/net-security.js", "loopback opt-in also allows non-loopback http",
     'process.env.ALOMA_ALLOW_HTTP_LOOPBACK === "1" &&\n    isLoopbackHost(u.hostname)', 'process.env.ALOMA_ALLOW_HTTP_LOOPBACK === "1"', AUTH],
   ["S28", 5, "src/net-security.js", "http allowed without the opt-in",
     'process.env.ALOMA_ALLOW_HTTP_LOOPBACK === "1" &&\n    isLoopbackHost(u.hostname)', "isLoopbackHost(u.hostname)", AUTH],
-  ["S29", 5, "src/utils.js", "API URL not checked before sending the session",
-    '    assertSecureUrl(GRAPHQL_URL, "API URL");\n', "", AUTH],
-  ["S30", 5, "src/commands/company/index.js", "company switch follows redirects again",
-    "        maxRedirects: 0,\n", "", AUTH],
+  ["S29", 5, "src/http.js", "assertSecureUrl removed from http.js",
+    "  assertSecureUrl(url, `${what} URL`);\n", "", HTTP],
+  ["S30", 5, "src/commands/company/index.js", "company switch skips http.js (calls fetch directly)",
+    '    const response = await postJson(\n      `https://${GRAPHQL_HOST}/realm?realm=${encodeURIComponent(companyId)}`,\n      {},\n      { auth: await getSessionData("token"), what: "company switch" },\n    );',
+    '    const response = await fetch(\n      `https://${GRAPHQL_HOST}/realm?realm=${encodeURIComponent(companyId)}`,\n      { method: "POST", redirect: "manual", headers: { Authorization: `Bearer ${await getSessionData("token")}` }, body: "{}" },\n    );', HTTP],
   ["S31", 6, "src/commands/auth/index.js", "callback listens on all interfaces",
     "srv.listen(callbackPort, host);", "srv.listen(callbackPort);", AUTH],
   ["S32", 6, "src/commands/auth/index.js", "non-loopback redirect URI accepted",
@@ -96,6 +102,9 @@ const MUTANTS = [
     "reveal: options.reveal === true,", "reveal: false,", ["tests/commands-webhook-secret.test.js"]],
   ["S36", 8, "package.json", "postinstall script restored",
     '"audit": "npm audit --audit-level=low"', '"audit": "npm audit --audit-level=low",\n    "postinstall": "node src/cli.js setup || true"', PKG],
+  ["S37", 5, "src/http.js", "http.js follows a 3xx itself, attaching the auth to the redirect target",
+    "  refuseRedirect(response.status, what);\n  return response;",
+    '  const location = response.headers.get("location");\n  if (location) {\n    return fetch(new URL(location, url), {\n      method,\n      redirect: "manual",\n      headers: auth ? { ...headers, ...authHeaders(auth) } : headers,\n      body,\n    });\n  }\n  refuseRedirect(response.status, what);\n  return response;', HTTP],
 ];
 
 const md = process.argv.includes("--md");
