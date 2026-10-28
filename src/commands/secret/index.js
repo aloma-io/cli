@@ -2,13 +2,13 @@ import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import { GET_SECRET_QUERY, SAVE_SECRET_MUTATION } from "./query.js";
 import { resolveWorkspaceId } from "../workspace/index.js";
+import { CliError, failure } from "../../runtime.js";
 
 export const HIDDEN_VALUE = "******** (hidden, use --reveal to show)";
 
 // Values are masked unless the user explicitly asks to reveal them (scrollback, CI logs).
 export async function listSecrets(workspaceId, { reveal = false } = {}) {
   const targetWorkspaceId = await resolveWorkspaceId(workspaceId);
-  if (!targetWorkspaceId) return;
 
   try {
     const data = await graphQuery(GET_SECRET_QUERY, {
@@ -56,7 +56,7 @@ export async function listSecrets(workspaceId, { reveal = false } = {}) {
       console.log();
     });
   } catch (error) {
-    console.error(chalk.red("Error fetching secrets:"), error.message);
+    throw failure("Error fetching secrets:", error);
   }
 }
 
@@ -69,7 +69,6 @@ export async function addSecret(
   workspaceId,
 ) {
   const targetWorkspaceId = await resolveWorkspaceId(workspaceId);
-  if (!targetWorkspaceId) return;
 
   try {
     // Get current secrets
@@ -99,13 +98,12 @@ export async function addSecret(
 
     console.log(chalk.green(`✅ Secret "${name}" added successfully`));
   } catch (error) {
-    console.error(chalk.red("Error adding secret:"), error.message);
+    throw failure("Error adding secret:", error);
   }
 }
 
 export async function deleteSecret(secretName, workspaceId) {
   const targetWorkspaceId = await resolveWorkspaceId(workspaceId);
-  if (!targetWorkspaceId) return;
 
   try {
     // Get current secrets
@@ -117,12 +115,9 @@ export async function deleteSecret(secretName, workspaceId) {
 
     // Check if the secret exists
     if (!config[secretName]) {
-      console.log(
-        chalk.red(
-          `❌ Secret "${secretName}" not found. Use \`aloma secret list\` to see available secrets.`,
-        ),
+      throw new CliError(
+        `❌ Secret "${secretName}" not found. Use \`aloma secret list\` to see available secrets.`,
       );
-      return;
     }
 
     // Remove from the object
@@ -136,6 +131,6 @@ export async function deleteSecret(secretName, workspaceId) {
 
     console.log(chalk.green(`✅ Secret "${secretName}" deleted successfully`));
   } catch (error) {
-    console.error(chalk.red("Error deleting secret:"), error.message);
+    throw failure("Error deleting secret:", error);
   }
 }

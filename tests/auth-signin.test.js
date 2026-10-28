@@ -166,7 +166,8 @@ test("a callback with the wrong state is refused: no token request, no session, 
     }),
   });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Callback handling failed: Invalid state parameter/);
+  // PLAT-81: printed once (was also printed as "Callback handling failed: ...").
+  assert.equal(r.stderr.match(/Invalid state parameter/g).length, 1);
   assert.match(r.stderr, /Authentication failed: Invalid state parameter/);
   assert.equal(r.browser[0].status, 500);
   assert.equal(tokenCalls().length, 0);
@@ -222,7 +223,7 @@ test("an ID token from the wrong issuer is rejected before the session exchange"
   idp.ctl.idTokenOverrides = { iss: "http://127.0.0.1:1/realms/other" };
   const r = await runCli(sb, ["auth"], { onOpen: browser() });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Callback handling failed: unexpected iss value/);
+  assert.match(r.stderr, /Authentication failed: unexpected iss value/);
   assert.equal(sessionCalls().length, 0);
   assert.equal(sb.readSession(), null);
 });
@@ -240,7 +241,7 @@ test("no ID token from the login service: sign-in fails, API not contacted", asy
   idp.ctl.includeIdToken = false;
   const r = await runCli(sb, ["auth"], { onOpen: browser() });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Callback handling failed: id_token not present in TokenSet/);
+  assert.match(r.stderr, /Authentication failed: id_token not present in TokenSet/);
   assert.equal(sessionCalls().length, 0);
   assert.equal(sb.readSession(), null);
 });
@@ -258,7 +259,7 @@ test("the login service refusing the code: sign-in fails, no session", async () 
   idp.ctl.tokenStatus = 500;
   const r = await runCli(sb, ["auth"], { onOpen: browser() });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Callback handling failed: server_error/);
+  assert.match(r.stderr, /Authentication failed: server_error/);
   assert.equal(sessionCalls().length, 0);
   assert.equal(sb.readSession(), null);
 });
@@ -308,8 +309,9 @@ test("no browser activity: the sign-in times out (5 minutes, shortened here) and
     onOpen: async () => ({ ignored: true }),
   });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Authentication timed out after 5 minutes\./);
-  assert.match(r.stderr, /Authentication failed: Authentication timed out/);
+  // PLAT-81: printed once (was a separate "timed out" line, then "Authentication failed").
+  assert.equal(r.stderr.match(/timed out/g).length, 1);
+  assert.match(r.stderr, /Authentication failed: Authentication timed out after 5 minutes\./);
   assert.equal(sb.readSession(), null);
 });
 

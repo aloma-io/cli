@@ -59,7 +59,8 @@ test("task list: a task without a state breaks the whole listing", sandboxTest(a
   sb.api.on("LIST_TASKS_QUERY", { listAutomationEnvironmentTasks: [T({}), T({ id: "t-2", state: null })] });
   const r = await sb.run(["task", "list"]);
   // PINS SUSPECT BEHAVIOUR: the first task was already printed, then the null state throws.
-  assert.equal(r.code, 0);
+  // PLAT-81: the failure now exits 1 (was 0).
+  assert.equal(r.code, 1);
   assert.match(r.stdout, /order/);
   assert.match(r.stderr, /Error listing tasks: Cannot read properties of null/);
 }));
@@ -67,15 +68,14 @@ test("task list: a task without a state breaks the whole listing", sandboxTest(a
 test("task list: API error; no workspace", sandboxTest(async (sb) => {
   sb.api.on("LIST_TASKS_QUERY", gqlError("denied"));
   let r = await sb.run(["task", "list"]);
-  assert.match(r.stderr, /Error listing tasks: denied/);
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error listing tasks: denied\n");
+  assert.equal(r.code, 1);
 }));
 
-test("task list: no workspace selected", sandboxTest({ session: { token: "t" } }, async (sb) => {
+test("task list: no workspace selected exits 1", sandboxTest({ session: { token: "t" } }, async (sb) => {
   const r = await sb.run(["task", "list"]);
-  // PLAT-81 (intermediate): the message moves to stderr; the old task handler still exits 0 until the next commit.
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /No workspace selected\. Use `aloma workspace switch` to select one\./);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "No workspace selected. Use `aloma workspace switch` to select one.\n");
   assert.deepEqual(sb.api.calls, []);
 }));
 
@@ -159,19 +159,23 @@ test("task log --step <n>: restricts logs to that entry; out of range is refused
   assert.doesNotMatch(r.stdout, /hello console/);
   r = await sb.run(["task", "log", "t-1", "--logs", "--step", "1"]);
   assert.match(r.stdout, /hello console/);
+  // PLAT-81: an out-of-range --step is a usage error (exit 2, stderr).
   r = await sb.run(["task", "log", "t-1", "--step", "9"]);
   assert.match(r.stdout, /Task Details/);
-  assert.match(r.stdout, /Invalid step number specified\.\n$/);
+  assert.equal(r.stderr, "Invalid step number specified.\n");
+  assert.equal(r.code, 2);
   assert.doesNotMatch(r.stdout, /Execution History/);
   r = await sb.run(["task", "log", "t-1", "--step", "x"]);
-  assert.match(r.stdout, /Invalid step number specified\.\n$/);
+  assert.equal(r.stderr, "Invalid step number specified.\n");
+  assert.equal(r.code, 2);
   // the history has 3 entries (created, Step One, Step Two): index 3 is already out of range, 2 is the last valid one
   r = await sb.run(["task", "log", "t-1", "--step", "3"]);
-  assert.match(r.stdout, /Invalid step number specified\.\n$/);
+  assert.equal(r.stderr, "Invalid step number specified.\n");
   r = await sb.run(["task", "log", "t-1", "--step", "2"]);
   assert.match(r.stdout, /Execution History/);
+  assert.equal(r.code, 0);
   r = await sb.run(["task", "log", "t-1", "--step", "-1"]);
-  assert.match(r.stdout, /Invalid step number specified\.\n$/);
+  assert.equal(r.stderr, "Invalid step number specified.\n");
 }));
 
 test("task log: task without history, unknown task, API error", sandboxTest(async (sb) => {
@@ -180,11 +184,12 @@ test("task log: task without history, unknown task, API error", sandboxTest(asyn
   assert.match(r.stdout, /Duration: N\/A\n$/);
   mockTask(sb, null, []);
   r = await sb.run(["task", "log", "t-1"]);
-  assert.equal(r.stdout, "⚠ Task with ID t-1 not found\n");
+  assert.equal(r.stderr, "⚠ Task with ID t-1 not found\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_TASK_QUERY", gqlError("denied"));
   r = await sb.run(["task", "log", "t-1"]);
-  assert.match(r.stderr, /Error showing task: denied/);
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error showing task: denied\n");
+  assert.equal(r.code, 1);
 }));
 
 // --------------------------------------------------------------------- new
@@ -217,20 +222,24 @@ test("task new: --data wins over --file", sandboxTest(async (sb) => {
 
 test("task new: no data, unsupported extension, bad JSON, bad YAML, missing file", sandboxTest(async (sb) => {
   sb.api.on("CREATE_TASK_MUTATION", { createAutomationTask: "t-new" });
+  // PLAT-81: unusable task data is a usage error (exit 2, stderr; was exit 0).
   let r = await sb.run(["task", "new", "n"]);
-  assert.equal(r.stdout, "⚠ No data provided\n");
+  assert.equal(r.stderr, "⚠ No data provided\n");
+  assert.equal(r.code, 2);
   sb.write("d.txt", "x");
   r = await sb.run(["task", "new", "n", "-f", "d.txt"]);
-  assert.equal(r.stdout, "⚠ Unsupported file extension. Only .json and .yaml/.yml are supported.\n");
+  assert.equal(r.stderr, "⚠ Unsupported file extension. Only .json and .yaml/.yml are supported.\n");
+  assert.equal(r.code, 2);
   r = await sb.run(["task", "new", "n", "-d", "{nope"]);
   assert.match(r.stderr, /^Error parsing JSON\/YAML data: /);
+  assert.equal(r.code, 2);
   sb.write("bad.yaml", "a: [1\n");
   r = await sb.run(["task", "new", "n", "-f", "bad.yaml"]);
   assert.match(r.stderr, /^Error parsing JSON\/YAML data: /);
   r = await sb.run(["task", "new", "n", "-f", "missing.json"]);
   assert.match(r.stderr, /Error parsing JSON\/YAML data: ENOENT/);
   assert.deepEqual(sb.api.calls, []);
-  assert.equal(r.code, 0);
+  assert.equal(r.code, 2);
 }));
 
 test("task new: API error; -w name is resolved", sandboxTest(async (sb) => {
@@ -269,16 +278,17 @@ test("task clone --step 0 sends the synthetic id 'created'", sandboxTest(async (
 test("task clone --step: out-of-range step; API error", sandboxTest(async (sb) => {
   mockTask(sb);
   let r = await sb.run(["task", "clone", "t-1", "-s", "7"]);
-  assert.equal(r.stdout, "Invalid step number specified.\n");
+  assert.equal(r.stderr, "Invalid step number specified.\n");
+  assert.equal(r.code, 2);
   r = await sb.run(["task", "clone", "t-1", "-s", "3"]); // 3 entries -> highest valid index is 2
-  assert.equal(r.stdout, "Invalid step number specified.\n");
+  assert.equal(r.stderr, "Invalid step number specified.\n");
   r = await sb.run(["task", "clone", "t-1", "-s", "-1"]);
-  assert.equal(r.stdout, "Invalid step number specified.\n");
+  assert.equal(r.stderr, "Invalid step number specified.\n");
   assert.ok(!sb.api.ops().includes("NEW_TASK_FROM_HISTORY_MUTATION"));
   sb.api.on("CLONE_TASK_MUTATION", gqlError("denied"));
   r = await sb.run(["task", "clone", "t-1"]);
-  assert.match(r.stderr, /Error cloning task: denied/);
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error cloning task: denied\n");
+  assert.equal(r.code, 1);
 }));
 
 test("task stop: success, refusal, error", sandboxTest(async (sb) => {
@@ -288,10 +298,12 @@ test("task stop: success, refusal, error", sandboxTest(async (sb) => {
   assert.deepEqual(ops(sb), [["STOP_TASK_MUTATION", { id: "t-1" }]]);
   sb.api.on("STOP_TASK_MUTATION", { stopAutomationTask: false });
   r = await sb.run(["task", "stop", "t-1"]);
-  assert.equal(r.stdout, "⚠ Task t-1 could not be stopped\n");
+  assert.equal(r.stderr, "⚠ Task t-1 could not be stopped\n");
+  assert.equal(r.code, 1);
   sb.api.on("STOP_TASK_MUTATION", gqlError("denied"));
   r = await sb.run(["task", "stop", "t-1"]);
-  assert.match(r.stderr, /Error stopping task: denied/);
+  assert.equal(r.stderr, "Error stopping task: denied\n");
+  assert.equal(r.code, 1);
 }));
 
 test("task resume: success, refusal, error", sandboxTest(async (sb) => {
@@ -301,8 +313,10 @@ test("task resume: success, refusal, error", sandboxTest(async (sb) => {
   assert.deepEqual(ops(sb), [["RESUME_TASK_MUTATION", { id: "t-1" }]]);
   sb.api.on("RESUME_TASK_MUTATION", { resumeAutomationTaskFromHistory: false });
   r = await sb.run(["task", "resume", "t-1"]);
-  assert.equal(r.stdout, "⚠ Task t-1 could not be resumed\n");
+  assert.equal(r.stderr, "⚠ Task t-1 could not be resumed\n");
+  assert.equal(r.code, 1);
   sb.api.on("RESUME_TASK_MUTATION", gqlError("denied"));
   r = await sb.run(["task", "resume", "t-1"]);
-  assert.match(r.stderr, /Error resuming task: denied/);
+  assert.equal(r.stderr, "Error resuming task: denied\n");
+  assert.equal(r.code, 1);
 }));

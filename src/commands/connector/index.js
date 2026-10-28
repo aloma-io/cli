@@ -13,6 +13,7 @@ import {
 import { doEncrypt } from "../../utils.js";
 import chalk from "chalk";
 import { resolveWorkspaceId } from "../workspace/index.js";
+import { CliError, UsageError, failure } from "../../runtime.js";
 import fs from "fs/promises";
 import open from "open";
 import yaml from "js-yaml";
@@ -21,7 +22,6 @@ import path from "path";
 export async function listAvailableConnectors(workspaceIdentifier, filterName) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     const data = await graphQuery(LIST_AVAILABLE_CONNECTOR_QUERY, {
       id: workspaceId,
@@ -48,15 +48,13 @@ export async function listAvailableConnectors(workspaceIdentifier, filterName) {
       console.log(`Expose Service: ${connector.expose_service}`);
     });
   } catch (error) {
-    console.error(chalk.red("Error listing connectors:"), error.message);
-    throw error;
+    throw failure("Error listing connectors:", error);
   }
 }
 
 export async function getConnector(id, workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     const data = await graphQuery(GET_CONNECTOR_QUERY, {
       id: workspaceId,
@@ -76,8 +74,7 @@ export async function getConnector(id, workspaceIdentifier) {
     const connector_schema = data.getAutomationConnectorConfigSchema;
     printConnectorSchema(connector_schema);
   } catch (error) {
-    console.error(chalk.red("Error showing connector:"), error.message);
-    throw error;
+    throw failure("Error showing connector:", error);
   }
 }
 
@@ -121,11 +118,9 @@ export async function addConnector(
 ) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     if (!connectorId) {
-      console.log(chalk.yellow("⚠ Connector ID is required"));
-      return;
+      throw new UsageError("⚠ Connector ID is required");
     }
 
     let connectorName = name;
@@ -139,8 +134,7 @@ export async function addConnector(
       });
 
       if (!connectorData.getAutomationConnector) {
-        console.log(chalk.red("Error: Connector not found"));
-        return;
+        throw new CliError("Error: Connector not found");
       }
 
       connectorName = connectorData.getAutomationConnector.name;
@@ -170,38 +164,29 @@ export async function addConnector(
 
         if (addedConnector) {
           await new Promise((resolve) => setTimeout(resolve, 10000));
-          try {
-            await updateConnector(
-              addedConnector.id,
-              workspaceId,
-              null,
-              null,
-              tags,
-              shared_in_realm,
-              config,
-              file,
-            );
-          } catch (error) {
-            console.error(
-              chalk.red("Error updating connector:"),
-              error.message,
-            );
-          }
+          await updateConnector(
+            addedConnector.id,
+            workspaceId,
+            null,
+            null,
+            tags,
+            shared_in_realm,
+            config,
+            file,
+          );
         }
       }
     } else {
-      console.log(chalk.red("Error: Failed to add connector"));
+      throw new CliError("Error: Failed to add connector");
     }
   } catch (error) {
-    console.error(chalk.red("Error creating connector:"), error.message);
-    throw error;
+    throw failure("Error creating connector:", error);
   }
 }
 
 export async function removeConnector(id, workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     await graphQuery(REMOVE_CONNECTOR_MUTATION, {
       id,
@@ -209,15 +194,13 @@ export async function removeConnector(id, workspaceIdentifier) {
     });
     console.log(chalk.green(`\nConnector ${id} deleted successfully!`));
   } catch (error) {
-    console.error(chalk.red("Error deleting connector:"), error.message);
-    throw error;
+    throw failure("Error deleting connector:", error);
   }
 }
 
 export async function listConnectors(workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     const data = await graphQuery(LIST_CONNECTORS_QUERY, { id: workspaceId });
 
@@ -241,11 +224,7 @@ export async function listConnectors(workspaceIdentifier) {
       );
     });
   } catch (error) {
-    console.error(
-      chalk.red("Error listing available connectors:"),
-      error.message,
-    );
-    throw error;
+    throw failure("Error listing available connectors:", error);
   }
 }
 
@@ -261,7 +240,6 @@ export async function updateConnector(
 ) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     let connectorName = name;
     let connectorNamespace = namespace;
@@ -270,8 +248,7 @@ export async function updateConnector(
     let connectorConfig = config;
 
     if (!connectorId) {
-      console.log(chalk.yellow("⚠ Connector ID is required"));
-      return;
+      throw new UsageError("⚠ Connector ID is required");
     }
 
     if (file) {
@@ -319,8 +296,7 @@ export async function updateConnector(
         });
 
         if (!connectorData.getAutomationConnector) {
-          console.log(chalk.red("Error: Connector not found"));
-          return;
+          throw new CliError("Error: Connector not found");
         }
 
         connectorName = connectorData.getAutomationConnector.name;
@@ -336,8 +312,7 @@ export async function updateConnector(
       if (response.updateAutomationConnector) {
         console.log(chalk.green("\nConnector updated successfully!"));
       } else {
-        console.log(chalk.red("Error: Failed to update connector"));
-        return;
+        throw new CliError("Error: Failed to update connector");
       }
     }
 
@@ -380,25 +355,20 @@ export async function updateConnector(
           chalk.green("\nConnector configuration updated successfully!"),
         );
       } else {
-        console.log(
-          chalk.red("Error: Failed to update connector configuration"),
-        );
+        throw new CliError("Error: Failed to update connector configuration");
       }
     }
   } catch (error) {
-    console.error(chalk.red("Error updating connector:"), error.message);
-    throw error;
+    throw failure("Error updating connector:", error);
   }
 }
 
 export async function getConnectorLogs(id, workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     if (!id) {
-      console.log(chalk.yellow("⚠ Connector ID is required"));
-      return;
+      throw new UsageError("⚠ Connector ID is required");
     }
 
     const data = await graphQuery(GET_CONNECTOR_LOGS_QUERY, {
@@ -414,8 +384,7 @@ export async function getConnectorLogs(id, workspaceIdentifier) {
     console.log(chalk.blue("\nConnector Logs:"));
     console.log(data.getAutomationConnectorLogs);
   } catch (error) {
-    console.error(chalk.red("Error getting connector logs:"), error.message);
-    throw error;
+    throw failure("Error getting connector logs:", error);
   }
 }
 
@@ -426,11 +395,9 @@ export async function startConnectorOAuth(
 ) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     if (!id) {
-      console.log(chalk.yellow("⚠ Connector ID is required"));
-      return;
+      throw new UsageError("⚠ Connector ID is required");
     }
 
     const response = await graphQuery(START_CONNECTOR_OAUTH_MUTATION, {
@@ -456,17 +423,16 @@ export async function startConnectorOAuth(
         console.log(oauthUrl.toString());
       }
     } else {
-      console.log(chalk.red("Error: Failed to start OAuth process"));
+      throw new CliError("Error: Failed to start OAuth process");
     }
   } catch (error) {
-    console.error(chalk.red("Error starting OAuth process:"), error);
+    throw failure("Error starting OAuth process:", error);
   }
 }
 
 export async function getConnectorByName(connectorName, workspaceIdentifier) {
   try {
     const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-    if (!workspaceId) return;
 
     if (!connectorName) {
       console.log(chalk.yellow("⚠ Connector name is required"));
@@ -505,7 +471,6 @@ export async function getConnectorByName(connectorName, workspaceIdentifier) {
       return null;
     }
   } catch (error) {
-    console.error(chalk.red("Error getting connector by name:"), error.message);
-    throw error;
+    throw failure("Error getting connector by name:", error);
   }
 }

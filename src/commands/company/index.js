@@ -10,12 +10,12 @@ import {
   switchDefaultWorkspace,
 } from "../workspace/index.js";
 import readline from "readline";
+import { CliError, failure } from "../../runtime.js";
 
 export const addCompany = async (name, emails) => {
   const user = await graphQuery(ME_QUERY);
   if (!user?.me?.groups?.includes("company-manager")) {
-    console.log(chalk.red("Error: Only administrators can add companies"));
-    return;
+    throw new CliError("Error: Only administrators can add companies");
   }
 
   try {
@@ -26,7 +26,7 @@ export const addCompany = async (name, emails) => {
     // });
     console.log(chalk.green(`Company "${name}" created successfully!`));
   } catch (error) {
-    console.log(chalk.red("Error creating company:", error.message));
+    throw failure("Error creating company:", error);
   }
 };
 
@@ -56,8 +56,7 @@ async function selectCompanyInteractive() {
     const currentCompanyId = user?.me?.realm?.id;
 
     if (realms.length === 0) {
-      console.log(chalk.yellow("No companies found."));
-      return null;
+      throw new CliError("No companies found.");
     }
 
     let selectedIndex = 0;
@@ -90,7 +89,7 @@ async function selectCompanyInteractive() {
     process.stdin.resume();
     process.stdin.setEncoding("utf8");
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const displayCompanies = () => {
         // Clear screen and move cursor to top
         process.stdout.write("\x1B[2J\x1B[0f");
@@ -122,8 +121,7 @@ async function selectCompanyInteractive() {
           // Ctrl+C
           process.stdin.setRawMode(false);
           rl.close();
-          console.log(chalk.yellow("\nSelection cancelled."));
-          resolve(null);
+          reject(new CliError("\nSelection cancelled."));
           return;
         }
 
@@ -153,8 +151,7 @@ async function selectCompanyInteractive() {
       process.stdin.on("data", handleKeyPress);
     });
   } catch (error) {
-    console.error(chalk.red("Error fetching companies:"), error.message);
-    return null;
+    throw failure("Error fetching companies:", error);
   }
 }
 
@@ -165,17 +162,13 @@ export const switchCompany = async (identifier) => {
     if (!identifier) {
       // Interactive selection
       company = await selectCompanyInteractive();
-      if (!company) {
-        return;
-      }
     } else {
       // Direct selection by identifier
       const user = await graphQuery(ME_QUERY);
       const realms = user?.me?.realms || [];
 
       if (realms.length === 0) {
-        console.log(chalk.yellow("No companies found."));
-        return;
+        throw new CliError("No companies found.");
       }
 
       // select the company by name or id
@@ -183,8 +176,7 @@ export const switchCompany = async (identifier) => {
         (realm) => realm.name === identifier || realm.id === identifier,
       );
       if (!company) {
-        console.log(chalk.red("Company not found"));
-        return;
+        throw new CliError("Company not found");
       }
     }
 
@@ -229,6 +221,6 @@ export const switchCompany = async (identifier) => {
       chalk.green(`Successfully switched to company [${company.name}]`),
     );
   } catch (error) {
-    console.log(chalk.red("Error switching company:", error.message));
+    throw failure("Error switching company:", error);
   }
 };

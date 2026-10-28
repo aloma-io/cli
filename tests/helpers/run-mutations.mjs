@@ -27,6 +27,8 @@ const CO = "src/commands/connector/index.js";
 const D = "src/commands/deploy/index.js";
 const CLI = "src/cli.js";
 const UT = "src/utils.js";
+const RT = "src/runtime.js";
+const A = "src/commands/auth/index.js";
 
 // [id, file, find (must occur exactly once), replace, tests expected to catch it, description]
 export const MUTATIONS = [
@@ -41,7 +43,7 @@ export const MUTATIONS = [
   ["M09", CLI, "const deletionDays = options.days ? parseInt(options.days) : undefined;", "const deletionDays = options.days ? options.days : undefined;", "workspace", "workspace delete --days sent as a string"],
   ["M10", S, "          nocode_content: null,\n          config_content: null,\n        });\n\n        if (updateData.saveAutomationStep) {", "          nocode_content: null,\n          config_content: null,\n          enabled: false,\n        });\n\n        if (updateData.saveAutomationStep) {", "step", "step add -f saves the step disabled"],
   ["M11", S, "      environment_id: workspaceId, // TODO: remove this", "      environment_id: stepId, // TODO: remove this", "step", "step delete sends the step id as the workspace"],
-  ["M12", S, "        if (!confirmed) {\n          console.log(chalk.yellow(\"Sync cancelled by user.\"));\n          return;\n        }\n        try {\n          await updateStepFromFile", "        if (confirmed) {\n          console.log(chalk.yellow(\"Sync cancelled by user.\"));\n          return;\n        }\n        try {\n          await updateStepFromFile", "step", "step sync -s: confirmation inverted"],
+  ["M12", S, "      if (!confirmed) {\n        throw new CliError(\"Sync cancelled by user.\");\n      }\n      try {\n        await updateStepFromFile", "      if (confirmed) {\n        throw new CliError(\"Sync cancelled by user.\");\n      }\n      try {\n        await updateStepFromFile", "step", "step sync -s: confirmation inverted"],
   ["M13", S, 'const stepName = relPath.replace(/\\\\/g, "/").replace(/\\.js$/, "");', 'const stepName = relPath.replace(/\\\\/g, "/");', "step", "step sync keeps the .js extension in the step name"],
   ["M14", S, "      const data = await graphQuery(LIST_STEPS_QUERY, {\n        id: workspaceId,\n        includeDisabled: true,\n      });\n      const steps = data.listAutomationSteps;\n\n      if (!steps || steps.length === 0) {\n        console.log(chalk.yellow(\"No steps found in workspace.\"));", "      const data = await graphQuery(LIST_STEPS_QUERY, {\n        id: workspaceId,\n        includeDisabled: false,\n      });\n      const steps = data.listAutomationSteps;\n\n      if (!steps || steps.length === 0) {\n        console.log(chalk.yellow(\"No steps found in workspace.\"));", "step", "step pull skips disabled steps"],
   ["M15", S, 'const filePath = pullTargetFile(step.name, workspaceFolder, "step");', 'const filePath = pullTargetFile(step.name.split("/").pop(), workspaceFolder, "step");', "step", "step pull flattens nested step names"],
@@ -52,7 +54,7 @@ export const MUTATIONS = [
   ["M20", T, "const offset = (page - 1) * limit;", "const offset = page * limit;", "task", "task list pages off by one"],
   ["M21", T, "if (!isNaN(stepIdx) && stepIdx >= 0 && stepIdx < normalized.length) {\n        const stepId", "if (!isNaN(stepIdx) && stepIdx >= 0 && stepIdx <= normalized.length) {\n        const stepId", "task", "task clone --step accepts one index too many"],
   ["M22", T, 'if (ext === ".json") {', 'if (ext === ".jsn") {', "task", "task new -f no longer reads .json files"],
-  ["M23", WH, "Error listing webhooks: ${error.message}`));\n    process.exit(1);", "Error listing webhooks: ${error.message}`));\n    process.exit(0);", "webhook-secret", "webhook list exits 0 on error"],
+  ["M23", WH, 'throw failure("Error listing webhooks:", error);', "console.error(error.message);", "webhook-secret", "webhook list exits 0 on error"],
   ["M24", WH, "console.log(`URL: ${webhookUrl + webhook.key}`);\n    });", "console.log(`URL: ${webhookUrl}`);\n    });", "webhook-secret", "webhook list prints the URL without the key"],
   ["M25", SE, "    delete config[secretName];", "    // delete config[secretName];", "webhook-secret", "secret delete keeps the secret"],
   ["M26", SE, "      encrypted: encrypted,", "      encrypted: false,", "webhook-secret", "secret add ignores --encrypted"],
@@ -64,10 +66,29 @@ export const MUTATIONS = [
   ["M32", CO, "            audience: marketId,", '            audience: "connector",', "connector", "connector config encrypted for the wrong audience"],
   ["M33", CO, "      mine: false,\n      name: filterName || \"\",", "      mine: true,\n      name: filterName || \"\",", "connector", "connector list-available asks only for my connectors"],
   ["M34", D, 'library.namespace || library.name.split("/")[0] || "default"', 'library.namespace || library.name.split("/")[1] || "default"', "deploy", "deploy library namespace from the wrong segment"],
-  ["M35", D, "await syncStep(workspaceId, null, step.syncPath, true);", "await syncStep(workspaceId, null, step.syncPath, false);", "deploy", "deploy syncPath asks for confirmation"],
+  ["M35", D, "syncStep(workspaceId, null, step.syncPath, true),", "syncStep(workspaceId, null, step.syncPath, false),", "deploy", "deploy syncPath asks for confirmation"],
   ["M36", UT, "headers.Authorization = `Bearer ${tokenData}`;", "headers.Authorization = `Token ${tokenData}`;", "cli", "requests send the wrong Authorization scheme"],
   ["M37", UT, "    if (data.errors) {", "    if (data.errors && false) {", "workspace", "GraphQL errors are ignored"],
   ["M38", CLI, 'const enabled = options.enabled === "true";\n        const tags', 'const enabled = options.enabled !== "true";\n        const tags', "library", "library add --enabled inverted"],
+  // PLAT-81: the exit-code rule (tests/commands-exit-codes.test.js). Each mutant removes the wrapper's
+  // non-zero exit, prints twice, or lets one command group swallow its error again.
+  ["E01", RT, "process.exitCode =\n      error instanceof CliError ? error.exitCode : EXIT_FAILURE;", "process.exitCode = 0;", "exit-codes", "runtime: a failed command exits 0"],
+  ["E02", RT, "process.exit(err.exitCode === 0 ? 0 : EXIT_USAGE);", "process.exit(err.exitCode === 0 ? 0 : EXIT_FAILURE);", "exit-codes", "runtime: usage errors exit 1 instead of 2"],
+  ["E03", RT, "if (process.env.DEBUG && error?.stack) {", "if (error?.stack) {", "exit-codes", "runtime: the stack trace is printed without DEBUG"],
+  ["E04", UT, 'error.prefix = "GraphQL Error:";', 'error.prefix = "GraphQL Error:";\n    console.error("GraphQL Error:", error.message);', "exit-codes", "graphQuery prints the error itself again (printed twice)"],
+  ["E05", W, 'throw new CliError(\n        "No workspace selected. Use `aloma workspace switch` to select one.",\n      );', 'console.log(\n        "No workspace selected. Use `aloma workspace switch` to select one.",\n      );\n      return null;', "exit-codes", "workspace: no selected workspace is a message, exit 0"],
+  ["E06", C, 'throw new CliError("Company not found");', 'console.log("Company not found");\n        return;', "exit-codes", "company: switch to an unknown company exits 0"],
+  ["E07", S, 'throw failure("Error fetching steps:", error);', "console.error(error.message);", "exit-codes", "step: list swallows its error"],
+  ["E08", L, 'throw failure("Error fetching libraries:", error);', "console.error(error.message);", "exit-codes", "library: list swallows its error"],
+  ["E09", T, 'throw failure("Error listing tasks:", error);', "console.error(error.message);", "exit-codes", "task: list swallows its error"],
+  ["E10", WH, 'throw failure("Error showing webhook:", error);', "console.error(error.message);", "exit-codes", "webhook: show swallows its error"],
+  ["E11", SE, 'throw failure("Error fetching secrets:", error);', "console.error(error.message);", "exit-codes", "secret: list swallows its error"],
+  ["E12", CO, 'throw failure("Error starting OAuth process:", error);', "console.error(error.message);", "exit-codes", "connector: oauth swallows its error"],
+  ["E13", U, "throw new CliError(`Error: Only administrators or owners can ${action}`);", "console.error(`Error: Only administrators or owners can ${action}`);", "exit-codes", "user: a refused permission is only printed"],
+  ["E14", A, 'throw failure("❌ Failed to clear session data:", error);', "console.error(error.message);\n      return false;", "exit-codes", "auth: logout swallows a failed session removal"],
+  ["E15", D, "      failed++;\n      reportError(error);\n", "      reportError(error);\n", "exit-codes", "deploy: failed items are not counted (success banner, exit 0)"],
+  ["E16", T, 'throw new UsageError("⚠ No data provided");', 'throw new CliError("⚠ No data provided");', "exit-codes", "task: missing data is an operation failure (exit 1), not a usage error"],
+  ["E17", U, "      throw new UsageError(error.message);\n    }\n\n    await graphQuery(UPDATE_COMPANY_MEMBER_MUTATION", "      throw new CliError(error.message);\n    }\n\n    await graphQuery(UPDATE_COMPANY_MEMBER_MUTATION", "exit-codes", "user: an invalid role exits 1, not 2"],
 ];
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));

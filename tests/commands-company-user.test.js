@@ -29,21 +29,22 @@ test("company list: no companies", sandboxTest(async (sb) => {
   assert.equal(r.stdout, "No companies found\n");
 }));
 
-test("company list: API failure is an unhandled rejection (exit 1)", sandboxTest(async (sb) => {
+test("company list: API failure exits 1", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", gqlError("session expired"));
   const r = await sb.run(["company", "list"]);
-  // PINS SUSPECT BEHAVIOUR: unlike most commands, listCompanies has no try/catch, so the
-  // failure surfaces as a stack trace and exit code 1.
+  // PLAT-81: listCompanies has no try/catch; the action wrapper prints the error once (no stack
+  // trace, was an unhandled rejection) and exits 1.
   assert.equal(r.code, 1);
   assert.match(r.stderr, /GraphQL Error: session expired/);
   assert.match(r.stderr, /Error: session expired/);
 }));
 
-test("company add: non-admin is refused", sandboxTest(async (sb) => {
+test("company add: non-admin is refused (exit 1)", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
   const r = await sb.run(["company", "add", "New Co"]);
-  assert.equal(r.stdout, "Error: Only administrators can add companies\n");
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error: Only administrators can add companies\n");
+  assert.equal(r.stdout, "");
+  assert.equal(r.code, 1);
 }));
 
 test("company add: for a company-manager it only prints success and creates nothing", sandboxTest(async (sb) => {
@@ -84,7 +85,8 @@ test("company switch <id>: matches by id; exact (case-sensitive) name", sandboxT
   let r = await sb.run(["company", "switch", "r-2"]);
   assert.equal(sb.axiosCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
   r = await sb.run(["company", "switch", "beta co"]);
-  assert.equal(r.stdout, "Company not found\n");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Company not found\n");
   assert.equal(sb.axiosCalls().length, 1);
 }));
 
@@ -106,25 +108,27 @@ test("company switch: a token containing '=' is cut off at the first '='", sandb
   assert.equal(sb.readSession().token, "abc");
 }));
 
-test("company switch: errors from the realm endpoint are printed to stdout, exit 0", sandboxTest(async (sb) => {
+test("company switch: errors from the realm endpoint are printed to stderr, exit 1", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
   const r = await sb.run(["company", "switch", "Beta Co"], { env: { TEST_AXIOS_FAIL: "Request failed with status code 403" } });
-  assert.equal(r.code, 0);
-  assert.equal(r.stdout, "Error switching company: Request failed with status code 403\n");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error switching company: Request failed with status code 403\n");
+  assert.equal(r.stdout, "");
   assert.equal(sb.readSession().token, FAKE_TOKEN);
 }));
 
 test("company switch: empty account", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", { me: { realms: [] } });
   const r = await sb.run(["company", "switch", "x"]);
-  assert.equal(r.stdout, "No companies found.\n");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "No companies found.\n");
   assert.deepEqual(sb.axiosCalls(), []);
 }));
 
 test("company switch without argument needs a terminal", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
   const r = await sb.run(["company", "switch"]);
-  assert.equal(r.code, 0);
+  assert.equal(r.code, 1);
   assert.match(r.stderr, /Error fetching companies: process\.stdin\.setRawMode is not a function/);
   assert.deepEqual(sb.axiosCalls(), []);
 }));
@@ -158,16 +162,16 @@ test("user list: empty company, and permission check (owner allowed, developer r
   assert.equal(r.stdout, "No users found in the current company.\n");
   sb.api.on("ME_QUERY", me(["developer"]));
   r = await sb.run(["user", "list"]);
-  assert.equal(r.stdout, "Error: Only administrators or owners can list users\n");
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error: Only administrators or owners can list users\n");
+  assert.equal(r.code, 1);
   assert.equal(sb.api.ops().filter((o) => o === "FIND_COMPANY_MEMBERS_QUERY").length, 1);
 }));
 
 test("user list: API error", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", gqlError("nope"));
   const r = await sb.run(["user", "list"]);
-  assert.match(r.stderr, /Error listing users: nope/);
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error listing users: nope\n");
+  assert.equal(r.code, 1);
 }));
 
 test("user invite: default role developer expands to the base groups", sandboxTest(async (sb) => {
@@ -191,10 +195,13 @@ test("user invite --roles admin,business adds their groups without duplicates", 
 
 test("user invite: invalid role, role 'owner' not invitable, no valid emails", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["admin"]));
+  // PLAT-81: bad option values are usage errors (exit 2), printed on stderr.
   let r = await sb.run(["user", "invite", "a@example.invalid", "-r", "owner,wizard"]);
-  assert.equal(r.stdout, "Invalid roles: owner, wizard. Allowed roles are: developer, admin, business\n");
+  assert.equal(r.code, 2);
+  assert.equal(r.stderr, "Invalid roles: owner, wizard. Allowed roles are: developer, admin, business\n");
   r = await sb.run(["user", "invite", " , ,"]);
-  assert.equal(r.stdout, "No valid emails provided.\n");
+  assert.equal(r.code, 2);
+  assert.equal(r.stderr, "No valid emails provided.\n");
   assert.ok(!sb.api.ops().includes("INVITE_TO_COMPANY_MUTATION"));
 }));
 
@@ -208,11 +215,13 @@ test("user invite: emails are not validated client side", sandboxTest(async (sb)
 test("user invite: non-admin refused; API error reported", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
   let r = await sb.run(["user", "invite", "a@example.invalid"]);
-  assert.equal(r.stdout, "Error: Only administrators or owners can invite users\n");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error: Only administrators or owners can invite users\n");
   sb.api.on("ME_QUERY", me(["admin"]));
   sb.api.on("INVITE_TO_COMPANY_MUTATION", gqlError("limit reached"));
   r = await sb.run(["user", "invite", "a@example.invalid"]);
-  assert.match(r.stderr, /Error inviting users: limit reached/);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error inviting users: limit reached\n");
 }));
 
 test("user update: roles become groups", sandboxTest(async (sb) => {
@@ -226,16 +235,19 @@ test("user update: roles become groups", sandboxTest(async (sb) => {
 test("user update: roles are required and validated", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["admin"]));
   let r = await sb.run(["user", "update", "u-9"]);
-  assert.equal(r.stdout, "Error: Roles parameter is required\n");
+  assert.equal(r.code, 2);
+  assert.equal(r.stderr, "Error: Roles parameter is required\n");
   r = await sb.run(["user", "update", "u-9", "-r", "root"]);
-  assert.match(r.stdout, /^Invalid roles: root\./);
+  assert.equal(r.code, 2);
+  assert.match(r.stderr, /^Invalid roles: root\./);
   assert.ok(!sb.api.ops().includes("UPDATE_COMPANY_MEMBER_MUTATION"));
 }));
 
 test("user update: non-admin refused", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["viewer"]));
   const r = await sb.run(["user", "update", "u-9", "-r", "admin"]);
-  assert.equal(r.stdout, "Error: Only administrators or owners can update users\n");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error: Only administrators or owners can update users\n");
 }));
 
 test("user remove: sends removed=true", sandboxTest(async (sb) => {
@@ -251,8 +263,10 @@ test("user remove: error text says 'updating' and non-admin is refused", sandbox
   sb.api.on("UPDATE_COMPANY_MEMBER_MUTATION", gqlError("last owner"));
   let r = await sb.run(["user", "remove", "u-9"]);
   // PINS SUSPECT BEHAVIOUR: the remove command reports failures as "Error updating user".
-  assert.match(r.stderr, /Error updating user: last owner/);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error updating user: last owner\n");
   sb.api.on("ME_QUERY", me([]));
   r = await sb.run(["user", "remove", "u-9"]);
-  assert.equal(r.stdout, "Error: Only administrators or owners can remove users\n");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error: Only administrators or owners can remove users\n");
 }));
