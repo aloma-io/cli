@@ -40,13 +40,24 @@ test("keytar and the unused supabase CLI are not dependencies", () => {
   assert.equal(lock.packages["node_modules/keytar"], undefined);
 });
 
+// SECURITY (PLAT-117): the CLI's requests go through src/http.js on Node's own fetch. The two HTTP libraries
+// are gone, and with them axios's form-data and follow-redirects (both had advisories, see below): absent is
+// stricter than patched, and bringing one back fails here.
+const REMOVED = ["node-fetch", "axios", "form-data", "follow-redirects"];
+for (const name of REMOVED) {
+  test(`SECURITY: ${name} is not a dependency and not in the lockfile`, () => {
+    assert.equal(pkg.dependencies[name], undefined);
+    assert.equal(pkg.devDependencies?.[name], undefined);
+    const entries = Object.keys(lock.packages).filter((k) => k === `node_modules/${name}` || k.endsWith(`/node_modules/${name}`));
+    assert.deepEqual(entries, []);
+  });
+}
+
 // SECURITY (finding 4): every package that had a published advisory against the locked version
-// is locked at or above the first patched release.
+// is locked at or above the first patched release. (axios >= 1.19.1, form-data >= 4.0.6 and
+// follow-redirects >= 1.15.12 were here until PLAT-117 removed them; see REMOVED above.)
 const PATCHED = {
-  axios: "1.19.1",
-  "form-data": "4.0.6",
   "js-yaml": "4.3.2",
-  "follow-redirects": "1.15.12",
   diff: "8.0.3",
   "http-cache-semantics": "4.2.1",
 };
