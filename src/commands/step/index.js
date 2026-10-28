@@ -20,6 +20,7 @@ import path from "path";
 import os from "os";
 import open from "open";
 import { resolveWorkspaceId } from "../workspace/index.js";
+import { CliError, UsageError, failure } from "../../runtime.js";
 import readline from "readline";
 import parser from "@babel/parser";
 import generate from "@babel/generator";
@@ -31,7 +32,6 @@ export async function addStep(
   filePath = null,
 ) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   try {
     // Create the step first
@@ -72,13 +72,11 @@ export async function addStep(
           );
         }
       } catch (error) {
-        console.error(
-          chalk.red(`Error reading or parsing file: ${error.message}`),
-        );
+        throw failure("Error reading or parsing file:", error);
       }
     }
   } catch (error) {
-    console.error(chalk.red("Error creating step:"), error.message);
+    throw failure("Error creating step:", error);
   }
 }
 
@@ -88,7 +86,6 @@ export async function listSteps(
   name = null,
 ) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   try {
     const data = await graphQuery(LIST_STEPS_QUERY, {
@@ -117,14 +114,13 @@ export async function listSteps(
       console.log(`   Last Used: ${step.last_used_at || "Never"}\n`);
     });
   } catch (error) {
-    console.error(chalk.red("Error fetching steps:"), error.message);
+    throw failure("Error fetching steps:", error);
   }
 }
 
 export async function showStep(stepId) {
   if (!stepId) {
-    console.log(chalk.yellow("⚠ Please provide a step ID."));
-    return;
+    throw new UsageError("⚠ Please provide a step ID.");
   }
 
   try {
@@ -134,8 +130,7 @@ export async function showStep(stepId) {
     const step = data.getAutomationStep;
 
     if (!step) {
-      console.log(chalk.yellow(`Step with ID ${stepId} not found.`));
-      return;
+      throw new CliError(`Step with ID ${stepId} not found.`);
     }
 
     console.log(chalk.blue("\n📊 Step Details\n"));
@@ -162,17 +157,15 @@ export async function showStep(stepId) {
       );
     }
   } catch (error) {
-    console.error(chalk.red("Error fetching step details:"), error.message);
+    throw failure("Error fetching step details:", error);
   }
 }
 
 export async function deleteStep(stepId, workspaceIdentifier) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   if (!stepId) {
-    console.log(chalk.yellow("⚠ Please provide a step ID."));
-    return;
+    throw new UsageError("⚠ Please provide a step ID.");
   }
 
   try {
@@ -184,24 +177,20 @@ export async function deleteStep(stepId, workspaceIdentifier) {
     if (data.deleteAutomationStep) {
       console.log(chalk.green(`Successfully deleted step with ID: ${stepId}`));
     } else {
-      console.log(
-        chalk.yellow(
-          `Step with ID ${stepId} not found or could not be deleted.`,
-        ),
+      throw new CliError(
+        `Step with ID ${stepId} not found or could not be deleted.`,
       );
     }
   } catch (error) {
-    console.error(chalk.red("Error deleting step:"), error.message);
+    throw failure("Error deleting step:", error);
   }
 }
 
 export async function editStep(stepId, workspaceIdentifier) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   if (!stepId) {
-    console.log(chalk.yellow("⚠ Please provide a step ID."));
-    return;
+    throw new UsageError("⚠ Please provide a step ID.");
   }
 
   try {
@@ -212,8 +201,7 @@ export async function editStep(stepId, workspaceIdentifier) {
     const step = data.getAutomationStep;
 
     if (!step) {
-      console.log(chalk.yellow(`Step with ID ${stepId} not found.`));
-      return;
+      throw new CliError(`Step with ID ${stepId} not found.`);
     }
 
     // Create temporary file
@@ -263,6 +251,7 @@ ${step.content?.do || ""}
     const modifiedContent = await fs.readFile(tempFilePath, "utf8");
 
     // Parse the modified content
+    let editError = null;
     try {
       const { condition: newCondition, content: newContent } =
         await parseStepFile(tempFilePath);
@@ -282,13 +271,10 @@ ${step.content?.do || ""}
       if (updateData.saveAutomationStep) {
         console.log(chalk.green(`Successfully updated step: ${step.name}`));
       } else {
-        console.log(chalk.yellow(`Failed to update step: ${step.name}`));
+        editError = new CliError(`Failed to update step: ${step.name}`);
       }
     } catch (error) {
-      console.error(
-        chalk.red("Error parsing or updating step:"),
-        error.message,
-      );
+      editError = failure("Error parsing or updating step:", error);
     }
 
     // Clean up the temporary file
@@ -302,18 +288,17 @@ ${step.content?.do || ""}
         ),
       );
     }
+    if (editError) throw editError;
   } catch (error) {
-    console.error(chalk.red("Error editing step:"), error.message);
+    throw failure("Error editing step:", error);
   }
 }
 
 export async function cloneStep(stepId, workspaceIdentifier) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   if (!stepId) {
-    console.log(chalk.yellow("Please provide a step ID to clone."));
-    return;
+    throw new UsageError("Please provide a step ID to clone.");
   }
 
   try {
@@ -324,8 +309,7 @@ export async function cloneStep(stepId, workspaceIdentifier) {
     const sourceStep = sourceData.getAutomationStep;
 
     if (!sourceStep) {
-      console.log(chalk.yellow(`Step with ID ${stepId} not found.`));
-      return;
+      throw new CliError(`Step with ID ${stepId} not found.`);
     }
 
     // Create the step in the target workspace
@@ -356,13 +340,12 @@ export async function cloneStep(stepId, workspaceIdentifier) {
     );
     return newStepId;
   } catch (error) {
-    console.error(chalk.red(`Error cloning step: ${error.message}`));
+    throw failure("Error cloning step:", error);
   }
 }
 
 export async function pullStep(workspaceIdentifier, stepId, targetPath) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   // Use current directory if no path specified
   const workspaceFolder = targetPath || process.cwd();
@@ -377,8 +360,7 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
       const step = data.getAutomationStep;
 
       if (!step) {
-        console.log(chalk.yellow(`Step with ID ${stepId} not found.`));
-        return;
+        throw new CliError(`Step with ID ${stepId} not found.`);
       }
 
       await createStepFile(step, workspaceFolder);
@@ -423,7 +405,7 @@ export async function pullStep(workspaceIdentifier, stepId, targetPath) {
       );
     }
   } catch (error) {
-    console.error(chalk.red("Error pulling steps:"), error.message);
+    throw failure("Error pulling steps:", error);
   }
 }
 
@@ -434,7 +416,6 @@ export async function syncStep(
   noPrompt,
 ) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   // Use current directory if no path specified
   const workspaceFolder = sourcePath || process.cwd();
@@ -479,10 +460,7 @@ export async function syncStep(
     try {
       await fs.access(workspaceFolder);
     } catch (error) {
-      console.log(
-        chalk.yellow(`Workspace folder not found: ${workspaceFolder}`),
-      );
-      return;
+      throw new CliError(`Workspace folder not found: ${workspaceFolder}`);
     }
 
     if (stepId) {
@@ -491,8 +469,7 @@ export async function syncStep(
       const step = data.getAutomationStep;
 
       if (!step) {
-        console.log(chalk.yellow(`Step with ID ${stepId} not found.`));
-        return;
+        throw new CliError(`Step with ID ${stepId} not found.`);
       }
 
       // If the step name contains slashes, create subfolders accordingly
@@ -504,26 +481,26 @@ export async function syncStep(
 
       try {
         await fs.access(stepFilePath);
-        // Prompt for confirmation
-        let confirmed = true;
-        if (!noPrompt) {
-          confirmed = await promptConfirmation(
-            `Are you sure you want to overwrite the step '${step.name}' with the contents of '${stepFilePath}'? (y/N): `,
-          );
-        }
-        if (!confirmed) {
-          console.log(chalk.yellow("Sync cancelled by user."));
-          return;
-        }
-        try {
-          await updateStepFromFile(step, stepFilePath);
-          console.log(chalk.green(`Successfully synced step: ${step.name}`));
-        } catch (error) {
-          console.log(chalk.red(`Error updating step: ${step.name}`));
-        }
       } catch (error) {
-        console.log(chalk.yellow(`Step file not found: ${stepFilePath}`));
+        throw new CliError(`Step file not found: ${stepFilePath}`);
       }
+
+      // Prompt for confirmation
+      let confirmed = true;
+      if (!noPrompt) {
+        confirmed = await promptConfirmation(
+          `Are you sure you want to overwrite the step '${step.name}' with the contents of '${stepFilePath}'? (y/N): `,
+        );
+      }
+      if (!confirmed) {
+        throw new CliError("Sync cancelled by user.");
+      }
+      try {
+        await updateStepFromFile(step, stepFilePath);
+      } catch (error) {
+        throw failure(`Error updating step: ${step.name}:`, error);
+      }
+      console.log(chalk.green(`Successfully synced step: ${step.name}`));
     } else {
       // Sync all steps
       const data = await graphQuery(LIST_STEPS_QUERY, {
@@ -554,12 +531,12 @@ export async function syncStep(
         );
       }
       if (!confirmed) {
-        console.log(chalk.yellow("Sync cancelled by user."));
-        return;
+        throw new CliError("Sync cancelled by user.");
       }
 
       let updatedCount = 0;
       let createdCount = 0;
+      let failedCount = 0;
       for (const { absPath, relPath } of jsFiles) {
         // Derive step name from relPath (remove .js extension, convert path separators to /)
         const stepName = relPath.replace(/\\/g, "/").replace(/\.js$/, "");
@@ -573,7 +550,10 @@ export async function syncStep(
             await updateStepFromFile(fullStep, absPath);
             updatedCount++;
           } catch (error) {
-            console.log(chalk.red(`Error updating step: ${stepName}`));
+            failedCount++;
+            console.error(
+              chalk.red(`Error updating step: ${stepName}: ${error.message}`),
+            );
           }
         } else {
           // Create new step
@@ -600,9 +580,17 @@ export async function syncStep(
             });
             createdCount++;
           } catch (error) {
-            console.log(chalk.red(`Error creating step: ${stepName}`));
+            failedCount++;
+            console.error(
+              chalk.red(`Error creating step: ${stepName}: ${error.message}`),
+            );
           }
         }
+      }
+      if (failedCount > 0) {
+        throw new CliError(
+          `Step sync from ${workspaceFolder} failed for ${failedCount} file(s)\nUpdated: ${updatedCount}, Created: ${createdCount}, Failed: ${failedCount}`,
+        );
       }
       console.log(
         chalk.green(
@@ -611,7 +599,7 @@ export async function syncStep(
       );
     }
   } catch (error) {
-    console.error(chalk.red("Error syncing steps:"), error.message);
+    throw failure("Error syncing steps:", error);
   }
 }
 
@@ -670,10 +658,9 @@ async function updateStepFromFile(step, filePath) {
     });
 
     if (!updateData.saveAutomationStep) {
-      console.log(chalk.yellow(`Failed to update step: ${step.name}`));
+      throw new Error(`Failed to update step: ${step.name}`);
     }
   } catch (error) {
-    console.error(chalk.red(`Error updating step from file: ${error.message}`));
     throw new Error(`Error updating step from file: ${error.message}`);
   }
 }
@@ -742,13 +729,9 @@ async function parseStepFile(filePath) {
 
 export async function generateStep(filePath, workspaceIdentifier) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-  if (!workspaceId) return;
 
   if (!filePath) {
-    console.log(
-      chalk.yellow("⚠ Please provide a file path with -f or --file"),
-    );
-    return;
+    throw new UsageError("⚠ Please provide a file path with -f or --file");
   }
 
   try {
@@ -916,6 +899,6 @@ ${step.content || ""}
       }
     }
   } catch (error) {
-    console.error(chalk.red("Error in step generation:"), error.message);
+    throw failure("Error in step generation:", error);
   }
 }

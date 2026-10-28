@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { graphQuery, updateSessionData, getSessionData } from "../../utils.js";
+import { CliError, failure } from "../../runtime.js";
 import {
   LIST_ENVIRONMENTS_QUERY,
   CREATE_WORKSPACE_MUTATION,
@@ -29,11 +30,7 @@ export async function saveSelectedWorkspace(workspaceId) {
     selectedWorkspaceId = workspaceId;
     return true;
   } catch (error) {
-    console.error(
-      chalk.red("Failed to save workspace selection:"),
-      error.message,
-    );
-    return false;
+    throw failure("Failed to save workspace selection:", error);
   }
 }
 
@@ -48,11 +45,7 @@ export async function getSelectedWorkspace() {
     selectedWorkspaceId = selectedWorkspace;
     return selectedWorkspace;
   } catch (error) {
-    console.error(
-      chalk.red("Failed to read workspace selection:"),
-      error.message,
-    );
-    return null;
+    throw failure("Failed to read workspace selection:", error);
   }
 }
 
@@ -62,12 +55,9 @@ export async function resolveWorkspaceId(workspaceIdentifier) {
   if (!workspaceIdentifier) {
     workspaceId = await getSelectedWorkspace();
     if (!workspaceId) {
-      console.log(
-        chalk.yellow(
-          "No workspace selected. Use `aloma workspace switch` to select one.",
-        ),
+      throw new CliError(
+        "No workspace selected. Use `aloma workspace switch` to select one.",
       );
-      return null;
     }
   } else {
     // Try to resolve workspace name to ID
@@ -121,7 +111,7 @@ async function selectWorkspaceInteractive() {
     process.stdin.resume();
     process.stdin.setEncoding("utf8");
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const displayWorkspaces = () => {
         // Clear screen and move cursor to top
         process.stdout.write("\x1B[2J\x1B[0f");
@@ -153,8 +143,7 @@ async function selectWorkspaceInteractive() {
           // Ctrl+C
           process.stdin.setRawMode(false);
           rl.close();
-          console.log(chalk.yellow("\nSelection cancelled."));
-          resolve(null);
+          reject(new CliError("\nSelection cancelled."));
           return;
         }
 
@@ -184,8 +173,7 @@ async function selectWorkspaceInteractive() {
       process.stdin.on("data", handleKeyPress);
     });
   } catch (error) {
-    console.error(chalk.red("Error fetching workspaces:"), error.message);
-    return null;
+    throw failure("Error fetching workspaces:", error);
   }
 }
 
@@ -206,8 +194,7 @@ export async function switchWorkspace(workspaceIdentifier) {
       const workspaces = data.listAutomationEnvironmentWithStats;
 
       if (!workspaces || workspaces.length === 0) {
-        console.log(chalk.yellow("No workspaces found."));
-        return;
+        throw new CliError("No workspaces found.");
       }
 
       // Try to find and switch to it
@@ -218,8 +205,7 @@ export async function switchWorkspace(workspaceIdentifier) {
       );
 
       if (!workspace) {
-        console.log(chalk.red(`Workspace '${workspaceIdentifier}' not found.`));
-        return;
+        throw new CliError(`Workspace '${workspaceIdentifier}' not found.`);
       }
     }
 
@@ -227,7 +213,7 @@ export async function switchWorkspace(workspaceIdentifier) {
     await saveSelectedWorkspace(workspace.id);
     console.log(chalk.green(`Switched to workspace [${workspace.name}]`));
   } catch (error) {
-    console.error(chalk.red("Error switching workspace:"), error.message);
+    throw failure("Error switching workspace:", error);
   }
 }
 
@@ -251,7 +237,7 @@ export async function createWorkspace(name, tags) {
     await saveSelectedWorkspace(workspace.id);
     console.log(chalk.green(`Switched to workspace [${name.trim()}]`));
   } catch (error) {
-    console.error(chalk.red("Error creating workspace:"), error.message);
+    throw failure("Error creating workspace:", error);
   }
 }
 
@@ -274,7 +260,7 @@ export async function listWorkspaces(name, tags, archived) {
       console.log(`${env.name} (ID:${env.id})${isCurrent ? " [*]" : ""}`);
     });
   } catch (error) {
-    console.error(chalk.red("Error fetching environments:"), error.message);
+    throw failure("Error fetching environments:", error);
   }
 }
 
@@ -288,8 +274,7 @@ export async function showWorkspace(workspaceIdentifier, stats, source) {
     });
     const ws = data.getAutomationEnvironmentWithStats;
     if (!ws) {
-      console.log(chalk.red("Workspace not found or no stats available."));
-      return;
+      throw new CliError("Workspace not found or no stats available.");
     }
     // Workspace Header
     console.log(
@@ -418,8 +403,7 @@ export async function showWorkspace(workspaceIdentifier, stats, source) {
       const data = await graphQuery(GET_SOURCE_QUERY, { id: workspaceId });
       const ws = data.getAutomationEnvironment;
       if (!ws) {
-        console.log(chalk.red("Workspace not found."));
-        return;
+        throw new CliError("Workspace not found.");
       }
       if (ws.archived || ws.deleting || ws.deleting_at) {
         console.log(
@@ -443,10 +427,7 @@ export async function showWorkspace(workspaceIdentifier, stats, source) {
         console.log(chalk.gray(key + ": ") + chalk.cyan(value));
       });
     } catch (error) {
-      console.error(
-        chalk.red("Error fetching source configuration:"),
-        error.message,
-      );
+      throw failure("Error fetching source configuration:", error);
     }
   } else {
     const data = await graphQuery(GET_WORKSPACE_QUERY, {
@@ -454,8 +435,7 @@ export async function showWorkspace(workspaceIdentifier, stats, source) {
     });
     const ws = data.getAutomationEnvironment;
     if (!ws) {
-      console.log(chalk.red("Workspace not found."));
-      return;
+      throw new CliError("Workspace not found.");
     }
     // Header
     console.log(
@@ -527,8 +507,7 @@ export async function deleteWorkspace(
     const ws = data.getAutomationEnvironment;
 
     if (!ws) {
-      console.log(chalk.red("Workspace not found."));
-      return;
+      throw new CliError("Workspace not found.");
     }
 
     if (cancel) {
@@ -564,10 +543,7 @@ export async function deleteWorkspace(
       }
     }
   } catch (error) {
-    console.error(
-      chalk.red("Error managing workspace deletion:"),
-      error.message,
-    );
+    throw failure("Error managing workspace deletion:", error);
   }
 }
 
@@ -583,8 +559,7 @@ export async function archiveWorkspace(workspaceIdentifier, unarchive = false) {
     const ws = data.getAutomationEnvironment;
 
     if (!ws) {
-      console.log(chalk.red("Workspace not found."));
-      return;
+      throw new CliError("Workspace not found.");
     }
 
     if (unarchive) {
@@ -613,10 +588,7 @@ export async function archiveWorkspace(workspaceIdentifier, unarchive = false) {
       console.log(chalk.green(`Workspace [${ws.name}] archived successfully.`));
     }
   } catch (error) {
-    console.error(
-      chalk.red("Error managing workspace archive:"),
-      error.message,
-    );
+    throw failure("Error managing workspace archive:", error);
   }
 }
 
@@ -632,8 +604,7 @@ export async function updateWorkspace(workspaceIdentifier, options) {
     const ws = data.getAutomationEnvironment;
 
     if (!ws) {
-      console.log(chalk.red("Workspace not found."));
-      return;
+      throw new CliError("Workspace not found.");
     }
 
     // Prepare update data with existing values as defaults
@@ -664,7 +635,7 @@ export async function updateWorkspace(workspaceIdentifier, options) {
     await graphQuery(SAVE_WORKSPACE_MUTATION, updateData);
     console.log(chalk.green(`Workspace [${ws.name}] updated successfully.`));
   } catch (error) {
-    console.error(chalk.red("Error updating workspace:"), error.message);
+    throw failure("Error updating workspace:", error);
   }
 }
 
@@ -705,28 +676,20 @@ export async function sourceEdit(workspaceIdentifier, options) {
         config = JSON.parse(fileContent);
       }
     } catch (err) {
-      console.error(
-        chalk.red("Failed to read or parse config file:"),
-        err.message,
-      );
-      return;
+      throw failure("Failed to read or parse config file:", err);
     }
   } else {
     const data = await graphQuery(GET_SOURCE_QUERY, { id: workspaceId });
     const ws = data.getAutomationEnvironment;
 
     if (!ws) {
-      console.log(chalk.red("Workspace not found."));
-      return;
+      throw new CliError("Workspace not found.");
     }
 
     if (ws.archived || ws.deleting || ws.deleting_at) {
-      console.log(
-        chalk.yellow(
-          "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.",
-        ),
+      throw new CliError(
+        "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.",
       );
-      return;
     }
     // Accept CLI options for each field
     config = {
@@ -749,10 +712,7 @@ export async function sourceEdit(workspaceIdentifier, options) {
     await graphQuery(SAVE_SOURCE_MUTATION, { id: workspaceId, ...config });
     console.log(chalk.green("Source configuration updated successfully."));
   } catch (error) {
-    console.error(
-      chalk.red("Error updating source configuration:"),
-      error.message,
-    );
+    throw failure("Error updating source configuration:", error);
   }
 }
 
@@ -766,31 +726,23 @@ export async function syncSource(workspaceIdentifier) {
     const ws = data.getAutomationEnvironment;
 
     if (!ws) {
-      console.log(chalk.red("Workspace not found."));
-      return;
+      throw new CliError("Workspace not found.");
     }
 
     if (ws.archived || ws.deleting || ws.deleting_at) {
-      console.log(
-        chalk.yellow(
-          "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.",
-        ),
+      throw new CliError(
+        "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.",
       );
-      return;
     }
 
     if (!ws.source) {
-      console.log(
-        chalk.yellow("No source configuration found for this workspace."),
-      );
-      return;
+      throw new CliError("No source configuration found for this workspace.");
     }
 
     if (ws.source.source_automatic) {
-      console.log(
-        chalk.yellow("Source automatic sync is enabled for this workspace."),
+      throw new CliError(
+        "Source automatic sync is enabled for this workspace.",
       );
-      return;
     }
 
     // Use SAVE_SOURCE_MUTATION to trigger sync with current values and source_do_sync: true
@@ -810,7 +762,7 @@ export async function syncSource(workspaceIdentifier) {
         ` ${ws.name} (ID: ${ws.id})`,
     );
   } catch (error) {
-    console.error(chalk.red("Error triggering source sync:"), error.message);
+    throw failure("Error triggering source sync:", error);
   }
 }
 

@@ -64,8 +64,8 @@ test("library list: empty and error", sandboxTest(async (sb) => {
   assert.equal(r.stdout, "No libraries found in current workspace.\n");
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", gqlError("denied"));
   r = await sb.run(["library", "list"]);
-  assert.match(r.stderr, /Error fetching libraries: denied/);
-  assert.equal(r.code, 0);
+  assert.equal(r.stderr, "Error fetching libraries: denied\n");
+  assert.equal(r.code, 1);
 }));
 
 test("library show: details, types and code; the workspace option is unused", sandboxTest(async (sb) => {
@@ -84,10 +84,12 @@ test("library show: details, types and code; the workspace option is unused", sa
 test("library show: not found / error", sandboxTest(async (sb) => {
   sb.api.on("GET_AUTOMATION_LIB_QUERY", { getAutomationLib: null });
   let r = await sb.run(["library", "show", "l-9"]);
-  assert.equal(r.stdout, "Library with ID l-9 not found.\n");
+  assert.equal(r.stderr, "Library with ID l-9 not found.\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_AUTOMATION_LIB_QUERY", gqlError("denied"));
   r = await sb.run(["library", "show", "l-9"]);
-  assert.match(r.stderr, /Error fetching library details: denied/);
+  assert.equal(r.stderr, "Error fetching library details: denied\n");
+  assert.equal(r.code, 1);
 }));
 
 test("library add: creates the library; with --file also saves types and content", sandboxTest(async (sb) => {
@@ -127,7 +129,8 @@ test("library add: enabled defaults to true, anything but 'true' is false", sand
 
 test("library add: both name and namespace are required", sandboxTest(async (sb) => {
   const r = await sb.run(["library", "add", "x"]);
-  assert.equal(r.code, 1);
+  // PLAT-81: a usage error exits 2 (was commander's 1).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /missing required argument 'namespace'/);
 }));
 
@@ -135,8 +138,9 @@ test("library add --file: bad file leaves the created library empty", sandboxTes
   sb.write("bad.js", "export const types = () => { return ''; };\n");
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
   let r = await sb.run(["library", "add", "x", "ns", "-f", "bad.js"]);
-  // PINS SUSPECT BEHAVIOUR: library is created before the file is validated; exit code stays 0.
-  assert.equal(r.code, 0);
+  // PINS SUSPECT BEHAVIOUR: library is created before the file is validated.
+  // PLAT-81: the failed file step now exits 1 (was 0).
+  assert.equal(r.code, 1);
   assert.match(r.stderr, /Error reading or parsing file: Error parsing library file\. Could not parse types from file/);
   assert.deepEqual(sb.api.ops(), ["ADD_AUTOMATION_LIB_MUTATION"]);
   sb.write("bad2.js", "export const types = () => { return 'T'; };\nexport const content = () => {};\n");
@@ -144,7 +148,8 @@ test("library add --file: bad file leaves the created library empty", sandboxTes
   assert.match(r.stderr, /Could not parse content from file/);
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", gqlError("exists"));
   r = await sb.run(["library", "add", "x", "ns"]);
-  assert.match(r.stderr, /Error creating library: exists/);
+  assert.equal(r.stderr, "Error creating library: exists\n");
+  assert.equal(r.code, 1);
 }));
 
 test("library file parser: string literal / arrow-return forms of types", sandboxTest(async (sb) => {
@@ -193,6 +198,7 @@ test("library update --file: replaces content and types; a failing parse sends n
   const n = sb.api.calls.length;
   const r = await sb.run(["library", "update", "l-1", "-f", "bad.js"]);
   assert.match(r.stderr, /Error updating library: Error parsing library file\. Could not parse types from file/);
+  assert.equal(r.code, 1);
   assert.equal(sb.api.calls.filter((c) => c.op === "UPDATE_AUTOMATION_LIB_MUTATION").length, 1);
   assert.ok(sb.api.calls.length > n); // only the GET happened
 }));
@@ -200,11 +206,13 @@ test("library update --file: replaces content and types; a failing parse sends n
 test("library update: not found; refused by API", sandboxTest(async (sb) => {
   sb.api.on("GET_AUTOMATION_LIB_QUERY", { getAutomationLib: null });
   let r = await sb.run(["library", "update", "l-9"]);
-  assert.equal(r.stdout, "Library with ID l-9 not found.\n");
+  assert.equal(r.stderr, "Library with ID l-9 not found.\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_AUTOMATION_LIB_QUERY", { getAutomationLib: FULL("l-1", "util", "T", null) });
   sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: false });
   r = await sb.run(["library", "update", "l-1"]);
-  assert.equal(r.stdout, "Failed to update library.\n");
+  assert.equal(r.stderr, "Failed to update library.\n");
+  assert.equal(r.code, 1);
   // a library without stored content is saved with empty content
   assert.equal(sb.api.calls.at(-1).variables.content, "");
 }));
@@ -216,10 +224,12 @@ test("library delete: success, refusal, error", sandboxTest(async (sb) => {
   assert.deepEqual(ops(sb), [["REMOVE_AUTOMATION_LIB_MUTATION", { id: "l-1", environment_id: "ws-sel" }]]);
   sb.api.on("REMOVE_AUTOMATION_LIB_MUTATION", { deleteAutomationLib: false });
   r = await sb.run(["library", "delete", "l-1"]);
-  assert.equal(r.stdout, "Library with ID l-1 not found or could not be deleted.\n");
+  assert.equal(r.stderr, "Library with ID l-1 not found or could not be deleted.\n");
+  assert.equal(r.code, 1);
   sb.api.on("REMOVE_AUTOMATION_LIB_MUTATION", gqlError("in use"));
   r = await sb.run(["library", "delete", "l-1"]);
-  assert.match(r.stderr, /Error deleting library: in use/);
+  assert.equal(r.stderr, "Error deleting library: in use\n");
+  assert.equal(r.code, 1);
 }));
 
 test("library pull (all): one file per library name, nested for 'a/b' names", sandboxTest(async (sb) => {
@@ -244,7 +254,8 @@ test("library pull -l <id>: one library; unknown id; empty workspace", sandboxTe
   let r = await sb.run(["library", "pull", "-l", "l-1", "-p", "out"]);
   assert.equal(r.stdout, "Successfully pulled library: flat\n");
   r = await sb.run(["library", "pull", "-l", "nope", "-p", "out"]);
-  assert.equal(r.stdout, "Library with ID nope not found.\n");
+  assert.equal(r.stderr, "Library with ID nope not found.\n");
+  assert.equal(r.code, 1);
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: [] });
   r = await sb.run(["library", "pull", "-p", "out"]);
   assert.equal(r.stdout, "No libraries found in workspace.\n");
@@ -299,8 +310,8 @@ test("library pull: a library without stored content aborts the whole pull", san
   mockLibs(sb, [FULL("l-1", "ok", "T", "a();"), FULL("l-2", "nocontent", "T", null), FULL("l-3", "later", "T", "c();")]);
   const r = await sb.run(["library", "pull", "-p", "out"]);
   // PINS SUSPECT BEHAVIOUR: library.content.content throws on null content; earlier files are
-  // already written, later ones are not, and the exit code is 0.
-  assert.equal(r.code, 0);
+  // already written, later ones are not. PLAT-81: the aborted pull now exits 1 (was 0).
+  assert.equal(r.code, 1);
   assert.match(r.stderr, /Error pulling libraries: Cannot read properties of null/);
   assert.deepEqual(sb.list("out"), ["ok.js"]);
 }));
@@ -311,10 +322,11 @@ test("library pull: types containing a backtick produce a file that cannot be sy
   await sb.run(["library", "pull", "-p", "out"]);
   const r = await sb.run(["library", "sync", "-p", "out"], { answers: YES });
   // PINS SUSPECT BEHAVIOUR: backticks in types are not escaped when the file is written.
-  assert.match(r.stdout, /Error updating library: tick\n/);
-  assert.match(r.stderr, /Missing semicolon/);
-  // ... and the run still ends with a "Successfully synced" banner.
-  assert.match(r.stdout, /Successfully synced libraries from: out\nUpdated: 0, Created: 0\n$/);
+  assert.match(r.stderr, /^Error updating library: tick: .*Missing semicolon/);
+  // PLAT-81: the run no longer ends with a "Successfully synced" banner; it reports the failure and exits 1.
+  assert.doesNotMatch(r.stdout, /Successfully synced/);
+  assert.match(r.stderr, /failed for 1 file\(s\)\nUpdated: 0, Created: 0, Failed: 1\n$/);
+  assert.equal(r.code, 1);
   assert.ok(!sb.api.ops().includes("UPDATE_AUTOMATION_LIB_MUTATION"));
 }));
 
@@ -346,21 +358,26 @@ test("library sync: always asks for confirmation; n cancels", sandboxTest(async 
   sb.write("src/a.js", libFile("T", "  a();"));
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: [] });
   const r = await sb.run(["library", "sync", "-p", "src"], { answers: [{ when: /\(y\/N\): /, send: "n\n" }] });
-  assert.match(r.stdout, /Sync cancelled by user\.\n$/);
+  // PLAT-81: a cancelled sync did not happen: exit 1, message on stderr.
+  assert.equal(r.stderr, "Sync cancelled by user.\n");
+  assert.equal(r.code, 1);
   assert.deepEqual(sb.api.ops(), ["LIST_AUTOMATION_LIBS_QUERY"]);
 }));
 
 test("library sync: missing folder, no .js files, unparsable file", sandboxTest(async (sb) => {
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: [] });
   let r = await sb.run(["library", "sync", "-p", "nowhere"]);
-  assert.equal(r.stdout, "Workspace folder not found: nowhere\n");
+  assert.equal(r.stderr, "Workspace folder not found: nowhere\n");
+  assert.equal(r.code, 1);
   sb.write("none/readme.txt", "x");
   r = await sb.run(["library", "sync", "-p", "none"]);
   assert.equal(r.stdout, "No .js library files found in workspace folder.\n");
+  assert.equal(r.code, 0);
   sb.write("bad/bad.js", "const x = 1;\n");
   r = await sb.run(["library", "sync", "-p", "bad"], { answers: YES });
-  assert.match(r.stdout, /Error creating library: bad\n/);
-  assert.match(r.stdout, /Updated: 0, Created: 0\n$/);
+  assert.match(r.stderr, /^Error creating library: bad: Error parsing library file\./);
+  assert.match(r.stderr, /Updated: 0, Created: 0, Failed: 1\n$/);
+  assert.equal(r.code, 1);
 }));
 
 test("library sync -l <id>: nested name maps to a nested file; missing file; update", sandboxTest(async (sb) => {
@@ -368,7 +385,8 @@ test("library sync -l <id>: nested name maps to a nested file; missing file; upd
   sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
   sb.write("src/placeholder.txt", "");
   let r = await sb.run(["library", "sync", "-l", "l-1", "-p", "src"]);
-  assert.match(r.stdout, /Library file not found: src\/grp\/inner\.js\n$/);
+  assert.equal(r.stderr, "Library file not found: src/grp/inner.js\n");
+  assert.equal(r.code, 1);
   sb.write("src/grp/inner.js", libFile("NT", "  n();"));
   r = await sb.run(["library", "sync", "-l", "l-1", "-p", "src"], { answers: YES });
   assert.match(r.stdout, /overwrite the library 'grp\/inner' with the contents of 'src\/grp\/inner\.js'\? \(y\/N\): /);
@@ -378,7 +396,8 @@ test("library sync -l <id>: nested name maps to a nested file; missing file; upd
   });
   mockLibs(sb, []);
   r = await sb.run(["library", "sync", "-l", "zzz", "-p", "src"]);
-  assert.equal(r.stdout, "Library with ID zzz not found.\n");
+  assert.equal(r.stderr, "Library with ID zzz not found.\n");
+  assert.equal(r.code, 1);
 }));
 
 test("library pull then sync round-trips", sandboxTest(async (sb) => {

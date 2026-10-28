@@ -138,7 +138,8 @@ test("connector add: unknown connector, refused by API, API error", sandboxTest(
 
 test("connector add --config with invalid JSON: nothing is sent", sandboxTest(async (sb) => {
   const r = await sb.run(["connector", "add", "m-1", "-n", "x", "-c", "{nope"]);
-  assert.equal(r.code, 0);
+  // PLAT-81: a refused option is a usage error, exit 2 (was 0).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /Error: -c\/--config must be a valid JSON string: /);
   assert.deepEqual(sb.api.calls, []);
 }));

@@ -73,7 +73,9 @@ test("task list: API error; no workspace", sandboxTest(async (sb) => {
 
 test("task list: no workspace selected", sandboxTest({ session: { token: "t" } }, async (sb) => {
   const r = await sb.run(["task", "list"]);
-  assert.equal(r.stdout, "No workspace selected. Use `aloma workspace switch` to select one.\n");
+  // PLAT-81 (intermediate): the message moves to stderr; the old task handler still exits 0 until the next commit.
+  assert.equal(r.code, 0);
+  assert.match(r.stderr, /No workspace selected\. Use `aloma workspace switch` to select one\./);
   assert.deepEqual(sb.api.calls, []);
 }));
 

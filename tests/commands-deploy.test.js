@@ -73,19 +73,19 @@ test("deploy: missing workspace is created (tags joined) and becomes the target"
   assert.equal(sb.readSession().selectedWorkspace, "ws-fresh");
 }));
 
-test("deploy: when workspace creation fails the previously selected workspace receives the resources", sandboxTest(async (sb) => {
+test("deploy: when workspace creation fails the deployment stops (nothing goes to the selected workspace), exit 1", sandboxTest(async (sb) => {
   sb.write("d.yaml", "workspaces:\n  - name: Fresh\n    webhooks:\n      - name: hook\n");
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Other"]));
   sb.api.on("CREATE_WORKSPACE_MUTATION", gqlError("quota"));
   sb.api.on("CREATE_WEBHOOK_MUTATION", { createAutomationWebhook: { id: "wh-1" } });
   sb.api.on("LIST_WEBHOOKS_QUERY", { listAutomationWebhooks: [] });
   const r = await sb.run(["deploy", "d.yaml"]);
-  // PINS SUSPECT BEHAVIOUR: createWorkspace swallows its error; deploy then falls back to
-  // the session's current workspace (ws-sel) and deploys the webhook there. Exit code 0.
-  assert.equal(r.code, 0);
-  assert.match(r.stderr, /Error creating workspace: quota/);
-  assert.equal(sb.api.calls.find((c) => c.op === "CREATE_WEBHOOK_MUTATION").variables.environmentId, "ws-sel");
-  assert.match(r.stdout, /Deployment completed successfully!\n$/);
+  // PLAT-81 (intermediate): createWorkspace now fails the run, so nothing reaches ws-sel; deploy's own
+  // "Deployment failed:" message comes with the deploy group in the next commit.
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error creating workspace: quota\n");
+  assert.ok(!sb.api.ops().includes("CREATE_WEBHOOK_MUTATION"));
+  assert.doesNotMatch(r.stdout, /completed successfully/);
 }));
 
 test("deploy: steps from name+file and from syncPath (no prompt)", sandboxTest(async (sb) => {
@@ -301,6 +301,7 @@ test("deploy: missing file, invalid YAML and empty file all fail with exit code 
 
 test("deploy: the yaml path argument is required", sandboxTest(async (sb) => {
   const r = await sb.run(["deploy"]);
-  assert.equal(r.code, 1);
+  // PLAT-81: a usage error exits 2 (was commander's 1).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /missing required argument 'yamlPath'/);
 }));

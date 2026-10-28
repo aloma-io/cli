@@ -225,7 +225,8 @@ test("PINS SUSPECT BEHAVIOUR: an expired session gives the API's error, no refre
   const r = await runDriver(sb, { fn: "graphQuery" });
   assert.equal(r.result.ok, false);
   assert.equal(r.result.error, "Unauthorized");
-  assert.match(r.stderr, /GraphQL Error: Unauthorized/);
+  // PLAT-81: graphQuery no longer prints the error itself; the command's handler prints it once.
+  assert.doesNotMatch(r.stderr, /GraphQL Error/);
   assert.equal(api.requests.length, 1, "no retry or refresh");
   assert.equal(sb.readSession().token, FAKE.session);
   assert.deepEqual(leakedSecrets(r.output), []);

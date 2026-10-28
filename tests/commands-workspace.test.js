@@ -48,13 +48,11 @@ test("workspace list: empty result and API error", sandboxTest(async (sb) => {
   assert.equal(r.stdout, "No environments found.\n");
   sb.api.on("LIST_ENVIRONMENTS_QUERY", gqlError("boom one", "boom two"));
   r = await sb.run(["workspace", "list"]);
-  // PINS SUSPECT BEHAVIOUR: errors are printed but the exit code is still 0.
-  assert.equal(r.code, 0);
+  // PLAT-81: an API error exits 1 (was PINS SUSPECT BEHAVIOUR: printed but exit code 0).
+  assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
-  assert.equal(
-    r.stderr,
-    "GraphQL Error: boom one\nboom two\nError fetching environments: boom one\nboom two\n",
-  );
+  // PLAT-81: the error is printed once (was a "GraphQL Error:" copy first).
+  assert.equal(r.stderr, "Error fetching environments: boom one\nboom two\n");
 }));
 
 test("workspace show: default view queries the selected workspace and prints its settings", sandboxTest(async (sb) => {
@@ -95,8 +93,9 @@ test("workspace show: no tags / no groups / deleting workspace", sandboxTest(asy
 test("workspace show: workspace not found", sandboxTest(async (sb) => {
   sb.api.on("GET_WORKSPACE_QUERY", { getAutomationEnvironment: null });
   const r = await sb.run(["workspace", "show"]);
-  assert.equal(r.stdout, "Workspace not found.\n");
-  assert.equal(r.code, 0);
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Workspace not found.\n");
+  assert.equal(r.code, 1);
 }));
 
 test("workspace show --stats: stats query and summary", sandboxTest(async (sb) => {
@@ -160,7 +159,9 @@ test("workspace show --source: archived, no source, not found", sandboxTest(asyn
   assert.equal(r.stdout, "No source configuration found for this workspace.\n");
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: null });
   r = await sb.run(["workspace", "show", "--source"]);
-  assert.equal(r.stdout, "Workspace not found.\n");
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Workspace not found.\n");
+  assert.equal(r.code, 1);
 }));
 
 test("workspace show: --stats wins over --source when both are given", sandboxTest(async (sb) => {
@@ -171,8 +172,9 @@ test("workspace show: --stats wins over --source when both are given", sandboxTe
 
 test("no workspace selected: command stops with a hint and sends no request", sandboxTest({ session: { token: "t" } }, async (sb) => {
   const r = await sb.run(["workspace", "show"]);
-  assert.equal(r.code, 0);
-  assert.equal(r.stdout, "No workspace selected. Use `aloma workspace switch` to select one.\n");
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "No workspace selected. Use `aloma workspace switch` to select one.\n");
+  assert.equal(r.code, 1);
   assert.deepEqual(sb.api.calls, []);
 }));
 
@@ -210,19 +212,22 @@ test("workspace switch <id>: matches on id as well", sandboxTest(async (sb) => {
 test("workspace switch: unknown name and empty account leave the selection alone", sandboxTest(async (sb) => {
   sb.api.on("LIST_WORKSPACES_QUERY", ENVS);
   let r = await sb.run(["workspace", "switch", "zzz"]);
-  assert.equal(r.stdout, "Workspace 'zzz' not found.\n");
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Workspace 'zzz' not found.\n");
+  assert.equal(r.code, 1);
   assert.equal(sb.readSession().selectedWorkspace, "ws-sel");
   sb.api.on("LIST_WORKSPACES_QUERY", { listAutomationEnvironmentWithStats: [] });
   r = await sb.run(["workspace", "switch", "zzz"]);
-  assert.equal(r.stdout, "No workspaces found.\n");
+  assert.equal(r.stderr, "No workspaces found.\n");
+  assert.equal(r.code, 1);
 }));
 
 test("workspace switch without argument needs a terminal", sandboxTest(async (sb) => {
   sb.api.on("LIST_WORKSPACES_QUERY", ENVS);
   const r = await sb.run(["workspace", "switch"]);
   // PINS SUSPECT BEHAVIOUR: with piped stdin the interactive picker dies on setRawMode and
-  // reports it as a fetch error; exit code stays 0.
-  assert.equal(r.code, 0);
+  // reports it as a fetch error. PLAT-81: exit code 1 (was 0).
+  assert.equal(r.code, 1);
   assert.match(r.stderr, /Error fetching workspaces: process\.stdin\.setRawMode is not a function/);
   assert.equal(sb.readSession().selectedWorkspace, "ws-sel");
 }));
@@ -240,14 +245,17 @@ test("workspace add: without tags sends null; API error keeps old selection", sa
   sb.api.on("CREATE_WORKSPACE_MUTATION", gqlError("name taken"));
   const r = await sb.run(["workspace", "add", "x"]);
   assert.deepEqual(ops(sb), [["CREATE_WORKSPACE_MUTATION", { name: "x", tags: null }]]);
-  assert.equal(r.stderr, "GraphQL Error: name taken\nError creating workspace: name taken\n");
-  assert.equal(r.code, 0);
+  // PLAT-81: the error is printed once (was a "GraphQL Error:" copy first).
+  assert.equal(r.stderr, "Error creating workspace: name taken\n");
+  // PLAT-81: an API error exits 1 (was 0).
+  assert.equal(r.code, 1);
   assert.equal(sb.readSession().selectedWorkspace, "ws-sel");
 }));
 
 test("workspace add: the name argument is required", sandboxTest(async (sb) => {
   const r = await sb.run(["workspace", "add"]);
-  assert.equal(r.code, 1);
+  // PLAT-81: a usage error exits 2 (was commander's 1).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /missing required argument 'name'/);
   assert.deepEqual(sb.api.calls, []);
 }));
@@ -307,12 +315,15 @@ test("workspace delete --cancel on a workspace that is not being deleted", sandb
 test("workspace delete: not found, and API error on the mutation", sandboxTest(async (sb) => {
   sb.api.on("GET_WORKSPACE_QUERY", { getAutomationEnvironment: null });
   let r = await sb.run(["workspace", "delete"]);
-  assert.equal(r.stdout, "Workspace not found.\n");
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Workspace not found.\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_WORKSPACE_QUERY", wsState({}));
   sb.api.on("DELETE_WORKSPACE_MUTATION", gqlError("denied"));
   r = await sb.run(["workspace", "delete"]);
   assert.match(r.stderr, /Error managing workspace deletion: denied/);
-  assert.equal(r.code, 0);
+  // PLAT-81: an API error exits 1 (was 0).
+  assert.equal(r.code, 1);
 }));
 
 test("workspace archive / --unarchive", sandboxTest(async (sb) => {
@@ -336,11 +347,14 @@ test("workspace archive / --unarchive", sandboxTest(async (sb) => {
 test("workspace archive: not found and API error", sandboxTest(async (sb) => {
   sb.api.on("GET_WORKSPACE_QUERY", { getAutomationEnvironment: null });
   let r = await sb.run(["workspace", "archive"]);
-  assert.equal(r.stdout, "Workspace not found.\n");
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Workspace not found.\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_WORKSPACE_QUERY", wsState({ archived: false }));
   sb.api.on("ARCHIVE_WORKSPACE_MUTATION", gqlError("nope"));
   r = await sb.run(["workspace", "archive"]);
   assert.match(r.stderr, /Error managing workspace archive: nope/);
+  assert.equal(r.code, 1); // PLAT-81
 }));
 
 test("workspace update: only the given fields change, the rest come from the current state", sandboxTest(async (sb) => {
@@ -378,11 +392,14 @@ test("workspace update --health-enabled: anything but 'true' means false", sandb
 test("workspace update: not found / API error", sandboxTest(async (sb) => {
   sb.api.on("GET_WORKSPACE_QUERY", { getAutomationEnvironment: null });
   let r = await sb.run(["workspace", "update", "-n", "x"]);
-  assert.equal(r.stdout, "Workspace not found.\n");
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Workspace not found.\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_WORKSPACE_QUERY", wsState({ tags: [] }));
   sb.api.on("SAVE_WORKSPACE_MUTATION", gqlError("invalid"));
   r = await sb.run(["workspace", "update", "-n", "x"]);
   assert.match(r.stderr, /Error updating workspace: invalid/);
+  assert.equal(r.code, 1); // PLAT-81
 }));
 
 const SRC = { url: "https://example.invalid/r.git", username: "u", branch: "main", enabled: true, source_automatic: true };
@@ -448,17 +465,22 @@ test("workspace source --file (YAML) and unreadable files", sandboxTest(async (s
   r = await sb.run(["workspace", "source", "-f", "missing.json"]);
   assert.match(r.stderr, /Failed to read or parse config file: ENOENT/);
   assert.equal(sb.api.calls.length, n);
-  assert.equal(r.code, 0);
+  // PLAT-81: an unreadable file exits 1 (was 0).
+  assert.equal(r.code, 1);
 }));
 
 test("workspace source: states that block editing", sandboxTest(async (sb) => {
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: null });
   let r = await sb.run(["workspace", "source", "--branch", "x"]);
-  assert.equal(r.stdout, "Workspace not found.\n");
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Workspace not found.\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: { id: "ws-sel", deleting: true, source: SRC } });
   r = await sb.run(["workspace", "source", "--branch", "x"]);
   // PINS SUSPECT BEHAVIOUR: the message says "Cannot sync" although this is the edit command.
-  assert.equal(r.stdout, "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.\n");
+  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.\n");
+  assert.equal(r.code, 1);
   assert.ok(!sb.api.ops().includes("SAVE_SOURCE_MUTATION"));
 }));
 
@@ -484,22 +506,28 @@ test("workspace sync: triggers a sync with source_do_sync and a blank apikey", s
 test("workspace sync: nothing is sent when automatic sync is on, no source, or blocked", sandboxTest(async (sb) => {
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: { id: "ws-sel", name: "N", source: SRC } });
   let r = await sb.run(["workspace", "sync"]);
-  assert.equal(r.stdout, "Source automatic sync is enabled for this workspace.\n");
+  // PLAT-81: no sync was triggered, so each of these exits 1 with the reason on stderr (was stdout, exit 0).
+  assert.equal(r.stderr, "Source automatic sync is enabled for this workspace.\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: { id: "ws-sel", name: "N", source: null } });
   r = await sb.run(["workspace", "sync"]);
-  assert.equal(r.stdout, "No source configuration found for this workspace.\n");
+  assert.equal(r.stderr, "No source configuration found for this workspace.\n");
+  assert.equal(r.code, 1);
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: { id: "ws-sel", archived: true } });
   r = await sb.run(["workspace", "sync"]);
-  assert.match(r.stdout, /Cannot sync\./);
+  assert.match(r.stderr, /Cannot sync\./);
+  assert.equal(r.code, 1);
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: null });
   r = await sb.run(["workspace", "sync"]);
-  assert.equal(r.stdout, "Workspace not found.\n");
+  assert.equal(r.stderr, "Workspace not found.\n");
+  assert.equal(r.code, 1);
   assert.ok(!sb.api.ops().includes("SAVE_SOURCE_MUTATION"));
 }));
 
-test("workspace sync: API error is reported, exit code 0", sandboxTest(async (sb) => {
+test("workspace sync: API error is reported, exit code 1", sandboxTest(async (sb) => {
   sb.api.on("GET_SOURCE_QUERY", gqlError("down"));
   const r = await sb.run(["workspace", "sync"]);
   assert.match(r.stderr, /Error triggering source sync: down/);
-  assert.equal(r.code, 0);
+  // PLAT-81: exit code 1 (was 0).
+  assert.equal(r.code, 1);
 }));

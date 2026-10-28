@@ -53,9 +53,12 @@ test("webhook list: errors exit with code 1", sandboxTest(async (sb) => {
   assert.match(r.stderr, /Error listing webhooks: denied/);
 }));
 
-test("webhook list: no selected workspace", sandboxTest({ session: { token: "t" } }, async (sb) => {
+test("webhook list: no selected workspace exits 1", sandboxTest({ session: { token: "t" } }, async (sb) => {
   const r = await sb.run(["webhook", "list"]);
-  assert.equal(r.stdout, "No workspace selected. Use `aloma workspace switch` to select one.\n");
+  assert.equal(r.code, 1);
+  // PLAT-81 (intermediate): printed by the old webhook handler with its label; printed once, unlabelled, in the next commit.
+  assert.equal(r.stderr, "Error listing webhooks: No workspace selected. Use `aloma workspace switch` to select one.\n");
+  assert.equal(r.stdout, "");
   assert.deepEqual(sb.api.calls, []);
 }));
 
@@ -212,8 +215,8 @@ test("secret add: an existing secret with the same name is overwritten without a
 test("secret add --options <yaml> always fails: cli.js never imports js-yaml", sandboxTest(async (sb) => {
   const r = await sb.run(["secret", "add", "A", "1", "-o", "k: v"]);
   // PINS SUSPECT BEHAVIOUR: ReferenceError is caught and shown as "Invalid JSON in options";
-  // nothing is sent and the exit code is 0.
-  assert.equal(r.code, 0);
+  // nothing is sent. PLAT-81: the refused option now exits 2 (was 0); the missing import is left for a later slice.
+  assert.equal(r.code, 2);
   assert.equal(r.stderr, "Invalid JSON in options: yaml is not defined\n");
   assert.deepEqual(sb.api.calls, []);
 }));
@@ -228,7 +231,8 @@ test("secret add: API error on save", sandboxTest(async (sb) => {
 
 test("secret add: value and name are required arguments", sandboxTest(async (sb) => {
   const r = await sb.run(["secret", "add", "A"]);
-  assert.equal(r.code, 1);
+  // PLAT-81: a usage error exits 2 (was commander's 1).
+  assert.equal(r.code, 2);
   assert.match(r.stderr, /missing required argument 'value'/);
 }));
 
