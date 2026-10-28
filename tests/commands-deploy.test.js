@@ -61,18 +61,19 @@ test("deploy: existing workspace (matched by name) gets webhooks and secrets; an
   assert.ok(!sb.api.ops().includes("CREATE_WORKSPACE_MUTATION"));
 }));
 
-test("deploy: a workspace name that differs from an existing one only in case stops the deployment (no duplicate)", sandboxTest(async (sb) => {
+// Flipped (Patrick, 28 Oct): a name in another case is that workspace, not a refusal (was refused with a hint).
+test("deploy: a workspace name that differs from an existing one only in case deploys into it (no duplicate)", sandboxTest(async (sb) => {
   sb.write("d.yaml", "workspaces:\n  - name: dev space\n    webhooks:\n      - name: hook\n");
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev Space"]));
   sb.api.on("CREATE_WORKSPACE_MUTATION", { createAutomationEnvironment: { id: "ws-dup" } });
   sb.api.on("CREATE_WEBHOOK_MUTATION", { createAutomationWebhook: { id: "wh-1" } });
+  sb.api.on("LIST_WEBHOOKS_QUERY", { listAutomationWebhooks: [{ id: "wh-1", name: "hook", key: "k" }] });
+  sb.api.on("ME_QUERY", { me: { realm: { region: null } } });
   const r = await sb.run(["deploy", "d.yaml"]);
-  assert.equal(r.code, 1);
-  assert.equal(
-    r.stderr,
-    'Deployment failed: No workspace named "dev space"; not creating one that differs from an existing name only in case. Names are case-sensitive: did you mean "Dev Space" (id: ws-1)?\n',
-  );
-  assert.deepEqual(sb.api.ops(), ["LIST_ENVIRONMENTS_QUERY"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /Target workspace: Dev Space \(ID: ws-1\)\n/);
+  assert.equal(sb.api.calls.find((c) => c.op === "CREATE_WEBHOOK_MUTATION").variables.environmentId, "ws-1");
+  assert.ok(!sb.api.ops().includes("CREATE_WORKSPACE_MUTATION"));
 }));
 
 test("deploy: two workspaces with the YAML name stop the deployment (no guess)", sandboxTest(async (sb) => {

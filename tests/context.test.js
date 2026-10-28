@@ -1,6 +1,6 @@
 // PLAT-116: one context module (src/context.js) owns the current company, region and workspace.
 // `me` is fetched at most once per session token; companies, workspaces and connectors are resolved by
-// the PLAT-115 rule: an exact id, then an exact name; more than one match is refused with the ids listed,
+// the rule in src/names.js: an exact id, then a name in any case (Patrick, 28 Oct); more than one match is refused with the ids listed,
 // and a reference that matches nothing is refused instead of being sent on as an id.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -62,12 +62,10 @@ test("context: company switch refuses an ambiguous company name and lists the id
 
 test("context: company switch refuses an unknown company and never sends it on", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", ME());
-  const r = await sb.run(["company", "switch", "beta co"]);
+  // Flipped (Patrick, 28 Oct): "beta co" now matches "Beta Co"; an unknown name is still refused, with no hint.
+  const r = await sb.run(["company", "switch", "gamma co"]);
   assert.equal(r.code, 1);
-  assert.equal(
-    r.stderr,
-    'No company with the id or name "beta co" among your companies. Names are case-sensitive: did you mean "Beta Co" (id: r-2)?\n',
-  );
+  assert.equal(r.stderr, 'No company with the id or name "gamma co" among your companies.\n');
   assert.deepEqual(sb.axiosCalls(), []);
 }));
 
@@ -103,18 +101,16 @@ test("context: -w <ambiguous name> is refused with the ids, nothing else is requ
   assert.deepEqual(sb.api.ops(), ["LIST_ENVIRONMENTS_QUERY"]);
 }));
 
-test("context: -w matches the exact name only; a case-only match is refused with a hint", sandboxTest(async (sb) => {
+// Flipped (Patrick, 28 Oct): -w matches a name in any case when one workspace matches (was refused with a hint).
+test("context: -w matches the exact name and a name in another case", sandboxTest(async (sb) => {
   sb.api.on("LIST_ENVIRONMENTS_QUERY", TWINS);
   sb.api.on("LIST_WEBHOOKS_QUERY", { listAutomationWebhooks: [] });
   let r = await sb.run(["webhook", "list", "-w", "Dev Space"]);
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(ops(sb).at(-1), ["LIST_WEBHOOKS_QUERY", { id: "ws-sel" }]);
   r = await sb.run(["webhook", "list", "-w", "dev space"]);
-  assert.equal(r.code, 1);
-  assert.equal(
-    r.stderr,
-    'No workspace with the id or name "dev space" among your workspaces. Names are case-sensitive: did you mean "Dev Space" (id: ws-sel)?\n',
-  );
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(ops(sb).at(-1), ["LIST_WEBHOOKS_QUERY", { id: "ws-sel" }]);
 }));
 
 test("context: --workspace-id bypasses the name lookup", sandboxTest(async (sb) => {

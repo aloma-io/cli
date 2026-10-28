@@ -154,7 +154,7 @@ export async function switchWorkspace(workspaceIdentifier) {
         throw new CliError("No workspaces found.");
       }
 
-      // Exact id, then exact name (PLAT-116)
+      // Exact id, then name in any case (PLAT-116)
       workspace = pickWorkspace(workspaces, workspaceIdentifier);
     }
 

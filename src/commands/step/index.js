@@ -25,6 +25,7 @@ import {
   uniqueByName,
   resolveByIdOrName,
   assertNameFree,
+  nameKey,
 } from "../../names.js";
 import readline from "readline";
 import parser from "@babel/parser";
@@ -421,8 +422,8 @@ export async function pullStep(workspaceIdentifier, stepRef, targetPath) {
         try {
           uniqueByName(steps, stepSummary.name, "step");
         } catch (error) {
-          if (!ambiguous.has(stepSummary.name)) {
-            ambiguous.add(stepSummary.name);
+          if (!ambiguous.has(nameKey(stepSummary.name))) {
+            ambiguous.add(nameKey(stepSummary.name));
             console.error(chalk.red(error.message));
           }
           continue;

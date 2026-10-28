@@ -164,7 +164,7 @@ export const switchCompany = async (identifier) => {
       // Interactive selection
       company = await selectCompanyInteractive();
     } else {
-      // Direct selection by id or exact name (PLAT-116)
+      // Direct selection by id, then name in any case (PLAT-116)
       company = await resolveCompany(identifier);
     }
 

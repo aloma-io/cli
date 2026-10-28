@@ -51,7 +51,7 @@ export async function deployFromYaml(yamlPath, options = {}) {
     for (const workspace of config.workspaces) {
       console.log(chalk.blue(`\nProcessing workspace: ${workspace.name}`));
 
-      // The workspace with exactly this name, created if there is none (PLAT-116: never a guess)
+      // The one workspace with this name in any case, created if there is none (PLAT-116: never a guess)
       let target;
       try {
         target = await findWorkspaceByName(workspace.name);
@@ -134,7 +134,7 @@ export async function deployFromYaml(yamlPath, options = {}) {
             let namespace = connector.namespace;
             // If connectorId is not provided but connectorName is, search for it
             if (!connectorId && connectorName) {
-              // Exact id or exact unique name; ambiguity and no match are refused (PLAT-116)
+              // Exact id, then unique name in any case; ambiguity and no match are refused (PLAT-116)
               const connectorData = await resolveConnector(
                 connectorName,
                 workspaceId,

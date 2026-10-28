@@ -1,7 +1,7 @@
 // The CLI's context for one invocation (PLAT-116): who is signed in (`me`), the current company and
 // its region, the selected workspace, and the one way to turn a company, workspace or connector
-// reference into an item. References follow the PLAT-115 rule (src/names.js): an exact id, then an exact name;
-// ambiguity and no match are refused, and a name is never sent on as if it were an id.
+// reference into an item. References follow the one rule in src/names.js: an exact id, then a name in any
+// case (Patrick, 28 Oct); ambiguity and no match are refused, and a name is never sent on as if it were an id.
 import chalk from "chalk";
 import { graphQuery, getSessionData, updateSessionData } from "./utils.js";
 import { ME_QUERY } from "./commands/auth/query.js";
@@ -12,7 +12,7 @@ import {
 } from "./commands/workspace/query.js";
 import { LIST_AVAILABLE_CONNECTOR_QUERY } from "./commands/connector/query.js";
 import { CliError, UsageError, failure } from "./runtime.js";
-import { resolveByIdOrName, uniqueByName, nearMatchHint } from "./names.js";
+import { resolveByIdOrName, uniqueByName } from "./names.js";
 
 // `me` is fetched once per session token; a failed fetch is not kept.
 let mePromise = null;
@@ -123,25 +123,16 @@ export async function resolveWorkspaceId(ref) {
   return (await resolveWorkspace(ref)).id;
 }
 
-// For deploy: the workspace named exactly `name`, or null when there is none. Several with that name,
-// or only names that differ in case, are refused rather than guessed or duplicated.
+// For deploy: the one workspace with this name in any case, or null when there is none (it is then
+// created). Several (case included) are refused rather than guessed.
 export async function findWorkspaceByName(name) {
   const data = await graphQuery(LIST_ENVIRONMENTS_QUERY);
-  const workspaces = data?.listAutomationEnvironmentWithStats ?? [];
-  const found = uniqueByName(
-    workspaces,
+  return uniqueByName(
+    data?.listAutomationEnvironmentWithStats ?? [],
     name,
     "workspace",
     "among your workspaces",
   );
-  if (found) return found;
-  const hint = nearMatchHint(workspaces, name);
-  if (hint) {
-    throw new CliError(
-      `No workspace named ${JSON.stringify(name)}; not creating one that differs from an existing name only in case.${hint}`,
-    );
-  }
-  return null;
 }
 
 // The command-line form: `-w <name or id>` or `--workspace-id <id>`, at most one of them.
