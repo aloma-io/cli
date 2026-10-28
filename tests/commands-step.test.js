@@ -482,9 +482,53 @@ test("step sync: an update refused by the API counts as failed (exit 1)", sandbo
   sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: false });
   const r = await sb.run(["step", "sync", "-p", "src"], { answers: [{ when: /\(y\/N\): /, send: "y\n" }] });
   // PLAT-81: was a yellow warning with "Updated: 1" in the summary and exit 0.
-  assert.match(r.stderr, /^Error updating step: alpha: Error updating step from file: Failed to update step: alpha\n/);
+  // PLAT-118 (B6): one engine, one wording: the inner "Error updating step from file:" wrapper is gone.
+  assert.match(r.stderr, /^Error updating step: alpha: Failed to save step: alpha\n/);
   assert.match(r.stderr, /Updated: 0, Created: 0, Failed: 1\n$/);
   assert.equal(r.code, 1);
+}));
+
+// PLAT-118 (B5): sync saves only what differs from the stored step.
+test("step sync: an unchanged file sends no save and is counted as unchanged", sandboxTest(async (sb) => {
+  sb.write("src/alpha.js", stepFile("{ a: 1 }", "data.a = 2;"));
+  sb.write("src/beta.js", stepFile("{ b: 1 }", "data.b = 3;"));
+  sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: [{ id: "s-1", name: "ALPHA" }, { id: "s-2", name: "beta" }] });
+  sb.api.on("GET_STEP_QUERY", (v) => ({ getAutomationStep: v.id === "s-1"
+    ? { id: "s-1", name: "ALPHA", enabled: true, version: 4, content: { if: "{\n  a: 1\n}", do: "data.a = 2;" } }
+    : { id: "s-2", name: "beta", enabled: true, version: 1, content: { if: "{\n  b: 1\n}", do: "data.b = 2;" } } }));
+  sb.api.on("VALIDATE_IF_QUERY", ok);
+  sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
+  const r = await sb.run(["step", "sync", "-p", "src"], { answers: [{ when: /\(y\/N\): /, send: "y\n" }] });
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /Updated: 1, Created: 0, Unchanged: 1\n$/);
+  const saves = sb.api.calls.filter((c) => c.op === "SAVE_STEP_MUTATION").map((c) => c.variables.id);
+  assert.deepEqual(saves, ["s-2"]);
+  assert.ok(!sb.api.ops().includes("CREATE_STEP_MUTATION"));
+}));
+
+// PLAT-118 (B7): was counted as created without looking at the save result.
+test("step sync: a create whose save is refused counts as failed", sandboxTest(async (sb) => {
+  sb.write("src/fresh.js", stepFile("{ a: 1 }", "data.a = 2;"));
+  sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: [] });
+  sb.api.on("VALIDATE_IF_QUERY", ok);
+  sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-new" });
+  sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: false });
+  const r = await sb.run(["step", "sync", "-p", "src"], { answers: [{ when: /\(y\/N\): /, send: "y\n" }] });
+  assert.match(r.stderr, /^Error creating step: fresh: Failed to save step: fresh\n/);
+  assert.match(r.stderr, /Updated: 0, Created: 0, Failed: 1\n$/);
+  assert.equal(r.code, 1);
+}));
+
+// PLAT-118 (B5): sync -s with a file equal to the stored step sends no save.
+test("step sync -s: an unchanged step is reported and not saved", sandboxTest(async (sb) => {
+  sb.write("src/alpha.js", stepFile("{ a: 1 }", "data.a = 2;"));
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-1", "alpha"]));
+  sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-1", name: "alpha", enabled: true, version: 4, content: { if: "{\n  a: 1\n}", do: "data.a = 2;" } } });
+  sb.api.on("VALIDATE_IF_QUERY", ok);
+  const r = await sb.run(["step", "sync", "-s", "alpha", "-p", "src"], { answers: [{ when: /\(y\/N\): /, send: "y\n" }] });
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /Step alpha is unchanged\.\n$/);
+  assert.ok(!sb.api.ops().includes("SAVE_STEP_MUTATION"));
 }));
 
 test("step sync -s <id>: syncs one step from <path>/<last name segment>.js", sandboxTest(async (sb) => {
@@ -505,6 +549,22 @@ test("step sync -s <id>: syncs one step from <path>/<last name segment>.js", san
   assert.deepEqual(sb.api.calls.at(-1).variables, {
     id: "s-2", name: "group/beta", if: "{\n  b: 1\n}", do: "data.b = 3;", enabled: true, version: 5,
   });
+}));
+
+// SECURITY (PLAT-118, B9; was CONCERNS "sync -s joins the server name with path.join"): the file for a
+// server-supplied name is checked with the same containment as pull; an unsafe name reads and saves nothing.
+test("SECURITY: step sync -s with an unsafe name reads no file outside the folder and saves nothing", sandboxTest(async (sb) => {
+  sb.write("outside.js", stepFile("{ leaked: 1 }", "leaked();"));
+  sb.write("src/keep.txt", "");
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-9", "../outside"]));
+  sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-9", name: "../outside", enabled: true, version: 1 } });
+  sb.api.on("VALIDATE_IF_QUERY", ok);
+  sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
+  const r = await sb.run(["step", "sync", "-s", "s-9", "-p", "src"], { answers: [{ when: /\(y\/N\): /, send: "y\n" }] });
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, 'Error syncing steps: unsafe step name "../outside"\n');
+  assert.ok(!sb.api.ops().includes("VALIDATE_IF_QUERY"));
+  assert.ok(!sb.api.ops().includes("SAVE_STEP_MUTATION"));
 }));
 
 test("step sync -s: unknown id", sandboxTest(async (sb) => {

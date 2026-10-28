@@ -1,39 +1,22 @@
-import {
-  pullTargetFile,
-  headerText,
-  oneLine,
-  UnsafeNameError,
-} from "../../pull-safety.js";
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import {
   LIST_AUTOMATION_LIBS_QUERY,
-  ADD_AUTOMATION_LIB_MUTATION,
   REMOVE_AUTOMATION_LIB_MUTATION,
   UPDATE_AUTOMATION_LIB_MUTATION,
   GET_AUTOMATION_LIB_QUERY,
 } from "./query.js";
-import fs from "fs/promises";
-import path from "path";
 import { resolveWorkspaceId } from "../../context.js";
 import { CliError, UsageError, failure } from "../../runtime.js";
-import {
-  uniqueByName,
-  resolveByIdOrName,
-  assertNameFree,
-  nameKey,
-} from "../../names.js";
-import readline from "readline";
-import parser from "@babel/parser";
-import generate from "@babel/generator";
+import { resolveByIdOrName, assertNameFree } from "../../names.js";
+import { libraryResource, parseLibraryFile } from "../../resources/library.js";
+import { pull, sync } from "../../resources/engine.js";
+
+export { parseLibraryFile };
 
 // Every library in the workspace: what library names are resolved against (PLAT-115).
-async function listWorkspaceLibraries(workspaceId) {
-  const data = await graphQuery(LIST_AUTOMATION_LIBS_QUERY, {
-    id: workspaceId,
-  });
-  return data.listAutomationLibs || [];
-}
+const listWorkspaceLibraries = (workspaceId) =>
+  libraryResource.list(workspaceId);
 
 // A library id or a library name (unique in the workspace) to the library's id; anything else is refused.
 async function resolveLibraryId(ref, workspaceId) {
@@ -135,44 +118,34 @@ export async function addLibrary(
     );
 
     // Create the library first
-    const data = await graphQuery(ADD_AUTOMATION_LIB_MUTATION, {
-      name: name.trim(),
-      environment_id: workspaceId,
-    });
-
-    const libraryId = data.createAutomationLib;
+    const libraryId = await libraryResource.create(name.trim(), workspaceId);
     console.log(
       chalk.green(`Created library [${name.trim()}] with ID: ${libraryId}`),
     );
 
-    // If a file path is provided, read and parse it
+    // Then save it once, with or without a file: namespace, tags and enabled only reach the API that way (M17)
+    let parsed = {};
     if (filePath) {
       try {
-        const { types: newTypes, content: newContent } =
-          await parseLibraryFile(filePath);
-
-        // Update the library with the parsed content
-        const updateData = await graphQuery(UPDATE_AUTOMATION_LIB_MUTATION, {
-          id: libraryId,
-          name: name.trim(),
-          namespace: namespace,
-          content: newContent,
-          types: newTypes,
-          version: 0,
-          tags: tags,
-          enabled: enabled,
-        });
-
-        if (updateData.saveAutomationLib) {
-          console.log(
-            chalk.green(
-              `Successfully added library content from file: ${filePath}`,
-            ),
-          );
-        }
+        parsed = await parseLibraryFile(filePath);
       } catch (error) {
         throw failure("Error reading or parsing file:", error);
       }
+    }
+    const saved = await libraryResource.save(
+      libraryResource.saveVars(libraryResource.blank(libraryId, name.trim()), {
+        ...parsed,
+        namespace,
+        tags,
+        enabled,
+      }),
+    );
+    if (saved && filePath) {
+      console.log(
+        chalk.green(
+          `Successfully added library content from file: ${filePath}`,
+        ),
+      );
     }
   } catch (error) {
     throw failure("Error creating library:", error);
@@ -274,84 +247,7 @@ export async function deleteLibrary(libraryRef, workspaceIdentifier) {
 
 export async function pullLibrary(workspaceIdentifier, libraryRef, targetPath) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-
-  // Use current directory if no path specified
-  const workspaceFolder = targetPath || process.cwd();
-
-  try {
-    // Create workspace folder if it doesn't exist
-    await fs.mkdir(workspaceFolder, { recursive: true });
-
-    if (libraryRef) {
-      // Pull specific library
-      const libraryId = await resolveLibraryId(libraryRef, workspaceId);
-      const data = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
-        id: libraryId,
-      });
-      const library = data.getAutomationLib;
-
-      if (!library) {
-        throw new CliError(`Library with ID ${libraryId} not found.`);
-      }
-
-      await createLibraryFile(library, workspaceFolder);
-      console.log(chalk.green(`Successfully pulled library: ${library.name}`));
-    } else {
-      // Pull all libraries
-      const data = await graphQuery(LIST_AUTOMATION_LIBS_QUERY, {
-        id: workspaceId,
-      });
-      const libraries = data.listAutomationLibs;
-
-      if (!libraries || libraries.length === 0) {
-        console.log(chalk.yellow("No libraries found in workspace."));
-        return;
-      }
-
-      // Get full details for each library; a name several libraries share is refused (it names one file)
-      const ambiguous = new Set();
-      for (const librarySummary of libraries) {
-        try {
-          uniqueByName(libraries, librarySummary.name, "library");
-        } catch (error) {
-          if (!ambiguous.has(nameKey(librarySummary.name))) {
-            ambiguous.add(nameKey(librarySummary.name));
-            console.error(chalk.red(error.message));
-          }
-          continue;
-        }
-        const libraryData = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
-          id: librarySummary.id,
-        });
-        const library = libraryData.getAutomationLib;
-        if (library) {
-          try {
-            await createLibraryFile(library, workspaceFolder);
-          } catch (error) {
-            if (!(error instanceof UnsafeNameError)) throw error;
-            console.log(
-              chalk.yellow(
-                `Skipped library ${oneLine(library.id)}: unsafe name ${JSON.stringify(library.name)}`,
-              ),
-            );
-          }
-        }
-      }
-
-      if (ambiguous.size > 0) {
-        throw new CliError(
-          `Libraries with ${ambiguous.size} ambiguous name(s) were not pulled to: ${workspaceFolder}`,
-        );
-      }
-      console.log(
-        chalk.green(
-          `Successfully pulled ${libraries.length} libraries to: ${workspaceFolder}`,
-        ),
-      );
-    }
-  } catch (error) {
-    throw failure("Error pulling libraries:", error);
-  }
+  await pull(libraryResource, workspaceId, libraryRef, targetPath);
 }
 
 export async function syncLibrary(
@@ -361,368 +257,5 @@ export async function syncLibrary(
   noPrompt = false,
 ) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
-
-  // Use current directory if no path specified
-  const workspaceFolder = sourcePath || process.cwd();
-
-  // Helper to prompt for confirmation
-  async function promptConfirmation(message) {
-    return new Promise((resolve) => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-      rl.question(message, (answer) => {
-        rl.close();
-        resolve(
-          answer.trim().toLowerCase() === "y" ||
-            answer.trim().toLowerCase() === "yes",
-        );
-      });
-    });
-  }
-
-  // Helper to recursively get all .js files in a directory
-  async function getAllJsFiles(dir, baseDir = dir) {
-    let results = [];
-    const list = await fs.readdir(dir, { withFileTypes: true });
-    for (const file of list) {
-      const filePath = path.join(dir, file.name);
-      if (file.isDirectory()) {
-        results = results.concat(await getAllJsFiles(filePath, baseDir));
-      } else if (file.isFile() && file.name.endsWith(".js")) {
-        results.push({
-          absPath: filePath,
-          relPath: path.relative(baseDir, filePath),
-        });
-      }
-    }
-    return results;
-  }
-
-  try {
-    // Check if workspace folder exists
-    try {
-      await fs.access(workspaceFolder);
-    } catch (error) {
-      throw new CliError(`Workspace folder not found: ${workspaceFolder}`);
-    }
-
-    if (libraryRef) {
-      // Sync specific library
-      const libraryId = await resolveLibraryId(libraryRef, workspaceId);
-      const data = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
-        id: libraryId,
-      });
-      const library = data.getAutomationLib;
-
-      if (!library) {
-        throw new CliError(`Library with ID ${libraryId} not found.`);
-      }
-
-      // If the library name contains slashes, create subfolders accordingly
-      const librarySegments = library.name.split("/");
-      const fileName = `${librarySegments[librarySegments.length - 1]}.js`;
-      const subfolders = librarySegments.slice(0, -1);
-      const targetFolder = path.join(workspaceFolder, ...subfolders);
-      const libraryFilePath = path.join(targetFolder, fileName);
-
-      try {
-        await fs.access(libraryFilePath);
-      } catch (error) {
-        throw new CliError(`Library file not found: ${libraryFilePath}`);
-      }
-
-      // Prompt for confirmation
-      let confirmed = true;
-      if (!noPrompt) {
-        confirmed = await promptConfirmation(
-          `Are you sure you want to overwrite the library '${library.name}' with the contents of '${libraryFilePath}'? (y/N): `,
-        );
-      }
-      if (!confirmed) {
-        throw new CliError("Sync cancelled by user.");
-      }
-      try {
-        await updateLibraryFromFile(library, libraryFilePath);
-      } catch (error) {
-        throw failure(`Error updating library: ${library.name}:`, error);
-      }
-      console.log(chalk.green(`Successfully synced library: ${library.name}`));
-    } else {
-      // Sync all libraries
-      const data = await graphQuery(LIST_AUTOMATION_LIBS_QUERY, {
-        id: workspaceId,
-      });
-      const libraries = data.listAutomationLibs || [];
-
-      // Get all .js files in workspaceFolder recursively
-      const jsFiles = await getAllJsFiles(workspaceFolder);
-      if (jsFiles.length === 0) {
-        console.log(
-          chalk.yellow("No .js library files found in workspace folder."),
-        );
-        return;
-      }
-
-      // Prompt for confirmation ONCE
-      let confirmed = true;
-      if (!noPrompt) {
-        confirmed = await promptConfirmation(
-          `Are you sure you want to overwrite libraries in the workspace with the contents of ${jsFiles.length} file(s) from '${workspaceFolder}'? (y/N): `,
-        );
-      }
-      if (!confirmed) {
-        throw new CliError("Sync cancelled by user.");
-      }
-
-      let updatedCount = 0;
-      let createdCount = 0;
-      let failedCount = 0;
-      for (const { absPath, relPath } of jsFiles) {
-        // Derive library name from relPath (remove .js extension, convert path separators to /)
-        const libraryName = relPath.replace(/\\/g, "/").replace(/\.js$/, "");
-        // Files are matched by name only; a name several libraries share is refused
-        let library;
-        try {
-          library = uniqueByName(libraries, libraryName, "library");
-        } catch (error) {
-          failedCount++;
-          console.error(chalk.red(`Error syncing library: ${error.message}`));
-          continue;
-        }
-        if (library) {
-          // Update existing library
-          try {
-            // Get full library details for update
-            const libraryData = await graphQuery(GET_AUTOMATION_LIB_QUERY, {
-              id: library.id,
-            });
-            const fullLibrary = libraryData.getAutomationLib;
-            await updateLibraryFromFile(fullLibrary, absPath);
-            updatedCount++;
-          } catch (error) {
-            failedCount++;
-            console.error(
-              chalk.red(
-                `Error updating library: ${libraryName}: ${error.message}`,
-              ),
-            );
-          }
-        } else {
-          // Create new library
-          try {
-            const { types: newTypes, content: newContent } =
-              await parseLibraryFile(absPath);
-            // Create the library first
-            const createData = await graphQuery(ADD_AUTOMATION_LIB_MUTATION, {
-              name: libraryName,
-              environment_id: workspaceId,
-            });
-            const newLibraryId = createData.createAutomationLib;
-            // Update the library with the parsed content
-            await graphQuery(UPDATE_AUTOMATION_LIB_MUTATION, {
-              id: newLibraryId,
-              name: libraryName,
-              namespace: libraryName.split("/")[0] || "default", // Use first part of name as namespace
-              content: newContent,
-              types: newTypes,
-              version: 0,
-              tags: [],
-              enabled: true,
-            });
-            createdCount++;
-          } catch (error) {
-            failedCount++;
-            console.error(
-              chalk.red(
-                `Error creating library: ${libraryName}: ${error.message}`,
-              ),
-            );
-          }
-        }
-      }
-      if (failedCount > 0) {
-        throw new CliError(
-          `Library sync from ${workspaceFolder} failed for ${failedCount} file(s)\nUpdated: ${updatedCount}, Created: ${createdCount}, Failed: ${failedCount}`,
-        );
-      }
-      console.log(
-        chalk.green(
-          `Successfully synced libraries from: ${workspaceFolder}\nUpdated: ${updatedCount}, Created: ${createdCount}`,
-        ),
-      );
-    }
-  } catch (error) {
-    throw failure("Error syncing libraries:", error);
-  }
-}
-
-// Helper function to create library file
-async function createLibraryFile(library, workspaceFolder) {
-  // A name with slashes becomes subfolders, always inside workspaceFolder (see pull-safety.js)
-  const filePath = pullTargetFile(library.name, workspaceFolder, "library");
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-
-  const fileContent = `/**
- * Library: ${headerText(library.name)}
- * ID: ${headerText(library.id)}
- * 
- * Edit the types and content below.
- * The types should be a function that returns type definitions.
- * The content should be JavaScript code with function implementations and exports.
- * 
- * Example:
- * types = () => {
- *   return "function processData(data: any): any";
- * };
- * 
- * content = () => {
- *   const processData = (data) => {
- *     return data.map(item => ({ ...item, processed: true }));
- *   };
- *   module.exports = { processData };
- * };
- */
-
-export const types = () => {
-  return \`${library.types || ""}\`;
-};
-
-export const content = () => {
-${library.content.content || ""}
-};
-`;
-
-  await fs.writeFile(filePath, fileContent, "utf8");
-}
-
-// Helper function to update library from file
-async function updateLibraryFromFile(library, filePath) {
-  try {
-    const { types: newTypes, content: newContent } =
-      await parseLibraryFile(filePath);
-
-    // Update the library
-    const updateData = await graphQuery(UPDATE_AUTOMATION_LIB_MUTATION, {
-      id: library.id,
-      name: library.name,
-      namespace: library.namespace,
-      content: newContent,
-      types: newTypes,
-      enabled: library.enabled,
-      version: library.version,
-      tags: library.tags || [],
-    });
-
-    if (!updateData.saveAutomationLib) {
-      throw new Error(`Failed to update library: ${library.name}`);
-    }
-  } catch (error) {
-    throw new Error(`Error updating library from file: ${error.message}`);
-  }
-}
-
-// Helper function to parse library file and extract types and content
-export async function parseLibraryFile(filePath) {
-  try {
-    const fileContent = await fs.readFile(filePath, "utf8");
-    const ast = parser.parse(fileContent, {
-      sourceType: "module",
-      plugins: [
-        "jsx",
-        "asyncGenerators",
-        "classProperties",
-        "dynamicImport",
-        "objectRestSpread",
-      ],
-    });
-
-    let typesStr = null;
-    let contentStr = null;
-
-    for (const node of ast.program.body) {
-      // Extract export const types = ...
-      if (
-        node.type === "ExportNamedDeclaration" &&
-        node.declaration &&
-        node.declaration.type === "VariableDeclaration"
-      ) {
-        for (const decl of node.declaration.declarations) {
-          if (decl.id.name === "types") {
-            // Handle types as a function that returns a string
-            if (
-              decl.init.type === "ArrowFunctionExpression" ||
-              decl.init.type === "FunctionExpression"
-            ) {
-              // Extract the return statement content
-              const body = decl.init.body;
-              if (body.type === "BlockStatement") {
-                // Look for return statement
-                for (const stmt of body.body) {
-                  if (stmt.type === "ReturnStatement" && stmt.argument) {
-                    typesStr = generate.default(stmt.argument).code;
-                    // Remove quotes if it's a string literal, but preserve template literals
-                    if (typesStr.startsWith('"') && typesStr.endsWith('"')) {
-                      typesStr = typesStr.slice(1, -1);
-                    } else if (
-                      typesStr.startsWith("'") &&
-                      typesStr.endsWith("'")
-                    ) {
-                      typesStr = typesStr.slice(1, -1);
-                    } else if (
-                      typesStr.startsWith("`") &&
-                      typesStr.endsWith("`")
-                    ) {
-                      // Keep template literal as-is, just remove the backticks
-                      typesStr = typesStr.slice(1, -1);
-                    }
-                    break;
-                  }
-                }
-              } else if (body.type === "StringLiteral") {
-                // Arrow function with implicit return
-                typesStr = body.value;
-              }
-            } else if (decl.init.type === "StringLiteral") {
-              // Fallback: direct string assignment
-              typesStr = decl.init.value;
-            }
-          }
-          if (decl.id.name === "content") {
-            // Handle content as a function that contains the code
-            if (
-              decl.init.type === "ArrowFunctionExpression" ||
-              decl.init.type === "FunctionExpression"
-            ) {
-              const body = decl.init.body;
-              if (body.type === "BlockStatement") {
-                // Extract all statements and convert them to code
-                const statements = body.body.map(
-                  (stmt) => generate.default(stmt).code,
-                );
-                contentStr = statements.join("\n");
-              } else if (body.type === "StringLiteral") {
-                // Arrow function with implicit return
-                contentStr = body.value;
-              }
-            } else if (decl.init.type === "StringLiteral") {
-              // Fallback: direct string assignment
-              contentStr = decl.init.value;
-            }
-          }
-        }
-      }
-    }
-
-    if (!typesStr) throw new Error("Could not parse types from file");
-    if (!contentStr) throw new Error("Could not parse content from file");
-
-    return {
-      types: typesStr,
-      content: contentStr,
-    };
-  } catch (error) {
-    throw new Error(`Error parsing library file. ${error.message}`);
-  }
+  await sync(libraryResource, workspaceId, libraryRef, sourcePath, noPrompt);
 }
