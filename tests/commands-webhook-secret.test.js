@@ -41,7 +41,7 @@ test("webhook list: the realm region becomes a host prefix", sandboxTest(async (
 test("webhook list -w <id>: resolves the workspace first", sandboxTest(async (sb) => {
   sb.api.on("LIST_ENVIRONMENTS_QUERY", { listAutomationEnvironmentWithStats: [{ id: "ws-2", name: "Other" }] });
   sb.api.on("LIST_WEBHOOKS_QUERY", { listAutomationWebhooks: [] });
-  const r = await sb.run(["webhook", "list", "-w", "other"]);
+  const r = await sb.run(["webhook", "list", "-w", "Other"]); // PLAT-116: exact name
   assert.equal(r.stdout, "No webhooks found in the current workspace.\n");
   assert.deepEqual(ops(sb), [["LIST_ENVIRONMENTS_QUERY", {}], ["LIST_WEBHOOKS_QUERY", { id: "ws-2" }]]);
 }));
@@ -70,8 +70,7 @@ test("webhook add: creates, then shows the new webhook", sandboxTest(async (sb) 
   assert.equal(r.code, 0);
   assert.deepEqual(ops(sb), [
     ["CREATE_WEBHOOK_MUTATION", { name: "orders", environmentId: "ws-sel" }],
-    // PINS SUSPECT BEHAVIOUR: the already-resolved id is resolved again (extra list call).
-    ["LIST_ENVIRONMENTS_QUERY", {}],
+    // PLAT-116: the already-resolved id is no longer resolved again (was an extra list call).
     ["LIST_WEBHOOKS_QUERY", { id: "ws-sel" }],
     ["ME_QUERY", {}],
   ]);

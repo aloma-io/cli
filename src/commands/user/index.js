@@ -6,12 +6,12 @@ import {
   UPDATE_COMPANY_MEMBER_MUTATION,
 } from "./query.js";
 import { rolesToGroups } from "./utils.js";
-import { ME_QUERY } from "../auth/query.js";
+import { getMe } from "../../context.js";
 import { CliError, UsageError, failure } from "../../runtime.js";
 
 async function checkAdminOrOwnerPermission(action) {
-  const user = await graphQuery(ME_QUERY);
-  if (!user?.me?.groups?.some((g) => g === "admin" || g === "owner")) {
+  const me = await getMe();
+  if (!me?.groups?.some((g) => g === "admin" || g === "owner")) {
     throw new CliError(`Error: Only administrators or owners can ${action}`);
   }
 }

@@ -2,19 +2,20 @@ import { getSessionData, updateSessionData } from "../../utils.js";
 import chalk from "chalk";
 import axios from "axios";
 import { GRAPHQL_HOST } from "../../config.js";
-import { graphQuery } from "../../utils.js";
-import { ME_QUERY } from "../auth/query.js";
-import { refuseRedirect } from "../../net-security.js";
 import {
+  getMe,
+  forgetMe,
+  resolveCompany,
   saveSelectedWorkspace,
-  switchDefaultWorkspace,
-} from "../workspace/index.js";
+  selectDefaultWorkspace,
+} from "../../context.js";
+import { refuseRedirect } from "../../net-security.js";
 import readline from "readline";
 import { CliError, failure } from "../../runtime.js";
 
 export const addCompany = async (name, emails) => {
-  const user = await graphQuery(ME_QUERY);
-  if (!user?.me?.groups?.includes("company-manager")) {
+  const me = await getMe();
+  if (!me?.groups?.includes("company-manager")) {
     throw new CliError("Error: Only administrators can add companies");
   }
 
@@ -31,9 +32,9 @@ export const addCompany = async (name, emails) => {
 };
 
 export const listCompanies = async () => {
-  const user = await graphQuery(ME_QUERY);
-  const realms = user?.me?.realms || [];
-  const currentCompany = user?.me?.realm?.id;
+  const me = await getMe();
+  const realms = me?.realms || [];
+  const currentCompany = me?.realm?.id;
 
   if (realms.length === 0) {
     console.log(chalk.yellow("No companies found"));
@@ -51,9 +52,9 @@ export const listCompanies = async () => {
 // Interactive company selection
 async function selectCompanyInteractive() {
   try {
-    const user = await graphQuery(ME_QUERY);
-    const realms = user?.me?.realms || [];
-    const currentCompanyId = user?.me?.realm?.id;
+    const me = await getMe();
+    const realms = me?.realms || [];
+    const currentCompanyId = me?.realm?.id;
 
     if (realms.length === 0) {
       throw new CliError("No companies found.");
@@ -163,21 +164,8 @@ export const switchCompany = async (identifier) => {
       // Interactive selection
       company = await selectCompanyInteractive();
     } else {
-      // Direct selection by identifier
-      const user = await graphQuery(ME_QUERY);
-      const realms = user?.me?.realms || [];
-
-      if (realms.length === 0) {
-        throw new CliError("No companies found.");
-      }
-
-      // select the company by name or id
-      company = realms.find(
-        (realm) => realm.name === identifier || realm.id === identifier,
-      );
-      if (!company) {
-        throw new CliError("Company not found");
-      }
+      // Direct selection by id, then name in any case (PLAT-116)
+      company = await resolveCompany(identifier);
     }
 
     // Switch to the selected company
@@ -210,10 +198,11 @@ export const switchCompany = async (identifier) => {
           .replace("Bearer%20", "");
         // Update the session with the new token
         await updateSessionData("token", token);
+        forgetMe();
         // Reset the selected workspace
         await updateSessionData("selectedWorkspace", null);
         await saveSelectedWorkspace(null);
-        await switchDefaultWorkspace();
+        await selectDefaultWorkspace();
       }
     }
 

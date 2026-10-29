@@ -77,17 +77,18 @@ test("company switch <name>: posts to the realm endpoint, stores the new token a
   assert.equal(s.selectedWorkspace, "ws-first");
   assert.match(r.stdout, /Switched to workspace \[First\]\n/);
   assert.match(r.stdout, /Successfully switched to company \[Beta Co\]\n$/);
-  assert.deepEqual(sb.api.ops(), ["ME_QUERY", "LIST_WORKSPACES_QUERY", "LIST_WORKSPACES_QUERY"]);
+  // PLAT-116: the default workspace is saved from the one list (was listed twice).
+  assert.deepEqual(sb.api.ops(), ["ME_QUERY", "LIST_WORKSPACES_QUERY"]);
 }));
 
-test("company switch <id>: matches by id; exact (case-sensitive) name", sandboxTest(async (sb) => {
+test("company switch <id>: matches by id; a name in any case", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
   let r = await sb.run(["company", "switch", "r-2"]);
   assert.equal(sb.axiosCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
+  // Flipped (Patrick, 28 Oct): names match regardless of case when one company matches (was refused with a hint).
   r = await sb.run(["company", "switch", "beta co"]);
-  assert.equal(r.code, 1);
-  assert.equal(r.stderr, "Company not found\n");
-  assert.equal(sb.axiosCalls().length, 1);
+  assert.equal(sb.axiosCalls().length, 2);
+  assert.equal(sb.axiosCalls()[1].url, "https://graphql.test.invalid/realm?realm=r-2");
 }));
 
 test("company switch: reply without an Authorization cookie keeps the session untouched", sandboxTest(async (sb) => {

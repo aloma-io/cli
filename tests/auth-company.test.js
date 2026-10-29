@@ -62,7 +62,7 @@ test("switch by name works the same", async () => {
 test("unknown company: says so, nothing requested, session unchanged", async () => {
   const r = await switchTo("No Such Company");
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Company not found/);
+  assert.match(r.stderr, /No company with the id or name "No Such Company" among your companies\./); // PLAT-116 wording
   assert.equal(realm.requests.length, 0);
   assert.equal(sb.readSession().token, FAKE.session);
 });

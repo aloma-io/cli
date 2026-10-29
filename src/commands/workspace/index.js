@@ -2,6 +2,12 @@ import chalk from "chalk";
 import { graphQuery, updateSessionData, getSessionData } from "../../utils.js";
 import { CliError, failure } from "../../runtime.js";
 import {
+  getSelectedWorkspace,
+  saveSelectedWorkspace,
+  resolveWorkspaceId,
+  pickWorkspace,
+} from "../../context.js";
+import {
   LIST_ENVIRONMENTS_QUERY,
   CREATE_WORKSPACE_MUTATION,
   LIST_WORKSPACES_QUERY,
@@ -19,55 +25,6 @@ import fs from "fs";
 import yaml from "js-yaml";
 import path from "path";
 import readline from "readline";
-
-// Global variable to store the selected workspace ID
-let selectedWorkspaceId = null;
-
-// Save the selected workspace ID
-export async function saveSelectedWorkspace(workspaceId) {
-  try {
-    await updateSessionData("selectedWorkspace", workspaceId);
-    selectedWorkspaceId = workspaceId;
-    return true;
-  } catch (error) {
-    throw failure("Failed to save workspace selection:", error);
-  }
-}
-
-// Get the selected workspace ID
-export async function getSelectedWorkspace() {
-  if (selectedWorkspaceId) {
-    return selectedWorkspaceId;
-  }
-
-  try {
-    const selectedWorkspace = await getSessionData("selectedWorkspace");
-    selectedWorkspaceId = selectedWorkspace;
-    return selectedWorkspace;
-  } catch (error) {
-    throw failure("Failed to read workspace selection:", error);
-  }
-}
-
-// Common function to resolve workspace ID from identifier or use selected workspace
-export async function resolveWorkspaceId(workspaceIdentifier) {
-  let workspaceId = workspaceIdentifier;
-  if (!workspaceIdentifier) {
-    workspaceId = await getSelectedWorkspace();
-    if (!workspaceId) {
-      throw new CliError(
-        "No workspace selected. Use `aloma workspace switch` to select one.",
-      );
-    }
-  } else {
-    // Try to resolve workspace name to ID
-    const resolvedId = await getWorkspaceId(workspaceIdentifier);
-    if (resolvedId) {
-      workspaceId = resolvedId;
-    }
-  }
-  return workspaceId;
-}
 
 // Interactive workspace selection
 async function selectWorkspaceInteractive() {
@@ -197,16 +154,8 @@ export async function switchWorkspace(workspaceIdentifier) {
         throw new CliError("No workspaces found.");
       }
 
-      // Try to find and switch to it
-      workspace = workspaces.find(
-        (w) =>
-          w.name.toLowerCase() === workspaceIdentifier.toLowerCase() ||
-          w.id === workspaceIdentifier,
-      );
-
-      if (!workspace) {
-        throw new CliError(`Workspace '${workspaceIdentifier}' not found.`);
-      }
+      // Exact id, then name in any case (PLAT-116)
+      workspace = pickWorkspace(workspaces, workspaceIdentifier);
     }
 
     // Switch to the selected workspace
@@ -236,6 +185,7 @@ export async function createWorkspace(name, tags) {
     // Automatically switch to the new workspace
     await saveSelectedWorkspace(workspace.id);
     console.log(chalk.green(`Switched to workspace [${name.trim()}]`));
+    return workspace.id;
   } catch (error) {
     throw failure("Error creating workspace:", error);
   }
@@ -639,27 +589,6 @@ export async function updateWorkspace(workspaceIdentifier, options) {
   }
 }
 
-export async function getWorkspaceId(name) {
-  const token = await getSessionData("token");
-  if (!token) {
-    console.log(
-      chalk.yellow(
-        "⚠ Not authenticated: No token found. Run `aloma auth` to login.",
-      ),
-    );
-    return;
-  }
-
-  const data = await graphQuery(LIST_ENVIRONMENTS_QUERY);
-  const environments = data.listAutomationEnvironmentWithStats;
-
-  const workspace = environments.find(
-    (env) => env.name.toLowerCase() === name.toLowerCase() || env.id === name,
-  );
-
-  return workspace ? workspace.id : null;
-}
-
 // Edit source config for a workspace
 export async function sourceEdit(workspaceIdentifier, options) {
   const workspaceId = await resolveWorkspaceId(workspaceIdentifier);
@@ -763,56 +692,5 @@ export async function syncSource(workspaceIdentifier) {
     );
   } catch (error) {
     throw failure("Error triggering source sync:", error);
-  }
-}
-
-export async function getWorkspace(identifier) {
-  const token = await getSessionData("token");
-  if (!token) {
-    console.log(
-      chalk.yellow(
-        "⚠ Not authenticated: No token found. Run `aloma auth` to login.",
-      ),
-    );
-    return;
-  }
-
-  const data = await graphQuery(LIST_ENVIRONMENTS_QUERY);
-  const environments = data.listAutomationEnvironmentWithStats;
-
-  const workspace = environments.find(
-    (env) =>
-      env.name.toLowerCase() === identifier.toLowerCase() ||
-      env.id === identifier,
-  );
-
-  return workspace || null;
-}
-
-export async function switchDefaultWorkspace() {
-  let defaultWorkspace = null;
-  // Check if there are any workspaces
-  const data = await graphQuery(LIST_WORKSPACES_QUERY);
-  const workspaces = data.listAutomationEnvironmentWithStats;
-
-  if (!workspaces || workspaces.length === 0) {
-    // If no workspaces, create a getting started workspace
-    const dataCreated = await graphQuery(CREATE_GETTING_STARTED_MUTATION);
-    const workspaceCreated = dataCreated.createGettingStarted;
-    if (workspaceCreated) {
-      defaultWorkspace = workspaceCreated;
-      // Get the list of workspaces again to get the new workspace
-      const data = await graphQuery(LIST_WORKSPACES_QUERY);
-      const workspaces = data.listAutomationEnvironmentWithStats;
-      defaultWorkspace = workspaces[0];
-    }
-  } else {
-    // If there are workspaces, use the first one
-    defaultWorkspace = workspaces[0];
-  }
-
-  if (defaultWorkspace) {
-    // Switch to the default workspace
-    await switchWorkspace(defaultWorkspace.id);
   }
 }

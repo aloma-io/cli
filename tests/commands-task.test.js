@@ -245,7 +245,7 @@ test("task new: no data, unsupported extension, bad JSON, bad YAML, missing file
 test("task new: API error; -w name is resolved", sandboxTest(async (sb) => {
   sb.api.on("LIST_ENVIRONMENTS_QUERY", { listAutomationEnvironmentWithStats: [{ id: "ws-7", name: "Seven" }] });
   sb.api.on("CREATE_TASK_MUTATION", gqlError("bad content"));
-  const r = await sb.run(["task", "new", "n", "-d", "{}", "-w", "seven"]);
+  const r = await sb.run(["task", "new", "n", "-d", "{}", "-w", "Seven"]); // PLAT-116: exact name
   assert.match(r.stderr, /Error creating task: bad content/);
   assert.equal(sb.api.calls.at(-1).variables.environment_id, "ws-7");
 }));

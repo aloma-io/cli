@@ -15,12 +15,13 @@ import {
 } from "./query.js";
 import fs from "fs/promises";
 import path from "path";
-import { resolveWorkspaceId } from "../workspace/index.js";
+import { resolveWorkspaceId } from "../../context.js";
 import { CliError, UsageError, failure } from "../../runtime.js";
 import {
   uniqueByName,
   resolveByIdOrName,
   assertNameFree,
+  nameKey,
 } from "../../names.js";
 import readline from "readline";
 import parser from "@babel/parser";
@@ -313,8 +314,8 @@ export async function pullLibrary(workspaceIdentifier, libraryRef, targetPath) {
         try {
           uniqueByName(libraries, librarySummary.name, "library");
         } catch (error) {
-          if (!ambiguous.has(librarySummary.name)) {
-            ambiguous.add(librarySummary.name);
+          if (!ambiguous.has(nameKey(librarySummary.name))) {
+            ambiguous.add(nameKey(librarySummary.name));
             console.error(chalk.red(error.message));
           }
           continue;

@@ -76,7 +76,7 @@ test("PLAT-81 workspace: switch to an unknown workspace exits 1", sandboxTest(as
   sb.api.on("LIST_WORKSPACES_QUERY", WS);
   const r = await sb.run(["workspace", "switch", "nope"]);
   assert.equal(r.code, 1);
-  assert.equal(r.stderr, "Workspace 'nope' not found.\n");
+  assert.equal(r.stderr, 'No workspace with the id or name "nope" among your workspaces.\n'); // PLAT-116 wording
   assert.equal(sb.readSession().selectedWorkspace, "ws-sel");
 }));
 

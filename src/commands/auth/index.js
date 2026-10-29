@@ -20,7 +20,7 @@ import {
 } from "../../config.js";
 import { exchangeIdTokenForSession } from "./session.js";
 import { assertSecureUrl, isLoopbackHost } from "../../net-security.js";
-import { switchDefaultWorkspace } from "../workspace/index.js";
+import { selectDefaultWorkspace } from "../../context.js";
 import { failure } from "../../runtime.js";
 
 let server;
@@ -219,7 +219,7 @@ async function initiateAuth() {
           // Store the session data with the encrypted token
           await updateSessionData("selectedWorkspace", null);
           await updateSessionData("token", sessionToken);
-          await switchDefaultWorkspace();
+          await selectDefaultWorkspace();
 
           res.writeHead(200, { "Content-Type": "text/html" });
           res.end(`

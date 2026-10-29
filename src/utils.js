@@ -3,7 +3,6 @@ import { promises as fs } from "fs";
 import fetch from "node-fetch";
 import { GRAPHQL_URL } from "./config.js";
 import chalk from "chalk";
-import { ME_QUERY } from "./commands/auth/query.js";
 import * as jose from "jose";
 import {
   getConfigDir,
@@ -160,15 +159,8 @@ export const getSessionData = async (prop = null) => {
   }
 };
 
-export const urlForRegion = async (url) => {
-  const user = await graphQuery(ME_QUERY);
-  const region = user.me.realm.region;
-  if (region && !url.startsWith(`https://${region}.`)) {
-    url = url.replace(/https:\/\//, `https://${region}.`);
-  }
-
-  return url;
-};
+// Moved to the context module (PLAT-116); still exported here for library users.
+export { urlForRegion } from "./context.js";
 
 export const doEncrypt = async ({
   pubKey,
