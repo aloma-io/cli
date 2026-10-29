@@ -872,9 +872,13 @@ program
   .description("Deploy resources from a YAML configuration file")
   .argument("<yamlPath>", "Path to the YAML configuration file")
   // .option('-f, --force', 'Force overwrite existing resources')
+  .option(
+    "--dry-run",
+    "Report what would be created or updated, without sending any change",
+  )
   .action(async (yamlPath, options) => {
     try {
-      await deployFromYaml(yamlPath);
+      await deployFromYaml(yamlPath, { dryRun: Boolean(options.dryRun) });
       // await deployFromYaml(yamlPath, { force: options.force });
     } catch (error) {
       throw failure("Deployment failed:", error);

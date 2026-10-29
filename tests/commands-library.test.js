@@ -116,13 +116,17 @@ test("library add: creates the library; with --file also saves types and content
   ]);
 }));
 
-test("library add: without --file the namespace, tags and enabled flag are dropped", sandboxTest(async (sb) => {
+// Flipped (PLAT-118, B8 / M17): was PINS SUSPECT BEHAVIOUR, only the name reached the API and the
+// namespace, tags and enabled flag were dropped. The library is now saved once with empty content.
+test("library add: without --file the namespace, tags and enabled flag are kept (M17)", sandboxTest(async (sb) => {
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED());
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
+  sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
   const r = await sb.run(["library", "add", "x", "ns", "-t", "a", "-e", "false"]);
-  // PINS SUSPECT BEHAVIOUR: only the name reaches the API; the other options are ignored silently.
+  assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, "Created library [x] with ID: l-new\n");
-  assert.deepEqual(ops(sb), [LIST, ["ADD_AUTOMATION_LIB_MUTATION", { name: "x", environment_id: "ws-sel" }]]);
+  assert.deepEqual(ops(sb), [LIST, ["ADD_AUTOMATION_LIB_MUTATION", { name: "x", environment_id: "ws-sel" }],
+    ["UPDATE_AUTOMATION_LIB_MUTATION", { id: "l-new", name: "x", namespace: "ns", content: "", types: "", version: 0, tags: ["a"], enabled: false }]]);
 }));
 
 test("library add: enabled defaults to true, anything but 'true' is false", sandboxTest(async (sb) => {
@@ -396,6 +400,17 @@ test("library sync: missing folder, no .js files, unparsable file", sandboxTest(
   assert.match(r.stderr, /^Error creating library: bad: Error parsing library file\./);
   assert.match(r.stderr, /Updated: 0, Created: 0, Failed: 1\n$/);
   assert.equal(r.code, 1);
+}));
+
+// PLAT-118 (B5): sync saves only what differs from the stored library.
+test("library sync: an unchanged file sends no save and is counted as unchanged", sandboxTest(async (sb) => {
+  sb.write("src/same.js", libFile("T", "  s();"));
+  mockLibs(sb, [FULL("l-1", "same", "T", "s();")]);
+  sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
+  const r = await sb.run(["library", "sync", "-p", "src"], { answers: YES });
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /Updated: 0, Created: 0, Unchanged: 1\n$/);
+  assert.ok(!sb.api.ops().includes("UPDATE_AUTOMATION_LIB_MUTATION"));
 }));
 
 test("library sync -l <id>: nested name maps to a nested file; missing file; update", sandboxTest(async (sb) => {
