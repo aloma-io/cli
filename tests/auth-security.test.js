@@ -41,6 +41,25 @@ test("harness: a mock on localhost is reachable by fetch (so 'never contacted' c
   }
 });
 
+// Node 18's fetch tries ::1 for "localhost", Node 22's tries 127.0.0.1. The mock answers on both, so the check above
+// holds on every supported Node (engines: >= 18). Skipped only where the machine has no IPv6 loopback.
+test("harness: a localhost mock answers on 127.0.0.1 and on ::1", async (t) => {
+  const s = await startServer((req, res) => json(res, 200, {}), { host: "localhost" });
+  try {
+    assert.equal((await fetch(`http://127.0.0.1:${s.port}/a`)).status, 200);
+    try {
+      assert.equal((await fetch(`http://[::1]:${s.port}/b`)).status, 200);
+    } catch (e) {
+      if (!Object.values(await import("node:os").then((o) => o.networkInterfaces())).flat().some((i) => i.address === "::1")) {
+        return t.skip("no IPv6 loopback on this machine");
+      }
+      throw e;
+    }
+  } finally {
+    await s.close();
+  }
+});
+
 // ---- static checks over the source --------------------------------------------------------------
 
 const srcFiles = (dir) =>
