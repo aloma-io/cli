@@ -44,7 +44,7 @@ test("context: after a company switch `me` is fetched again, with the new token,
   sb.api.on("LIST_WORKSPACES_QUERY", WS(["ws-1", "Dev"]));
   sb.api.on("LIST_ENVIRONMENTS_QUERY", WS(["ws-1", "Dev"]));
   webhooks(sb);
-  const r = await sb.run(["deploy", "d.yaml"], { env: { TEST_AXIOS_HEADERS: COOKIE("Bearer%20new-token-fake") } });
+  const r = await sb.run(["deploy", "d.yaml"], { env: { TEST_REALM_HEADERS: COOKIE("Bearer%20new-token-fake") } });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(meCalls(sb).map((c) => c.headers.authorization), [`Bearer ${FAKE_TOKEN}`, "Bearer new-token-fake"]);
   assert.match(r.stdout, /URL: https:\/\/us\.connect\.aloma\.io\/event\/ka\n/);
@@ -57,7 +57,7 @@ test("context: company switch refuses an ambiguous company name and lists the id
   const r = await sb.run(["company", "switch", "Twin"]);
   assert.equal(r.code, 1);
   assert.equal(r.stderr, 'The company name "Twin" is ambiguous among your companies (ids: r-2, r-3). Use the id.\n');
-  assert.deepEqual(sb.axiosCalls(), []);
+  assert.deepEqual(sb.realmCalls(), []);
 }));
 
 test("context: company switch refuses an unknown company and never sends it on", sandboxTest(async (sb) => {
@@ -66,15 +66,15 @@ test("context: company switch refuses an unknown company and never sends it on",
   const r = await sb.run(["company", "switch", "gamma co"]);
   assert.equal(r.code, 1);
   assert.equal(r.stderr, 'No company with the id or name "gamma co" among your companies.\n');
-  assert.deepEqual(sb.axiosCalls(), []);
+  assert.deepEqual(sb.realmCalls(), []);
 }));
 
 test("context: company switch by id, then one workspace list to pick the default", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", ME());
   sb.api.on("LIST_WORKSPACES_QUERY", WS(["ws-first", "First"]));
-  const r = await sb.run(["company", "switch", "r-2"], { env: { TEST_AXIOS_HEADERS: COOKIE("Bearer%20new-token-fake") } });
+  const r = await sb.run(["company", "switch", "r-2"], { env: { TEST_REALM_HEADERS: COOKIE("Bearer%20new-token-fake") } });
   assert.equal(r.code, 0, r.stderr);
-  assert.equal(sb.axiosCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
+  assert.equal(sb.realmCalls()[0].url, "https://graphql.test.invalid/realm?realm=r-2");
   assert.deepEqual(sb.api.ops(), ["ME_QUERY", "LIST_WORKSPACES_QUERY"]);
   assert.equal(sb.readSession().selectedWorkspace, "ws-first");
 }));

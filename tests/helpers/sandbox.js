@@ -111,14 +111,31 @@ export async function startServer(handler, { host = "127.0.0.1", tls } = {}) {
       }
     });
   };
-  const server = tls ? https.createServer(tls, listener) : http.createServer(listener);
+  const make = () => (tls ? https.createServer(tls, listener) : http.createServer(listener));
+  const servers = [make()];
   const sockets = new Set();
-  server.on("connection", (s) => {
+  servers[0].on("connection", (s) => {
     sockets.add(s);
     s.on("close", () => sockets.delete(s));
   });
-  await new Promise((r) => server.listen(0, host, r));
-  const port = server.address().port;
+  // "localhost" is a second host name for the same machine, and clients disagree on which address they try first:
+  // Node 18's fetch takes ::1, Node 22's takes 127.0.0.1. Listening on "localhost" binds just one of them, so bind
+  // 127.0.0.1 and then ::1 on the same port (two listeners rather than "::", which is not dual-stack on every
+  // host). If the machine has no IPv6 loopback, 127.0.0.1 alone is all that can be asked of it (PLAT-117).
+  await new Promise((r) => servers[0].listen(0, host === "localhost" ? "127.0.0.1" : host, r));
+  const port = servers[0].address().port;
+  if (host === "localhost") {
+    const v6 = make();
+    v6.on("connection", (s) => {
+      sockets.add(s);
+      s.on("close", () => sockets.delete(s));
+    });
+    const bound = await new Promise((r) => {
+      v6.once("error", () => r(false));
+      v6.listen(port, "::1", () => r(true));
+    });
+    if (bound) servers.push(v6);
+  }
   const shownHost = host.includes(":") ? `[${host}]` : host;
   return {
     port,
@@ -127,7 +144,7 @@ export async function startServer(handler, { host = "127.0.0.1", tls } = {}) {
     close: () =>
       new Promise((r) => {
         for (const s of sockets) s.destroy();
-        server.close(() => r());
+        Promise.all(servers.map((v) => new Promise((d) => v.close(() => d())))).then(() => r());
       }),
   };
 }

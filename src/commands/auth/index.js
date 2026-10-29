@@ -1,6 +1,5 @@
 import http from "http";
 import path from "path";
-import fetch from "node-fetch";
 import { Issuer, generators } from "openid-client";
 import open from "open";
 import { promises as fs } from "fs";
@@ -19,6 +18,7 @@ import {
   SESSION_URL,
 } from "../../config.js";
 import { exchangeIdTokenForSession } from "./session.js";
+import { request } from "../../http.js";
 import { assertSecureUrl, isLoopbackHost } from "../../net-security.js";
 import { selectDefaultWorkspace } from "../../context.js";
 import { failure } from "../../runtime.js";
@@ -408,11 +408,11 @@ async function endKeycloakSession() {
     // console.log(chalk.blue("🔄 Terminating Keycloak session..."));
 
     // Make a request to the logout endpoint
-    const response = await fetch(logoutUrl, {
-      method: "GET",
+    const response = await request(logoutUrl, {
       headers: {
         "User-Agent": "Aloma CLI",
       },
+      what: "login service",
     });
 
     // if (response.ok || response.status === 404) {

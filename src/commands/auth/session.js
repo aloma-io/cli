@@ -1,5 +1,4 @@
-import fetch from "node-fetch";
-import { assertSecureUrl, refuseRedirect } from "../../net-security.js";
+import { postJson } from "../../http.js";
 
 // The API's sign-in endpoint for the CLI lives next to its GraphQL endpoint.
 export function sessionUrlFor(graphqlUrl) {
@@ -12,18 +11,15 @@ export async function exchangeIdTokenForSession({ idToken, url }) {
     throw new Error("No ID token received from the login service");
   }
 
-  assertSecureUrl(url, "sign-in URL");
-  const response = await fetch(url, {
-    method: "POST",
-    redirect: "manual", // never resend the ID token to a redirect target
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "User-Agent": "Aloma CLI",
+  // https only; a redirect is refused, so the ID token is never resent elsewhere (src/http.js)
+  const response = await postJson(
+    url,
+    { id_token: idToken },
+    {
+      headers: { Accept: "application/json", "User-Agent": "Aloma CLI" },
+      what: "Aloma sign-in",
     },
-    body: JSON.stringify({ id_token: idToken }),
-  });
-  refuseRedirect(response.status, "Aloma sign-in");
+  );
 
   if (!response.ok) {
     throw new Error(`Aloma sign-in was not accepted (${response.status})`);

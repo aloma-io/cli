@@ -567,7 +567,7 @@ The CLI uses the following configuration in `src/config.js`:
 ## Dependencies
 
 - **commander**: CLI framework
-- **axios**: HTTP client for API requests
+- HTTP: Node's built-in `fetch`, through `src/http.js` only (https only, redirects refused)
 - **chalk**: Terminal colorization
 - **cli-table3**: Formatted table display
 - **jose**: JWT handling

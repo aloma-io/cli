@@ -123,7 +123,7 @@ test("PINS SUSPECT BEHAVIOUR: the cookie is parsed loosely: cut at '=', not URL-
 test("SECURITY: an untrusted certificate is refused; the session is not sent", async () => {
   const r = await runCli(sb, ["company", "switch", "realm-b"], untrusted);
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Error switching company: self[- ]signed certificate/);
+  assert.match(r.stderr, /Error switching company: .*self[- ]signed certificate/); // PLAT-117: "request to <url> failed, reason: ..."
   assert.equal(realm.requests.length, 0);
   assert.equal(sb.readSession().token, FAKE.session);
 });
