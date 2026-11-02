@@ -4,6 +4,8 @@ A command-line interface for interacting with Aloma services and utilities.
 
 ## Installation
 
+The CLI supports Node 22 or later; we recommend Node 26.
+
 ```bash
 npm install -g @aloma.io/aloma
 ```

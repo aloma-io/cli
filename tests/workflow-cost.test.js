@@ -11,7 +11,7 @@ import { REPO } from "./helpers/sandbox.js";
 const read = (name) => readFileSync(path.join(REPO, ".github", "workflows", name));
 const wf = parseYaml(read("test.yml").toString("utf8"), { schema: CORE_SCHEMA });
 const jobs = Object.values(wf.jobs);
-const FULL = ["18", "20", "22"];
+const FULL = ["22", "24", "26"];
 // publish.yml is out of scope for PLAT-145; change this hash only with a deliberate publish change.
 const PUBLISH_SHA256 = "dbe418aeb1a5b5b8f73ba4175bc3adc9ead9eaad881780f61b5d74173ee24748";
 
@@ -26,11 +26,11 @@ const evaluate = (value, event) => {
 };
 const matrixFor = (job, event) => evaluate(job.strategy.matrix["node-version"], event).map(String);
 
-test("PLAT-145: pull requests test on Node 22 only", () => {
-  for (const job of jobs) assert.deepEqual(matrixFor(job, "pull_request"), ["22"]);
+test("PLAT-145: pull requests test on one Node version only (26, PLAT-146)", () => {
+  for (const job of jobs) assert.deepEqual(matrixFor(job, "pull_request"), ["26"]);
 });
 
-test("PLAT-145: push to main and workflow_dispatch run the full 18/20/22 matrix", () => {
+test("PLAT-145: push to main and workflow_dispatch run the full 22/24/26 matrix (PLAT-146)", () => {
   assert.deepEqual(wf.on.push.branches, ["main"]);
   for (const job of jobs) {
     assert.deepEqual(matrixFor(job, "push"), FULL);
