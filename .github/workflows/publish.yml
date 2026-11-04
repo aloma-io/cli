@@ -13,7 +13,7 @@ jobs:
   # The gate: nothing is published unless the same suite test.yml runs passes on the tagged commit.
   # Own permissions (the workflow-level id-token: write must not reach this job), no secrets.
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read

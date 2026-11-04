@@ -87,3 +87,10 @@ test("PLAT-10: the publish job keeps id-token, provenance and its publish comman
   assert.equal(publishWf.permissions.contents, "read");
   assert.equal(publishJob.steps.at(-1).run, "npm publish --access public --provenance");
 });
+
+test("PLAT-10: the test job names its runner explicitly, never ubuntu-latest", () => {
+  const runner = testJob?.["runs-on"];
+  assert.equal(typeof runner, "string", "the test job has no runs-on");
+  assert.doesNotMatch(runner, /-latest$/i, `test job runs-on ${runner} is a moving label`);
+  assert.equal(runner, "ubuntu-26.04");
+});
