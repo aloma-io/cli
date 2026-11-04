@@ -6,12 +6,20 @@
 // - optionally shortens the 5-minute sign-in timeout
 import { appendFileSync } from "node:fs";
 import http from "node:http";
-import { register } from "node:module";
+import nodeModule from "node:module";
 import "./net-guard.js";
+import { resolve } from "./open-hooks.mjs";
 
 process.umask(0o022);
 
-register(new URL("./open-hooks.mjs", import.meta.url).href);
+// module.register() is deprecated from Node 26 (DEP0205) and prints a warning into the child's output;
+// module.registerHooks() (Node 22.15+, 23.5+) is its synchronous replacement. The fallback is only
+// reached on Node 22.0-22.14 and 23.0-23.4.
+if (typeof nodeModule.registerHooks === "function") {
+  nodeModule.registerHooks({ resolve });
+} else {
+  nodeModule.register(new URL("./open-hooks.mjs", import.meta.url).href);
+}
 
 const listenLog = process.env.ALOMA_TEST_LISTEN_LOG;
 if (listenLog) {
