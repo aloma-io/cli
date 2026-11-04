@@ -23,9 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Pull requests test on the newest Node; main and manual runs cover every supported
-        # version (engines: >=18) before a release.
-        node-version: ${{ github.event_name == 'pull_request' && fromJSON('["22"]') || fromJSON('["18","20","22"]') }}
+        # Pull requests test on the recommended Node; main and manual runs cover every supported
+        # version (engines: >=22) before a release.
+        node-version: ${{ github.event_name == 'pull_request' && fromJSON('["26"]') || fromJSON('["22","24","26"]') }}
     steps:
       - uses: actions/checkout@v6
 
