@@ -13,7 +13,8 @@ const wf = parseYaml(read("test.yml").toString("utf8"), { schema: CORE_SCHEMA })
 const jobs = Object.values(wf.jobs);
 const FULL = ["22", "24", "26"];
 // publish.yml is out of scope for PLAT-145; change this hash only with a deliberate publish change.
-const PUBLISH_SHA256 = "dbe418aeb1a5b5b8f73ba4175bc3adc9ead9eaad881780f61b5d74173ee24748";
+// Re-pinned for PLAT-10's publish gate (#22: test job before publish), merged alongside #19 without this update.
+const PUBLISH_SHA256 = "7f711fa1711d8569d56b017e59b188d899dd70aff9f68ca20bfcd285c8ab0f35";
 
 // Evaluates the only expression shapes the workflow may use, for one event name.
 const evaluate = (value, event) => {
