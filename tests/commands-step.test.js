@@ -2,6 +2,7 @@
 // and the files written/read by add, edit, pull, sync and generate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
 import { sandboxTest, gqlError, canFakeOpen } from "./helpers/cli-harness.js";
 
@@ -248,11 +249,13 @@ test("step edit: writes a temp file, waits for the editor, saves the edit, remov
   const r = await sb.run(["step", "edit", "s-1"], { env: { TEST_EDITOR_SCRIPT: script } });
   assert.equal(r.code, 0);
   assert.equal(r.stdout, "Opening editor for step: group/orig\nSuccessfully updated step: group/orig\n");
-  const tmpFile = path.join(sb.root, "tmp", "orig.js"); // only the last name segment is used
+  // only the last name segment is used, inside a private folder made for this edit
   const opened = sb.openCalls();
   assert.equal(opened.length, 1);
-  assert.equal(opened[0], `--wait-apps --new ${tmpFile}`);
+  const tmpFile = opened[0].replace("--wait-apps --new ", "");
+  assert.match(tmpFile, new RegExp(`^${path.join(sb.root, "tmp", "aloma-step-")}[^/]+/orig\\.js$`));
   assert.equal(sb.exists(tmpFile), false);
+  assert.equal(sb.exists(path.dirname(tmpFile)), false);
   assert.deepEqual(sb.api.calls.at(-1).variables, {
     id: "s-1", name: "group/orig", if: "{\n  a: 1\n}", do: "data.edited = 2;", enabled: true, version: 3,
     nocode_content: null, config_content: { k: 1 },
@@ -266,7 +269,7 @@ test("step edit: an unparsable edit is reported and nothing is saved", { skip: !
   const r = await sb.run(["step", "edit", "s-1"], { env: { TEST_EDITOR_SCRIPT: script } });
   assert.match(r.stderr, /Error parsing or updating step: Error parsing step file\. Could not parse condition from file/);
   assert.ok(!sb.api.ops().includes("SAVE_STEP_MUTATION"));
-  assert.equal(sb.exists(path.join(sb.root, "tmp", "orig.js")), false);
+  assert.deepEqual(fs.readdirSync(path.join(sb.root, "tmp")), []);
 }));
 
 test("step edit: unknown step never opens an editor", sandboxTest(async (sb) => {

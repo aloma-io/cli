@@ -6,7 +6,12 @@ import path from "path";
 import chalk from "chalk";
 import { CliError, failure } from "../runtime.js";
 import { uniqueByName, resolveByIdOrName, nameKey } from "../names.js";
-import { oneLine, UnsafeNameError } from "../pull-safety.js";
+import {
+  oneLine,
+  UnsafeNameError,
+  pullWritePath,
+  realPathInside,
+} from "../pull-safety.js";
 import { confirm } from "../confirm.js";
 import { walkJsFiles } from "../walk.js";
 
@@ -191,7 +196,8 @@ export async function pull(desc, workspaceId, ref, targetPath) {
 
 // A name with slashes becomes subfolders, always inside `folder` (see pull-safety.js)
 async function writeItemFile(desc, item, folder) {
-  const filePath = desc.filePath(item.name, folder);
+  const target = desc.filePath(item.name, folder);
+  const filePath = await pullWritePath(target, item.name, folder, desc.kind);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, desc.render(item), "utf8");
 }

@@ -7,7 +7,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { sandboxTest } from "./helpers/cli-harness.js";
+
+// NODE_OPTIONS for a CLI run whose `open` runs the TEST_EDITOR_SCRIPT on the target (any platform).
+const here = path.dirname(new URL(import.meta.url).pathname);
+const withEditor = `--import ${pathToFileURL(path.join(here, "helpers", "preload-fetch.mjs")).href} --import ${pathToFileURL(path.join(here, "helpers", "editor-open-hook.mjs")).href}`;
 
 const ok = { validateAutomationIf: true };
 const stepFile = (cond, body) =>
@@ -91,20 +96,34 @@ for (const K of KINDS) {
     assert.deepEqual(sb.list("out"), [], "nothing written inside either");
   }));
 
-  // PINS SUSPECT BEHAVIOUR: a symlink already in the target folder is followed. The name check is lexical
-  // (src/pull-safety.js:14); writeItemFile (src/resources/engine.js:196) mkdirs and writes through links.
-  test(`PINS SUSPECT BEHAVIOUR: ${K.kind} pull follows a symlink in the target folder and writes outside it`, sandboxTest(async (sb) => {
+  // A name whose real location is outside the target folder (through a link folder or a link file) is
+  // refused with the name shown; the linked file stays as it was. Links that stay inside are fine.
+  test(`SECURITY: ${K.kind} pull refuses a name that lands outside the target folder through a link`, sandboxTest(async (sb) => {
     const outside = path.join(sb.root, "outside");
     fs.mkdirSync(outside);
     fs.writeFileSync(path.join(outside, "victim.txt"), "original");
     sb.write("out/.keep", "");
     fs.symlinkSync(outside, path.join(sb.work, "out", "linkdir"));
     fs.symlinkSync(path.join(outside, "victim.txt"), path.join(sb.work, "out", "linkfile.js"));
-    K.mock(sb, [K.item("d", "linkdir/x"), K.item("f", "linkfile")]);
+    fs.symlinkSync(path.join(sb.work, "out", "real"), path.join(sb.work, "out", "innerlink"));
+    fs.mkdirSync(path.join(sb.work, "out", "real"));
+    K.mock(sb, [K.item("d", "linkdir/x"), K.item("f", "linkfile"), K.item("n", "linkdir/new/deep"), K.item("i", "innerlink/ok"), K.item("g", "plain")]);
     const r = await sb.run([K.kind, "pull", "-p", "out"]);
-    assert.equal(r.code, 0, r.out);
-    assert.match(fs.readFileSync(path.join(outside, "x.js"), "utf8"), /mark\("d"\)/, "written into the linked folder outside");
-    assert.match(fs.readFileSync(path.join(outside, "victim.txt"), "utf8"), /mark\("f"\)/, "file outside overwritten through the link");
+    assert.deepEqual(fs.readdirSync(outside), ["victim.txt"], "nothing created outside");
+    assert.equal(fs.readFileSync(path.join(outside, "victim.txt"), "utf8"), "original", "linked file unchanged");
+    for (const shown of ['"linkdir/x"', '"linkfile"', '"linkdir/new/deep"']) {
+      assert.ok(r.out.includes(shown), `${shown} named in\n${r.out}`);
+    }
+    assert.match(sb.read("out/real/ok.js"), /mark\("i"\)/, "a link that stays inside the folder works");
+    assert.match(sb.read("out/plain.js"), /mark\("g"\)/, "a normal name writes");
+    // asked for by id: refused, exit 1, name shown
+    for (const [id, name] of [["d", "linkdir/x"], ["f", "linkfile"]]) {
+      const one = await sb.run([K.kind, "pull", K.one, id, "-p", "out"]);
+      assert.equal(one.code, 1, name);
+      assert.ok(one.stderr.includes(JSON.stringify(name)), one.stderr);
+    }
+    assert.equal(fs.readFileSync(path.join(outside, "victim.txt"), "utf8"), "original");
+    assert.deepEqual(fs.readdirSync(outside), ["victim.txt"]);
   }));
 }
 
@@ -126,19 +145,61 @@ test("SECURITY: step edit: server names with traversal, absolute or drive parts 
   assert.match(r.stderr, /Error editing step:.*null bytes/);
 }));
 
-// PINS SUSPECT BEHAVIOUR: the temp file name is predictable and written with a plain writeFile
-// (src/commands/step/index.js:223, :255), so a link planted at <tmpdir>/<name>.js is followed. On Linux
-// os.tmpdir() is the shared /tmp.
-test("PINS SUSPECT BEHAVIOUR: step edit writes through a symlink planted at the predictable temp file name", sandboxTest(async (sb) => {
+// step edit works in its own private folder under the temp folder: made with mkdtemp, the file created
+// exclusively with mode 0600, read back from there and removed afterwards. Whatever sits at the old
+// predictable name <tmpdir>/<last name segment>.js is neither written nor read.
+test("SECURITY: step edit uses a private temp file; a file or link at the old predictable name is not touched", sandboxTest(async (sb) => {
   const tmp = path.join(sb.root, "tmp");
   fs.mkdirSync(tmp, { recursive: true });
+  const editor = sb.write("editor.mjs", [
+    'import fs from "node:fs";',
+    'const p = process.argv[2];',
+    'fs.appendFileSync(process.env.TEST_EDIT_LOG, JSON.stringify({ p, mode: fs.statSync(p).mode & 0o777, dirMode: fs.statSync(p.slice(0, p.lastIndexOf("/"))).mode & 0o777 }) + "\\n");',
+    'fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace("edited();", "editedByTest();"));',
+  ].join("\n"));
+  const log = path.join(sb.root, "edit.log");
   const victim = path.join(sb.root, "victim.txt");
   fs.writeFileSync(victim, "original");
-  fs.symlinkSync(victim, path.join(tmp, "target.js"));
   sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: [{ id: "s-1", name: "group/target" }] });
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-1", name: "group/target", content: { if: "{}", do: "edited();" } } });
-  await sb.run(["step", "edit", "s-1"], { timeoutMs: 15000 }).catch(() => {});
-  assert.match(fs.readFileSync(victim, "utf8"), /Step: group\/target[\s\S]*edited\(\);/);
+  sb.api.on("VALIDATE_IF_QUERY", ok);
+  sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
+  const edit = async () => {
+    sb.api.calls.length = 0;
+    const r = await sb.run(["step", "edit", "s-1"], { env: { TEST_EDITOR_SCRIPT: editor, TEST_EDIT_LOG: log, NODE_OPTIONS: withEditor }, timeoutMs: 15000 });
+    assert.equal(r.code, 0, r.out);
+    return sb.api.calls.filter((c) => c.op === "SAVE_STEP_MUTATION").map((c) => c.variables.do).join("\n");
+  };
+
+  // a link planted at the old name: the victim is not written, the edit is still saved
+  fs.symlinkSync(victim, path.join(tmp, "target.js"));
+  assert.match(await edit(), /editedByTest\(\);/);
+  assert.equal(fs.readFileSync(victim, "utf8"), "original");
+
+  // a regular file planted at the old name: it is not read back as the edited step
+  fs.unlinkSync(path.join(tmp, "target.js"));
+  const planted = stepFile("{}", "plantedContent();");
+  fs.writeFileSync(path.join(tmp, "target.js"), planted);
+  const saved = await edit();
+  assert.match(saved, /editedByTest\(\);/);
+  assert.doesNotMatch(saved, /plantedContent/);
+  assert.equal(fs.readFileSync(path.join(tmp, "target.js"), "utf8"), planted, "planted file untouched");
+
+  // where the editor was pointed: a fresh private folder each time, file mode 0600, all gone afterwards
+  const runs = fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  assert.equal(runs.length, 2);
+  for (const { p, mode, dirMode } of runs) {
+    assert.notEqual(p, path.join(tmp, "target.js"), "not the old predictable name");
+    assert.equal(path.dirname(path.dirname(p)), tmp, "inside a folder directly under the temp folder");
+    assert.equal(path.basename(p), "target.js");
+    assert.equal(mode, 0o600, "file mode");
+    assert.equal(dirMode, 0o700, "folder mode");
+    assert.equal(fs.existsSync(p), false, "temp file removed");
+    assert.equal(fs.existsSync(path.dirname(p)), false, "temp folder removed");
+  }
+  assert.notEqual(path.dirname(runs[0].p), path.dirname(runs[1].p), "folder name is not predictable");
+  assert.match(path.basename(path.dirname(runs[0].p)), /[A-Za-z0-9]{6,}$/);
+  assert.deepEqual(fs.readdirSync(tmp), ["target.js"], "nothing left behind");
 }));
 
 // ------------------------------------------------------------------ deploy: what a YAML may read
@@ -159,41 +220,97 @@ function deployMocks(sb) {
 }
 const sent = (sb) => JSON.stringify(sb.api.calls.map((c) => c.variables));
 
-// PINS SUSPECT BEHAVIOUR: file:, syncPath: (steps, libraries) and file: (tasks, connectors) are passed to
-// fs.readFile as written (src/resources/step.js:20, library.js:19, task/index.js:374, connector/index.js:258):
-// relative to the current directory, not the YAML's folder, and "../" or absolute paths are not refused.
-// What they read is sent to the API.
-test("PINS SUSPECT BEHAVIOUR: deploy reads step, library, task and connector files outside the YAML's folder and sends them", sandboxTest(async (sb) => {
-  sb.write("outside/s.js", stepFile("{}", "leakStepRel();"));
-  sb.write("outside/abs.js", stepFile("{}", "leakStepAbs();"));
-  sb.write("outside/l.js", libFile("T", "leakLib();"));
+// Every file reference in a deploy YAML (step and library file: and syncPath:, task file:, connector file:)
+// is taken from the YAML's own folder. A path that is absolute, or whose real location is outside that
+// folder (also through a link), is refused with an error naming it; nothing is read and nothing is sent.
+const REFUSED = [
+  { kind: "step file", yaml: (p) => `    steps:\n      - name: n\n        file: ${p}\n`, mark: "leakStep" },
+  { kind: "step syncPath", yaml: (p) => `    steps:\n      - syncPath: ${p}\n`, mark: "leakStep" },
+  { kind: "library file", yaml: (p) => `    libraries:\n      - name: n\n        file: ${p}\n`, mark: "leakLib" },
+  { kind: "library syncPath", yaml: (p) => `    libraries:\n      - syncPath: ${p}\n`, mark: "leakLib" },
+  { kind: "task file", yaml: (p) => `    tasks:\n      - name: n\n        file: ${p}\n`, mark: "leakTask" },
+  { kind: "connector file", yaml: (p) => `    connectors:\n      - connectorId: m-1\n        connectorName: Conn\n        file: ${p}\n`, mark: "leakConn" },
+];
+function seedOutside(sb) {
+  sb.write("outside/f.js", stepFile("{}", "leakStep();"));
+  sb.write("outside/dir/f.js", stepFile("{}", "leakStep();"));
+  sb.write("outside/lib.js", libFile("T", "leakLib();"));
+  sb.write("outside/libdir/lib.js", libFile("T", "leakLib();"));
   sb.write("outside/t.json", '{"leak":"leakTask"}');
-  sb.write("outside/c.yaml", "name: leakConnector\n");
-  sb.write("outside/dir/synced.js", stepFile("{}", "leakSync();"));
-  sb.write("cwd-only.js", stepFile("{}", "leakCwd();"));
+  sb.write("outside/c.yaml", "name: leakConn\n");
+  sb.write("proj/in/f.js", stepFile("{}", "leakStep();"));
+  sb.write("proj/in/dir/f.js", stepFile("{}", "leakStep();"));
+  sb.write("proj/in/lib.js", libFile("T", "leakLib();"));
+  sb.write("proj/in/libdir/lib.js", libFile("T", "leakLib();"));
+  sb.write("proj/in/t.json", '{"leak":"leakTask"}');
+  sb.write("proj/in/c.yaml", "name: leakConn\n");
+  fs.mkdirSync(path.join(sb.work, "proj"), { recursive: true });
+  fs.symlinkSync(path.join(sb.work, "outside"), path.join(sb.work, "proj", "linkdir"));
+  fs.symlinkSync(path.join(sb.work, "outside", "f.js"), path.join(sb.work, "proj", "linkfile.js"));
+}
+const pick = (R, name) => ({
+  "step file": name.s, "step syncPath": name.sd, "library file": name.l, "library syncPath": name.ld,
+  "task file": name.t, "connector file": name.c,
+})[R.kind];
+
+for (const R of REFUSED) {
+  test(`SECURITY: deploy refuses ${R.kind} paths outside the YAML's folder, names them and sends nothing`, sandboxTest(async (sb) => {
+    seedOutside(sb);
+    deployMocks(sb);
+    const abs = (rel) => path.join(sb.work, rel);
+    const cases = {
+      "../outside": pick(R, { s: "../outside/f.js", sd: "../outside/dir", l: "../outside/lib.js", ld: "../outside/libdir", t: "../outside/t.json", c: "../outside/c.yaml" }),
+      absolute: pick(R, { s: abs("outside/f.js"), sd: abs("outside/dir"), l: abs("outside/lib.js"), ld: abs("outside/libdir"), t: abs("outside/t.json"), c: abs("outside/c.yaml") }),
+      "absolute, even when it points into the folder": pick(R, { s: abs("proj/in/f.js"), sd: abs("proj/in/dir"), l: abs("proj/in/lib.js"), ld: abs("proj/in/libdir"), t: abs("proj/in/t.json"), c: abs("proj/in/c.yaml") }),
+      "through a link": pick(R, { s: "linkdir/f.js", sd: "linkdir/dir", l: "linkdir/lib.js", ld: "linkdir/libdir", t: "linkdir/t.json", c: "linkdir/c.yaml" }),
+      "link to a file": pick(R, { s: "linkfile.js", sd: "linkfile.js", l: "linkfile.js", ld: "linkfile.js", t: "linkfile.js", c: "linkfile.js" }),
+    };
+    for (const [label, ref] of Object.entries(cases)) {
+      sb.api.calls.length = 0;
+      sb.write("proj/d.yaml", `workspaces:\n  - name: Dev\n${R.yaml(ref)}`);
+      const r = await sb.run(["deploy", "d.yaml"], { cwd: path.join(sb.work, "proj"), timeoutMs: 40000 });
+      assert.equal(r.code, 1, `${label}\n${r.out}`);
+      assert.ok(r.stderr.includes(ref), `${label}: names ${ref}\n${r.stderr}`);
+      assert.doesNotMatch(sent(sb), new RegExp(R.mark), `${label}: nothing sent`);
+      const writes = sb.api.ops().filter((o) => /CREATE|SAVE|ADD|UPDATE/.test(o));
+      assert.deepEqual(writes, [], `${label}: nothing created or saved`);
+    }
+  }));
+}
+
+test("deploy reads files inside the YAML's folder, in subfolders too, from any current directory", sandboxTest(async (sb) => {
+  sb.write("proj/steps/s.js", stepFile("{}", "inStep();"));
+  sb.write("proj/lib/l.js", libFile("T", "inLib();"));
+  sb.write("proj/sync/a.js", stepFile("{}", "inSync();"));
+  sb.write("proj/data/t.json", '{"v":"inTask"}');
+  sb.write("proj/data/c.yaml", "name: inConn\n");
   sb.write("proj/d.yaml", [
     "workspaces:", "  - name: Dev",
-    "    steps:",
-    "      - name: rel", "        file: ../outside/s.js",
-    `      - name: abs`, `        file: ${path.join(sb.work, "outside", "abs.js")}`,
-    "      - syncPath: ../outside/dir",
-    "    libraries:", "      - name: lib", "        file: ../outside/l.js",
-    "    tasks:", "      - name: t", "        file: ../outside/t.json",
-    "    connectors:", "      - connectorId: m-1", "        connectorName: Conn", "        file: ../outside/c.yaml",
+    "    steps:", "      - name: s", "        file: steps/s.js", "      - syncPath: sync",
+    "    libraries:", "      - name: lib", "        file: ./lib/l.js",
+    "    tasks:", "      - name: t", "        file: data/t.json",
+    "    connectors:", "      - connectorId: m-1", "        connectorName: Conn", "        file: data/c.yaml",
   ].join("\n"));
   deployMocks(sb);
-  // the connector update waits 10 s after the add (src/commands/connector/index.js:165)
-  const r = await sb.run(["deploy", "d.yaml"], { cwd: path.join(sb.work, "proj"), timeoutMs: 40000 });
-  assert.equal(r.code, 0, r.out);
-  for (const mark of ["leakStepRel", "leakStepAbs", "leakSync", "leakLib", "leakTask", "leakConnector"]) {
-    assert.match(sent(sb), new RegExp(mark), `${mark}\n${r.out}`);
+  // from the parent folder and from an unrelated folder: paths are the YAML's, not the current directory's
+  for (const cwd of [sb.work, path.join(sb.work, "proj", "steps")]) {
+    sb.api.calls.length = 0;
+    const yamlArg = path.relative(cwd, path.join(sb.work, "proj", "d.yaml"));
+    const r = await sb.run(["deploy", yamlArg], { cwd, timeoutMs: 40000 });
+    assert.equal(r.code, 0, r.out);
+    for (const mark of ["inStep", "inSync", "inLib", "inTask", "inConn"]) {
+      assert.match(sent(sb), new RegExp(mark), `${mark} (cwd ${cwd})\n${r.out}`);
+    }
   }
-  // Relative paths are taken from the current directory, not the YAML's folder
-  sb.api.calls.length = 0;
-  sb.write("proj/d2.yaml", "workspaces:\n  - name: Dev\n    steps:\n      - name: c\n        file: cwd-only.js\n");
-  const r2 = await sb.run(["deploy", "proj/d2.yaml"]);
-  assert.equal(r2.code, 0, r2.out);
-  assert.match(sent(sb), /leakCwd/);
+}));
+
+test("deploy: a missing file inside the folder still reports that it is missing", sandboxTest(async (sb) => {
+  sb.write("proj/d.yaml", "workspaces:\n  - name: Dev\n    steps:\n      - name: n\n        file: nope/missing.js\n");
+  deployMocks(sb);
+  const r = await sb.run(["deploy", "d.yaml"], { cwd: path.join(sb.work, "proj") });
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /ENOENT|no such file/);
+  assert.doesNotMatch(r.stderr, /outside the folder/);
 }));
 
 // Safe today: a syncPath folder is walked with readdir entries, and symlinks are neither files nor folders
@@ -219,6 +336,6 @@ test("SECURITY: deploy: a file path with NUL fails that item with an error and r
   deployMocks(sb);
   const r = await sb.run(["deploy", "d.yaml"], { cwd: path.join(sb.work, "proj") });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Error creating step: n: Error parsing step file\..*null bytes/);
+  assert.match(r.stderr, /Path outside the folder of d\.yaml is refused: s +\.js/);
   assert.ok(!sb.api.ops().includes("CREATE_STEP_MUTATION"));
 }));

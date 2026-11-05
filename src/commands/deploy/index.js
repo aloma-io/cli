@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 import yaml from "js-yaml";
 import chalk from "chalk";
 import { switchCompany } from "../company/index.js";
@@ -16,7 +17,7 @@ import { addWebhook } from "../webhook/index.js";
 import { addConnector } from "../connector/index.js";
 import { addSecret } from "../secret/index.js";
 import { CliError, reportError } from "../../runtime.js";
-import { oneLine } from "../../pull-safety.js";
+import { oneLine, realPathInside } from "../../pull-safety.js";
 
 // The company and the target workspace decide where everything else goes: if either fails,
 // the deployment stops before anything is deployed.
@@ -52,6 +53,20 @@ function printResults(rows, dryRun) {
 export async function deployFromYaml(yamlPath, { dryRun = false } = {}) {
   // Read and parse YAML file
   const config = yaml.load(fs.readFileSync(yamlPath, "utf8"));
+
+  // Every file the YAML names is taken from the YAML's own folder, links resolved. A path that is absolute
+  // or ends up outside that folder is refused (named in the error) before anything is read or sent.
+  const folder = path.dirname(path.resolve(yamlPath));
+  const inFolder = async (ref) => {
+    if (!ref) return ref;
+    const real = await realPathInside(folder, ref);
+    if (real === null) {
+      throw new CliError(
+        `Path outside the folder of ${oneLine(path.basename(yamlPath))} is refused: ${oneLine(ref)}`,
+      );
+    }
+    return real;
+  };
 
   console.log(chalk.blue("🚀 Starting deployment...\n"));
 
@@ -90,7 +105,7 @@ export async function deployFromYaml(yamlPath, { dryRun = false } = {}) {
           const results = await ensureFolder(
             desc,
             workspaceId,
-            entry.syncPath,
+            await inFolder(entry.syncPath),
             {
               dryRun,
             },
@@ -107,10 +122,14 @@ export async function deployFromYaml(yamlPath, { dryRun = false } = {}) {
         );
       } else {
         console.log(chalk.gray(`  - ${entry.name}`));
-        record(
-          desc,
-          await ensure(desc, workspaceId, toDesired(entry), { dryRun }),
-        );
+        const desired = toDesired(entry);
+        try {
+          desired.file = await inFolder(desired.file);
+        } catch (error) {
+          fail(desc.kind, entry.name, error);
+          continue;
+        }
+        record(desc, await ensure(desc, workspaceId, desired, { dryRun }));
       }
     }
   };
@@ -214,6 +233,13 @@ export async function deployFromYaml(yamlPath, { dryRun = false } = {}) {
         for (const connector of workspace.connectors) {
           const label =
             connector.connectorName || connector.connectorId || "(unnamed)";
+          let file;
+          try {
+            file = await inFolder(connector.file);
+          } catch (error) {
+            fail("connector", label, error);
+            continue;
+          }
           await deploy("connector", label, async () => {
             let connectorId = connector.connectorId;
             let connectorName = connector.connectorName;
@@ -242,7 +268,7 @@ export async function deployFromYaml(yamlPath, { dryRun = false } = {}) {
               connector.tags,
               connector.shared_in_realm,
               connector.config,
-              connector.file,
+              file,
             );
           });
         }
@@ -280,8 +306,15 @@ export async function deployFromYaml(yamlPath, { dryRun = false } = {}) {
         console.log(chalk.blue("\nDeploying tasks..."));
         for (const task of workspace.tasks) {
           console.log(chalk.gray(`  - ${task.name}`));
+          let file;
+          try {
+            file = await inFolder(task.file);
+          } catch (error) {
+            fail("task", task.name, error);
+            continue;
+          }
           await deploy("task", task.name, () =>
-            createTask(task.name, task.data, task.file, workspaceId),
+            createTask(task.name, task.data, file, workspaceId),
           );
         }
       }
