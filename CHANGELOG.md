@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### File access stays inside the working folder
+
+- `aloma deploy <file.yaml>`: every file the YAML names (`file:` and `syncPath:` of steps and libraries,
+  `file:` of tasks and connectors) is now read relative to the folder of the YAML file, not the current
+  directory. A path that is absolute, or that leads outside that folder (also through a symbolic link), is
+  refused with an error naming it. Move such files into the YAML's folder (subfolders are fine).
+- `step pull` and `library pull`: a name whose file would land outside the target folder (for example through
+  a symbolic link) is refused and named; nothing is written there.
+- `step edit` keeps its temporary file in a private folder created for the edit and removes it afterwards.
+
 ## 0.3.0
 
 ### Node 22 or later (we recommend Node 26)

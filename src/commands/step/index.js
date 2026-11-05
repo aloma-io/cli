@@ -215,15 +215,15 @@ export async function editStep(stepRef, workspaceIdentifier) {
       throw new CliError(`Step with ID ${stepId} not found.`);
     }
 
-    // Create temporary file
-    const tempDir = os.tmpdir();
+    // The temp file lives in a folder only this user can enter, made fresh for this edit
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "aloma-step-"));
     // If the step name contains slashes, use only the last segment for the temp file
     const stepSegments = step.name.split("/");
     const fileName = `${stepSegments[stepSegments.length - 1]}.js`;
     const tempFilePath = path.join(tempDir, fileName);
-
-    // Prepare the file content
-    const fileContent = `/**
+    try {
+      // Prepare the file content
+      const fileContent = `/**
  * Step: ${headerText(step.name)}
  * ID: ${headerText(step.id)}
  * 
@@ -251,55 +251,64 @@ ${step.content?.do || ""}
 };
 `;
 
-    // Write the temporary file
-    await fs.writeFile(tempFilePath, fileContent, "utf8");
-    console.log(chalk.blue(`Opening editor for step: ${step.name}`));
+      // Write the temporary file: created new (never an existing file or link), owner read/write only
+      await fs.writeFile(tempFilePath, fileContent, {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 0o600,
+      });
+      console.log(chalk.blue(`Opening editor for step: ${step.name}`));
 
-    // Open the file in the default editor in a new window
-    const editor = await open(tempFilePath, { wait: true, newInstance: true });
-
-    // Read the modified file
-    const modifiedContent = await fs.readFile(tempFilePath, "utf8");
-
-    // Parse the modified content
-    let editError = null;
-    try {
-      const { condition: newCondition, content: newContent } =
-        await parseStepFile(tempFilePath);
-
-      // Update the step
-      const updateData = await graphQuery(SAVE_STEP_MUTATION, {
-        id: stepId,
-        name: step.name,
-        if: newCondition,
-        do: newContent,
-        enabled: step.enabled,
-        version: step.version,
-        nocode_content: step.nocode_content,
-        config_content: step.config_content,
+      // Open the file in the default editor in a new window
+      const editor = await open(tempFilePath, {
+        wait: true,
+        newInstance: true,
       });
 
-      if (updateData.saveAutomationStep) {
-        console.log(chalk.green(`Successfully updated step: ${step.name}`));
-      } else {
-        editError = new CliError(`Failed to update step: ${step.name}`);
-      }
-    } catch (error) {
-      editError = failure("Error parsing or updating step:", error);
-    }
+      // Read the modified file
+      const modifiedContent = await fs.readFile(tempFilePath, "utf8");
 
-    // Clean up the temporary file
-    try {
-      await fs.unlink(tempFilePath);
-    } catch (error) {
-      console.warn(
-        chalk.yellow(
-          "Warning: Could not delete temporary file:",
-          error.message,
-        ),
-      );
+      // Parse the modified content
+      let editError = null;
+      try {
+        const { condition: newCondition, content: newContent } =
+          await parseStepFile(tempFilePath);
+
+        // Update the step
+        const updateData = await graphQuery(SAVE_STEP_MUTATION, {
+          id: stepId,
+          name: step.name,
+          if: newCondition,
+          do: newContent,
+          enabled: step.enabled,
+          version: step.version,
+          nocode_content: step.nocode_content,
+          config_content: step.config_content,
+        });
+
+        if (updateData.saveAutomationStep) {
+          console.log(chalk.green(`Successfully updated step: ${step.name}`));
+        } else {
+          editError = new CliError(`Failed to update step: ${step.name}`);
+        }
+      } catch (error) {
+        editError = failure("Error parsing or updating step:", error);
+      }
+
+      if (editError) throw editError;
+    } finally {
+      // Clean up the temporary file and its folder
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch (error) {
+        console.warn(
+          chalk.yellow(
+            "Warning: Could not delete temporary file:",
+            error.message,
+          ),
+        );
+      }
     }
-    if (editError) throw editError;
   } catch (error) {
     throw failure("Error editing step:", error);
   }
