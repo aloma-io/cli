@@ -4,7 +4,7 @@
 // never echoed. Fills the gaps next to auth-storage, auth-security, auth-company, auth-logout and the secret
 // tests in commands-webhook-secret (not repeated here). Every host is a loopback mock; anything else is
 // recorded and failed by a preload, never sent.
-// `// SECURITY:` marks a check that passes today; `// PINS SUSPECT BEHAVIOUR:` pins behaviour we think is wrong.
+// `// SECURITY:` marks a check on a protection the CLI provides; `// PINS BEHAVIOUR:` records current behaviour as it is.
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
@@ -190,11 +190,11 @@ test("SECURITY: graphqlUrl http:// in config.json is refused before any lookup; 
   assert.deepEqual(leakedSecrets(r.output), []);
 });
 
-// PINS SUSPECT BEHAVIOUR: company switch builds its URL as `https://${graphqlHost}/realm` with no check of
-// graphqlHost (src/commands/company/index.js:174). Missing, it becomes the host "realm"; given as a URL
-// ("http://..."), the host "http". Neither is refused or warned about; the session goes to that host.
+// Company switch builds its URL as `https://${graphqlHost}/realm` and does not check graphqlHost
+// (src/commands/company/index.js:174). Missing, it becomes the host "realm"; given as a URL
+// ("http://..."), the host "http". The session goes to that host.
 for (const [label, graphqlHost, host] of [["missing", "", "realm"], ["given as an http:// URL", "http://api.example.test", "http"]]) {
-  test(`PINS SUSPECT BEHAVIOUR: graphqlHost ${label}: company switch sends the session to the host "${host}"`, async () => {
+  test(`graphqlHost ${label}: company switch sends the session to the host "${host}"`, async () => {
     sandbox({ graphqlHost });
     sb.writeSession({ token: FAKE.session });
     const rec = offHost();
@@ -247,9 +247,9 @@ test("SECURITY: secret add does not print the value, also when the save fails", 
   assert.doesNotMatch(r.out, new RegExp(VALUE));
 }));
 
-// PINS SUSPECT BEHAVIOUR: the value can only be given as a command-line argument (src/cli.js:651); there is no
-// stdin or file option, so it is visible in the process list while the command runs and in shell history.
-test("PINS SUSPECT BEHAVIOUR: secret add takes the value on the command line only", sandboxTest(async (h) => {
+// The value can only be given as a command-line argument (src/cli.js:651); there is no stdin or
+// file option.
+test("add takes the value on the command line only", sandboxTest(async (h) => {
   const r = await h.run(["secret", "add", "API_KEY"]);
   assert.equal(r.code, 2);
   assert.match(r.stderr, /missing required argument 'value'/);

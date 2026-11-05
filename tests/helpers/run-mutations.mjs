@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Mutation check for the command regression tests.
 //
-// Applies ONE single-point bug at a time to the command code under src/, runs the test file(s)
+// Applies ONE single-point change at a time to the command code under src/, runs the test file(s)
 // that should notice it, and records whether the suite failed (mutant "killed") or stayed green
 // ("survived"). The original file is restored after every mutant, even on a crash.
 //
@@ -139,6 +139,6 @@ for (const r of results) {
   console.log(`${r.id}\t${r.status}\t${r.file}\t${r.desc}\t${r.failed.slice(0, 2).join(" | ")}`);
 }
 if (wantMd) {
-  console.log("\n| ID | File | Bug | Result | First failing test |\n|---|---|---|---|---|");
+  console.log("\n| ID | File | Change | Result | First failing test |\n|---|---|---|---|---|");
   for (const r of results) console.log(`| ${r.id} | \`${r.file.replace("src/", "")}\` | ${r.desc} | ${r.status} | ${r.failed[0] ?? ""} |`);
 }

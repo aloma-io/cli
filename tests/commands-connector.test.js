@@ -48,7 +48,7 @@ test("connector list: prints each connector with health", sandboxTest(async (sb)
 test("connector list: empty says 'No available connector types found.'; API error exits 1", sandboxTest(async (sb) => {
   sb.api.on("LIST_CONNECTORS_QUERY", { listAutomationConnectors: [] });
   let r = await sb.run(["connector", "list"]);
-  // PINS SUSPECT BEHAVIOUR: wording mixes up "connectors" and "connector types".
+  // The wording uses "connector types".
   assert.equal(r.stdout, "No available connector types found.\n");
   sb.api.on("LIST_CONNECTORS_QUERY", gqlError("denied"));
   r = await sb.run(["connector", "list"]);
@@ -115,7 +115,7 @@ test("connector add <id> --name: sends the add mutation", sandboxTest(async (sb)
 test("connector add <id> without --name: name and namespace are taken from the connector details", sandboxTest(async (sb) => {
   sb.api.on("GET_CONNECTOR_QUERY", DETAIL());
   sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: true });
-  // PINS SUSPECT BEHAVIOUR: a --namespace given without --name is thrown away.
+  // A --namespace given without --name is not sent.
   await sb.run(["connector", "add", "m-1", "-ns", "mine"]);
   assert.deepEqual(ops(sb), [
     ["GET_CONNECTOR_QUERY", { id: "ws-sel", connectorId: "m-1" }],
@@ -150,7 +150,7 @@ test("connector add --tags: when the new connector cannot be found in the list, 
   sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: true });
   sb.api.on("LIST_CONNECTORS_QUERY", { listAutomationConnectors: [] });
   const r = await sb.run(["connector", "add", "m-1", "-n", "Mailer", "-t", "a,b", "-s"]);
-  // PINS SUSPECT BEHAVIOUR: success is printed, tags/shared are never applied, no warning.
+  // Success is printed; tags and shared are not applied, and no warning is shown.
   assert.equal(r.stdout, "\nConnector added successfully!\n");
   assert.deepEqual(sb.api.ops(), ["ADD_CONNECTOR_MUTATION", "LIST_CONNECTORS_QUERY"]);
 }));
@@ -174,8 +174,7 @@ test("connector update: name/namespace/tags/shared go to the update mutation", s
   assert.equal(r.stdout, "\nConnector updated successfully!\n");
   assert.deepEqual(ops(sb), [
     ["LIST_CONNECTORS_QUERY", { id: "ws-sel" }],
-    // PINS SUSPECT BEHAVIOUR: unlike `connector add`, update does not split --tags: the
-    // comma-separated string is sent as is.
+    // Unlike `connector add`, update does not split --tags: the comma-separated string is sent as is.
     ["UPDATE_CONNECTOR_MUTATION", { connectorId: "c-1", name: "Mailer2", namespace: "mail2", tags: "a,b", shared_in_realm: true }],
   ]);
 }));
@@ -185,7 +184,7 @@ test("connector update -t only: name is looked up, namespace is sent as empty st
   sb.api.on("GET_CONNECTOR_QUERY", DETAIL());
   sb.api.on("UPDATE_CONNECTOR_MUTATION", { updateAutomationConnector: true });
   await sb.run(["connector", "update", "c-1", "-t", "x"]);
-  // PINS SUSPECT BEHAVIOUR: the stored namespace ("mail") is not re-sent; "" is.
+  // The stored namespace ("mail") is not re-sent; "" is.
   assert.deepEqual(sb.api.calls.at(-1).variables, { connectorId: "c-1", name: "Mailer", namespace: "", tags: "x" });
 }));
 
@@ -240,7 +239,7 @@ test("connector update --file (JSON and YAML): file values override command-line
   sb.api.on("UPDATE_CONNECTOR_MUTATION", { updateAutomationConnector: true });
   sb.write("c.json", JSON.stringify({ name: "FromFile", tags: ["t1"], shared_in_realm: false }));
   await sb.run(["connector", "update", "c-1", "-n", "FromFlag", "-ns", "flagns", "-s", "-f", "c.json"]);
-  // PINS SUSPECT BEHAVIOUR: `shared_in_realm: false` in the file wins over --shared (via ??), name wins via ||.
+  // `shared_in_realm: false` in the file wins over --shared (via ??), name wins via ||.
   assert.deepEqual(sb.api.calls.at(-1).variables, { connectorId: "c-1", name: "FromFile", namespace: "flagns", tags: ["t1"], shared_in_realm: false });
   sb.write("c.yaml", "name: YamlName\nnamespace: ynz\n");
   await sb.run(["connector", "update", "c-1", "-f", "c.yaml"]);

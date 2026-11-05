@@ -68,7 +68,7 @@ test("every request is a POST with JSON body, bearer header and cookie", sandbox
 
 test("not signed in: commands report the missing token instead of sending a request", sandboxTest({ session: null }, async (sb) => {
   const r = await sb.run(["workspace", "list"]);
-  // PLAT-81: exit code 1 (was PINS SUSPECT BEHAVIOUR: exit code 0 although nothing worked).
+  // Exit code 1.
   assert.equal(r.code, 1);
   assert.equal(
     r.stderr,
@@ -98,7 +98,7 @@ test("server answers with something that is not JSON", sandboxTest(async (sb) =>
 test("server answers with an HTTP error but a JSON body: the status is ignored", sandboxTest(async (sb) => {
   sb.api.on("LIST_ENVIRONMENTS_QUERY", rawReply(500, JSON.stringify({ data: { listAutomationEnvironmentWithStats: [{ id: "ws-1", name: "Dev" }] } })));
   const r = await sb.run(["workspace", "list"]);
-  // PINS SUSPECT BEHAVIOUR: response.ok is never checked.
+  // response.ok is not checked; the list is printed.
   assert.match(r.stdout, /Dev \(ID:ws-1\)/);
 }));
 

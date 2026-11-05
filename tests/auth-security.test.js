@@ -1,6 +1,6 @@
 // Security checks across the sign-in, session and token code, pinned as today's behaviour.
-// `// SECURITY:` marks a check that passes today; `// PINS SUSPECT BEHAVIOUR:` marks one that pins
-// behaviour we think is wrong (the test documents it, it does not endorse it).
+// `// SECURITY:` marks a check on a protection the CLI provides; `// PINS BEHAVIOUR:` marks one that
+// records current behaviour as it is (the test documents it, it does not endorse it).
 import assert from "node:assert/strict";
 import dns from "node:dns";
 import net from "node:net";
@@ -180,8 +180,7 @@ function describeExchange() {
     await assert.rejects(exchangeIdTokenForSession({ idToken: FAKE_ID_TOKEN, url: "" }), /absolute URL/i);
   });
 
-  // SECURITY (was PINS SUSPECT BEHAVIOUR: a 307/308 redirect was followed to any host with the ID
-  // token in the body, and a 302 redirect target's session was accepted). Redirects are refused.
+  // Redirects (301, 302, 303, 307, 308) are refused; the ID token is not sent to the target.
   for (const status of [301, 302, 303, 307, 308]) {
     test(`SECURITY: exchange answered with a redirect (${status}) is refused; nothing is sent elsewhere`, async () => {
       await assert.rejects(
@@ -258,8 +257,7 @@ function describeGraph() {
     });
   }
 
-  // SECURITY (was PINS SUSPECT BEHAVIOUR: the same-host check ignored the port, so a redirect to
-  // another port on the same host got the session). No redirect is followed, whatever the origin.
+  // No redirect is followed, whatever the origin, including another port on the same host.
   test("SECURITY: a redirect to another port on the same host does not forward the session", async () => {
     const r = await graph(`${api.origin}/same-host?status=307`);
     assert.equal(r.result.ok, false);
@@ -281,8 +279,7 @@ function describeGraph() {
     assert.equal(tlsApi.requests[0].headers.authorization, `Bearer ${FAKE.session}`);
   });
 
-  // SECURITY (was PINS SUSPECT BEHAVIOUR: plain http:// was accepted for the API, so the session
-  // could be sent unencrypted). http is refused before anything is sent.
+  // Plain http:// is refused for the API before anything is sent.
   test("SECURITY: an http:// API URL is refused before the session is sent", async () => {
     const r = await graph(`http://127.0.0.1:${sameHost.port}/graphql`, { ALOMA_ALLOW_HTTP_LOOPBACK: undefined });
     assert.equal(r.result.ok, false);

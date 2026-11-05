@@ -85,9 +85,9 @@ test("ALOMA_ENV picks the template used when there is no configuration", async (
   assert.equal(c.ENVIRONMENT_NAME, "development");
 });
 
-// PINS SUSPECT BEHAVIOUR: a corrupt configuration file is treated exactly like a missing one: the
-// CLI silently switches to the production template (only the generic warning is shown).
-test("PINS SUSPECT BEHAVIOUR: a corrupt configuration silently falls back to the production template", async () => {
+// A corrupt configuration file is treated like a missing one: the CLI uses the production
+// template (only the generic message is shown).
+test("a corrupt configuration falls back to the production template", async () => {
   const { c, r } = await loadConfig("{corrupt", { ALOMA_ENV: "" });
   assert.match(r.stderr, /Using template configuration for production environment\./);
   assert.doesNotMatch(r.output, /corrupt|JSON|Unexpected/i);

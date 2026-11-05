@@ -32,10 +32,9 @@ test("signed in: the local session file is removed and sign-out is confirmed", a
   assert.deepEqual(leakedSecrets(r.output), []);
 });
 
-// PINS SUSPECT BEHAVIOUR: sign-out does not revoke anything. The login-service logout request
-// carries no token or id_token_hint (so it cannot end the browser's login session), and the API
-// session (PB-060) is never revoked: the API is not contacted. A copied session stays valid.
-test("PINS SUSPECT BEHAVIOUR: logout sends no token anywhere and does not revoke the API session", async () => {
+// Sign-out clears the local session. The login-service logout request carries no token or
+// id_token_hint, and the API is not contacted: the API session is not revoked by the CLI.
+test("logout sends no token anywhere and does not contact the API", async () => {
   sb.writeSession({ token: FAKE.session });
   const r = await runCli(sb, ["logout"]);
   assert.equal(r.code, 0, r.output);

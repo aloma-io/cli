@@ -116,8 +116,8 @@ test("library add: creates the library; with --file also saves types and content
   ]);
 }));
 
-// Flipped (PLAT-118, B8 / M17): was PINS SUSPECT BEHAVIOUR, only the name reached the API and the
-// namespace, tags and enabled flag were dropped. The library is now saved once with empty content.
+// Flipped: the namespace, tags and enabled flag are sent with the name. The
+// library is saved once with empty content.
 test("library add: without --file the namespace, tags and enabled flag are kept (M17)", sandboxTest(async (sb) => {
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", LISTED());
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
@@ -153,8 +153,8 @@ test("library add --file: bad file leaves the created library empty", sandboxTes
   sb.write("bad.js", "export const types = () => { return ''; };\n");
   sb.api.on("ADD_AUTOMATION_LIB_MUTATION", { createAutomationLib: "l-new" });
   let r = await sb.run(["library", "add", "x", "ns", "-f", "bad.js"]);
-  // PINS SUSPECT BEHAVIOUR: library is created before the file is validated.
-  // PLAT-81: the failed file step now exits 1 (was 0).
+  // The library is created before the file is validated.
+  // The failed file step exits 1.
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Error reading or parsing file: Error parsing library file\. Could not parse types from file/);
   assert.deepEqual(sb.api.ops(), ["LIST_AUTOMATION_LIBS_QUERY", "ADD_AUTOMATION_LIB_MUTATION"]);
@@ -331,8 +331,8 @@ test("library pull: libraries with the same name are refused, not written over e
 test("library pull: a library without stored content aborts the whole pull", sandboxTest(async (sb) => {
   mockLibs(sb, [FULL("l-1", "ok", "T", "a();"), FULL("l-2", "nocontent", "T", null), FULL("l-3", "later", "T", "c();")]);
   const r = await sb.run(["library", "pull", "-p", "out"]);
-  // PINS SUSPECT BEHAVIOUR: library.content.content throws on null content; earlier files are
-  // already written, later ones are not. PLAT-81: the aborted pull now exits 1 (was 0).
+  // library.content.content throws on null content; earlier files are already written, later ones
+  // are not. The aborted pull exits 1.
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Error pulling libraries: Cannot read properties of null/);
   assert.deepEqual(sb.list("out"), ["ok.js"]);
@@ -343,7 +343,7 @@ test("library pull: types containing a backtick produce a file that cannot be sy
   sb.api.on("UPDATE_AUTOMATION_LIB_MUTATION", { saveAutomationLib: true });
   await sb.run(["library", "pull", "-p", "out"]);
   const r = await sb.run(["library", "sync", "-p", "out"], { answers: YES });
-  // PINS SUSPECT BEHAVIOUR: backticks in types are not escaped when the file is written.
+  // Backticks in types are written to the file as they are.
   assert.match(r.stderr, /^Error updating library: tick: .*Missing semicolon/);
   // PLAT-81: the run no longer ends with a "Successfully synced" banner; it reports the failure and exits 1.
   assert.doesNotMatch(r.stdout, /Successfully synced/);
@@ -371,8 +371,8 @@ test("library sync (all): updates by name, creates new ones with the first path 
   assert.deepEqual(saves.find((s) => s.name === "grp/fresh"), {
     id: "l-new", name: "grp/fresh", namespace: "grp", content: "f();", types: "T2", version: 0, tags: [], enabled: true,
   });
-  // PINS SUSPECT BEHAVIOUR: a top-level library's namespace is its own name ("plain"), the
-  // "default" fallback can never apply because "".split("/")[0] is "".
+  // A top-level library's namespace is its own name ("plain"); the "default" fallback does not apply
+  // because "".split("/")[0] is "".
   assert.equal(saves.find((s) => s.name === "plain").namespace, "plain");
 }));
 

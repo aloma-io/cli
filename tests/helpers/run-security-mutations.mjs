@@ -105,6 +105,8 @@ const MUTANTS = [
   ["S37", 5, "src/http.js", "http.js follows a 3xx itself, attaching the auth to the redirect target",
     "  refuseRedirect(response.status, what);\n  return response;",
     '  const location = response.headers.get("location");\n  if (location) {\n    return fetch(new URL(location, url), {\n      method,\n      redirect: "manual",\n      headers: auth ? { ...headers, ...authHeaders(auth) } : headers,\n      body,\n    });\n  }\n  refuseRedirect(response.status, what);\n  return response;', HTTP],
+  ["S38", 8, "package.json", "tests/ added to the published files",
+    '"config/",\n    "README.md"\n  ],', '"config/",\n    "README.md",\n    "tests/"\n  ],', ["tests/package-files.test.js"]],
 ];
 
 const md = process.argv.includes("--md");
@@ -133,7 +135,7 @@ for (const [id, finding, file, desc, from, to, tests] of MUTANTS) {
   if (!md) console.log(`${id} ${killed ? "killed" : "SURVIVED"} ${desc}${failed[0] ? ` -> ${failed[0]}` : ""}`);
 }
 if (md) {
-  console.log("| ID | Finding | File | Mutant (undoes the fix) | Result | Failing tests | First failing test |");
+  console.log("| ID | Finding | File | Mutant (reverts the change) | Result | Failing tests | First failing test |");
   console.log("|---|---|---|---|---|---|---|");
   for (const r of rows) console.log(`| ${r.id} | ${r.finding} | \`${r.file}\` | ${r.desc} | ${r.result} | ${r.count ?? ""} | ${r.first} |`);
 }
