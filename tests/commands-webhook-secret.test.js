@@ -205,15 +205,15 @@ test("secret add: an existing secret with the same name is overwritten without a
   sb.api.on("GET_SECRET_QUERY", CONFIG);
   sb.api.on("SAVE_SECRET_MUTATION", { saveAutomationEnvironmentConfig: true });
   const r = await sb.run(["secret", "add", "API_URL", "new"]);
-  // PINS SUSPECT BEHAVIOUR: silent overwrite.
+  // An existing entry is overwritten without a prompt.
   assert.equal(r.stdout, '✅ Secret "API_URL" added successfully\n');
   assert.equal(sb.api.calls.at(-1).variables.values.API_URL.value, "new");
 }));
 
 test("secret add --options <yaml> always fails: cli.js never imports js-yaml", sandboxTest(async (sb) => {
   const r = await sb.run(["secret", "add", "A", "1", "-o", "k: v"]);
-  // PINS SUSPECT BEHAVIOUR: ReferenceError is caught and shown as "Invalid JSON in options";
-  // nothing is sent. PLAT-81: the refused option now exits 2 (was 0); the missing import is left for a later slice.
+  // The ReferenceError is caught and shown as "Invalid JSON in options"; nothing is sent.
+  // The refused option exits 2; the missing import is left for a later slice.
   assert.equal(r.code, 2);
   assert.equal(r.stderr, "Invalid JSON in options: yaml is not defined\n");
   assert.deepEqual(sb.api.calls, []);

@@ -49,7 +49,7 @@ test("task list: --page, --state, --name map to offset and filters", sandboxTest
 test("task list: page 0 gives a negative offset, a non-number gives null", sandboxTest(async (sb) => {
   sb.api.on("LIST_TASKS_QUERY", { listAutomationEnvironmentTasks: [] });
   await sb.run(["task", "list", "-p", "0"]);
-  // PINS SUSPECT BEHAVIOUR: no validation of the page number.
+  // The page number is not validated.
   assert.equal(sb.api.calls.at(-1).variables.offset, -10);
   await sb.run(["task", "list", "-p", "abc"]);
   assert.equal(sb.api.calls.at(-1).variables.offset, null);
@@ -58,8 +58,8 @@ test("task list: page 0 gives a negative offset, a non-number gives null", sandb
 test("task list: a task without a state breaks the whole listing", sandboxTest(async (sb) => {
   sb.api.on("LIST_TASKS_QUERY", { listAutomationEnvironmentTasks: [T({}), T({ id: "t-2", state: null })] });
   const r = await sb.run(["task", "list"]);
-  // PINS SUSPECT BEHAVIOUR: the first task was already printed, then the null state throws.
-  // PLAT-81: the failure now exits 1 (was 0).
+  // The first task is printed, then the null state throws.
+  // The failure exits 1.
   assert.equal(r.code, 1);
   assert.match(r.stdout, /order/);
   assert.match(r.stderr, /Error listing tasks: Cannot read properties of null/);
@@ -271,7 +271,7 @@ test("task clone --step 0 sends the synthetic id 'created'", sandboxTest(async (
   mockTask(sb);
   sb.api.on("NEW_TASK_FROM_HISTORY_MUTATION", { createAutomationTaskFromHistory: "t-from-h" });
   await sb.run(["task", "clone", "t-1", "-s", "0"]);
-  // PINS SUSPECT BEHAVIOUR: entry 0 is the made-up "created" event whose id is not a real history id.
+  // Entry 0 is the "created" event; its id is not a history id.
   assert.deepEqual(sb.api.calls.at(-1).variables, { id: "created" });
 }));
 

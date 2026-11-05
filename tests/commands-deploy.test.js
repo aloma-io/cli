@@ -440,7 +440,7 @@ test("deploy: missing file, invalid YAML and empty file all fail with exit code 
   assert.match(r.stderr, /Deployment failed: /);
   sb.write("empty.yaml", "");
   r = await sb.run(["deploy", "empty.yaml"]);
-  // PINS SUSPECT BEHAVIOUR: an empty file is a TypeError ("reading 'company'") rather than a friendly message.
+  // An empty file ends in a TypeError ("reading 'company'"), not a dedicated message.
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Deployment failed: Cannot read properties of undefined \(reading 'company'\)/);
   assert.deepEqual(sb.api.calls, []);

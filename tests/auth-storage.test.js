@@ -38,10 +38,7 @@ test("XDG_CONFIG_HOME (absolute) moves the folder; a relative one is ignored", a
   assert.equal(r.result.value, sb.configDir);
 });
 
-// SECURITY (was PINS SUSPECT BEHAVIOUR: the package root was looked up from the current directory
-// first, so a cloned repository shipping node_modules/@aloma.io/aloma/.config/config.json chose the
-// API host and received the stored session). Now neither the config nor the session in the cwd's
-// node_modules is ever read.
+// Neither the config nor the session in the current directory's node_modules is read.
 test("SECURITY: a config and session planted in the current directory's node_modules are ignored", async () => {
   const attacker = await startMockApi();
   try {
@@ -88,8 +85,7 @@ test("the session token is written as plain JSON in an owner-only file", async (
   assert.equal(statSync(sb.sessionPath).mode & 0o777, 0o600);
 });
 
-// SECURITY (was PINS SUSPECT BEHAVIOUR: created with default permissions, 0644 in a 0755 folder,
-// readable by every user on the machine).
+// The session file is created with owner-only permissions.
 test("SECURITY: the session file is created owner-only (0600) in an owner-only folder (0700)", async () => {
   await store(FAKE.session);
   const mode = statSync(sb.sessionPath).mode & 0o777;
@@ -216,10 +212,10 @@ test("a stored session is sent to the configured GraphQL URL as Bearer header an
   assert.deepEqual(leakedSecrets(q.url), []);
 });
 
-// PINS SUSPECT BEHAVIOUR: there is no expiry or refresh handling. An expired session keeps being
-// sent, the error is passed through as-is, the stale session stays on disk, and there is no refresh
-// attempt or "sign in again" hint.
-test("PINS SUSPECT BEHAVIOUR: an expired session gives the API's error, no refresh, session kept", async () => {
+// There is no expiry or refresh handling. An expired session keeps being sent, the error is
+// passed through as-is, the session stays on disk, and there is no refresh attempt or "sign in
+// again" hint.
+test("an expired session gives the API's error, no refresh, session kept", async () => {
   sb.writeSession({ token: FAKE.session });
   api.ctl.graphql = () => ({ errors: [{ message: "Unauthorized" }] });
   const r = await runDriver(sb, { fn: "graphQuery" });
@@ -232,7 +228,7 @@ test("PINS SUSPECT BEHAVIOUR: an expired session gives the API's error, no refre
   assert.deepEqual(leakedSecrets(r.output), []);
 });
 
-test("PINS SUSPECT BEHAVIOUR: a 401 with a non-JSON body surfaces as a JSON parse error", async () => {
+test("a 401 with a non-JSON body surfaces as a JSON parse error", async () => {
   sb.writeSession({ token: FAKE.session });
   api.ctl.graphql = () => ({ __raw: true, status: 401, headers: { "content-type": "text/html" }, body: "<h1>401</h1>" });
   const r = await runDriver(sb, { fn: "graphQuery" });

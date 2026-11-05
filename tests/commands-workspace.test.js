@@ -36,7 +36,7 @@ test("workspace list: --filter-name is accepted but never sent or applied", sand
   sb.api.on("LIST_ENVIRONMENTS_QUERY", ENVS);
   const r = await sb.run(["workspace", "list", "-f", "Other"]);
   assert.equal(r.code, 0);
-  // PINS SUSPECT BEHAVIOUR: the filter option is dropped; both workspaces are listed.
+  // The filter option is not applied; both workspaces are listed.
   assert.match(r.stdout, /Dev Space/);
   assert.match(r.stdout, /Other/);
   assert.deepEqual(ops(sb), [["LIST_ENVIRONMENTS_QUERY", {}]]);
@@ -48,7 +48,7 @@ test("workspace list: empty result and API error", sandboxTest(async (sb) => {
   assert.equal(r.stdout, "No environments found.\n");
   sb.api.on("LIST_ENVIRONMENTS_QUERY", gqlError("boom one", "boom two"));
   r = await sb.run(["workspace", "list"]);
-  // PLAT-81: an API error exits 1 (was PINS SUSPECT BEHAVIOUR: printed but exit code 0).
+  // An API error exits 1.
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
   // PLAT-81: the error is printed once (was a "GraphQL Error:" copy first).
@@ -111,8 +111,8 @@ test("workspace show --stats: stats query and summary", sandboxTest(async (sb) =
   assert.equal(r.code, 0);
   assert.deepEqual(ops(sb), [["GET_WORKSPACE_STATS_QUERY", { id: "ws-sel" }]]);
   assert.match(r.stdout, /Automated: 40%\s+\|\s+Manual: 60%/);
-  // PINS SUSPECT BEHAVIOUR: the 30-day block reads testPercentage30, which the stats query
-  // does not request, so it always shows 0% automated / 100% manual.
+  // The 30-day block reads testPercentage30, which the stats query does not request, so it shows
+  // 0% automated / 100% manual.
   assert.match(r.stdout, /Automated: 0%\s+\|\s+Manual: 100%/);
   assert.match(r.stdout, /3 \(7d\) {3}9 \(30d\) {3}20 \(All\)/);
   assert.match(r.stdout, /Health checks are disabled for this workspace\./);
@@ -228,8 +228,8 @@ test("workspace switch: unknown name and empty account leave the selection alone
 test("workspace switch without argument needs a terminal", sandboxTest(async (sb) => {
   sb.api.on("LIST_WORKSPACES_QUERY", ENVS);
   const r = await sb.run(["workspace", "switch"]);
-  // PINS SUSPECT BEHAVIOUR: with piped stdin the interactive picker dies on setRawMode and
-  // reports it as a fetch error. PLAT-81: exit code 1 (was 0).
+  // With piped stdin the interactive picker stops on setRawMode and reports it as a fetch error.
+  // Exit code 1.
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Error fetching workspaces: process\.stdin\.setRawMode is not a function/);
   assert.equal(sb.readSession().selectedWorkspace, "ws-sel");
@@ -292,7 +292,7 @@ test("workspace delete --days abc sends a null day count", sandboxTest(async (sb
   sb.api.on("GET_WORKSPACE_QUERY", wsState({}));
   sb.api.on("DELETE_WORKSPACE_MUTATION", { deleteAutomationEnvironment: true });
   const r = await sb.run(["workspace", "delete", "-d", "abc"]);
-  // PINS SUSPECT BEHAVIOUR: parseInt("abc") is NaN; it is sent as null and the CLI says nothing.
+  // parseInt("abc") is NaN; it is sent as null and the CLI prints nothing about it.
   assert.deepEqual(sb.api.calls.at(-1).variables, { id: "ws-sel", delete: true, deletionDays: null });
   assert.equal(r.stdout, "Deletion started for workspace [Dev Space]\n");
 }));
@@ -387,7 +387,7 @@ test("workspace update --health-enabled: anything but 'true' means false", sandb
   sb.api.on("GET_WORKSPACE_QUERY", wsState({ tags: [], health_enabled: true }));
   sb.api.on("SAVE_WORKSPACE_MUTATION", { saveAutomationEnvironment: true });
   const r = await sb.run(["workspace", "update", "-h", "yes"]);
-  // PINS SUSPECT BEHAVIOUR: "yes"/"1"/typos silently switch health checks off.
+  // "yes", "1" and typos switch health checks off.
   assert.equal(sb.api.calls.at(-1).variables.health_enabled, false);
   assert.equal(r.code, 0);
 }));
@@ -421,8 +421,7 @@ test("workspace source: without --apikey the request carries apikey null", sandb
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: { id: "ws-sel", name: "N", source: SRC } });
   sb.api.on("SAVE_SOURCE_MUTATION", { saveAutomationEnvironmentSource: true });
   await sb.run(["workspace", "source", "--url", "https://example.invalid/other.git"]);
-  // PINS SUSPECT BEHAVIOUR: the query only returns has_apikey, so the stored key is
-  // re-sent as null on every edit.
+  // The query returns only has_apikey, so the stored key is sent as null on every edit.
   assert.equal(sb.api.calls.at(-1).variables.apikey, null);
   assert.equal(sb.api.calls.at(-1).variables.url, "https://example.invalid/other.git");
 }));
@@ -431,7 +430,7 @@ test("workspace source --enabled false cannot switch a source off", sandboxTest(
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: { id: "ws-sel", name: "N", source: SRC } });
   sb.api.on("SAVE_SOURCE_MUTATION", { saveAutomationEnvironmentSource: true });
   await sb.run(["workspace", "source", "--enabled", "false", "--source-automatic", "false"]);
-  // PINS SUSPECT BEHAVIOUR: `false || stored` falls back to the stored (true) value.
+  // `false || stored` falls back to the stored (true) value.
   const v = sb.api.calls.at(-1).variables;
   assert.equal(v.enabled, true);
   assert.equal(v.source_automatic, true);
@@ -480,8 +479,8 @@ test("workspace source: states that block editing", sandboxTest(async (sb) => {
   assert.equal(r.code, 1);
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: { id: "ws-sel", deleting: true, source: SRC } });
   r = await sb.run(["workspace", "source", "--branch", "x"]);
-  // PINS SUSPECT BEHAVIOUR: the message says "Cannot sync" although this is the edit command.
-  // PLAT-81: a failure exits 1 and is printed on stderr (was stdout, exit 0).
+  // The message says "Cannot sync" although this is the edit command.
+  // A failure exits 1 and is printed on stderr.
   assert.equal(r.stderr, "Workspace is archived, being deleted, or scheduled for deletion. Cannot sync.\n");
   assert.equal(r.code, 1);
   assert.ok(!sb.api.ops().includes("SAVE_SOURCE_MUTATION"));
@@ -490,7 +489,7 @@ test("workspace source: states that block editing", sandboxTest(async (sb) => {
 test("workspace source: a workspace with no source crashes with exit code 1", sandboxTest(async (sb) => {
   sb.api.on("GET_SOURCE_QUERY", { getAutomationEnvironment: { id: "ws-sel", name: "N", source: null } });
   const r = await sb.run(["workspace", "source", "--branch", "x"]);
-  // PINS SUSPECT BEHAVIOUR: ws.source.url throws outside the try block -> unhandled rejection.
+  // ws.source.url throws outside the try block, giving an unhandled rejection.
   assert.equal(r.code, 1);
   assert.match(r.stderr, /TypeError: Cannot read properties of null/);
 }));

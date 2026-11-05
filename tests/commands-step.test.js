@@ -143,8 +143,8 @@ test("step add -f: file without condition/content, or invalid condition, leaves 
   sb.api.on("CREATE_STEP_MUTATION", { createAutomationStep: "s-new" });
   let r = await sb.run(["step", "add", "s", "-f", "bad.js"]);
   assert.equal(r.code, 1);
-  // PINS SUSPECT BEHAVIOUR: the step is created first; a bad file only prints an error, so an
-  // empty step remains in the workspace. PLAT-81: the exit code is now 1 (was 0).
+  // The step is created first; a bad file only prints an error, so an empty step remains in the
+  // workspace. The exit code is 1.
   assert.match(r.stderr, /Error reading or parsing file: Error parsing step file\. Could not parse condition from file/);
   assert.deepEqual(sb.api.ops(), ["LIST_STEPS_QUERY", "CREATE_STEP_MUTATION"]);
 
@@ -337,8 +337,8 @@ test("step pull: steps with the same name are refused, not written over each oth
   assert.equal(r.code, 1);
 }));
 
-// SECURITY (was PINS SUSPECT BEHAVIOUR: names come from the server and were not sanitised, so
-// "../escaped" was written outside the target folder). Unsafe names are skipped, the rest pulled.
+// Names come from the server; unsafe names (such as "../escaped") are skipped and the rest are
+// pulled, so nothing is written outside the target folder.
 test("SECURITY: step pull never writes outside the target folder", sandboxTest(async (sb) => {
   mockSteps(sb, [
     FULL("s-1", "../escaped", "{}", "x();"),
@@ -540,7 +540,7 @@ test("step sync -s <id>: syncs one step from <path>/<last name segment>.js", san
   sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-2", name: "group/beta", enabled: true, version: 5 } });
   sb.api.on("VALIDATE_IF_QUERY", ok);
   sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
-  // PINS SUSPECT BEHAVIOUR: with a nested name the file is looked up in src/group/beta.js.
+  // With a nested name the file is looked up in src/group/beta.js.
   let r = await sb.run(["step", "sync", "-s", "s-2", "-p", "src"]);
   assert.equal(r.stderr, "Step file not found: src/group/beta.js\n");
   assert.equal(r.code, 1);

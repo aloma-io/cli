@@ -94,18 +94,18 @@ test("a refused switch prints the error, keeps the session, exits 1", async () =
   assert.deepEqual(leakedSecrets(r.output), []);
 });
 
-// PINS SUSPECT BEHAVIOUR: no session cookie in the answer still reports success; the old company's
+// With no session cookie in the answer, the switch reports success; the previous company's
 // session and workspace stay in place.
-test("PINS SUSPECT BEHAVIOUR: no new session in the answer still reports success", async () => {
+test("no new session in the answer still reports success", async () => {
   realmCtl.respond = (req, res) => json(res, 200, {});
   const r = await switchTo("realm-b");
   assert.match(r.stdout, /Successfully switched to company \[Fake Company B\]/);
   assert.deepEqual(sb.readSession(), { token: FAKE.session, selectedWorkspace: "ws-old" });
 });
 
-// PINS SUSPECT BEHAVIOUR: the cookie value is cut at the first "=" after the name, and only a
-// literal "Bearer%20" is decoded; nothing checks it is a session ("id-" prefix, as sign-in does).
-test("PINS SUSPECT BEHAVIOUR: the cookie is parsed loosely: cut at '=', not URL-decoded, not checked", async () => {
+// The cookie value is cut at the first "=" after the name, and only a literal "Bearer%20" is
+// decoded; the value is not checked to be a session ("id-" prefix, as sign-in does).
+test("the cookie is parsed by a simple rule: cut at '=', not URL-decoded, not checked", async () => {
   realmCtl.respond = (req, res) =>
     json(res, 200, {}, { "set-cookie": ["Authorization=Bearer%20id-FAKE-PAD-test-only==; Path=/"] });
   await switchTo("realm-b");

@@ -134,8 +134,7 @@ test("SECURITY: no token in the authorization URL", async () => {
   assert.ok(!/token=/i.test(r.opened[0]));
 });
 
-// SECURITY (was PINS SUSPECT BEHAVIOUR: the callback server was started with listen(port) and no
-// host, so it listened on every network interface during sign-in). It binds loopback only.
+// The callback server binds loopback only.
 test("SECURITY: the callback server listens on loopback only", async () => {
   const r = await runCli(sb, ["auth"], { onOpen: browser() });
   assert.equal(r.code, 0, r.output);
@@ -175,9 +174,9 @@ test("a callback with the wrong state is refused: no token request, no session, 
   assert.equal(sb.readSession(), null);
 });
 
-// PINS SUSPECT BEHAVIOUR: any request to the callback port without the right state (a browser's
-// /favicon.ico, a port scan, another local process) aborts the whole sign-in.
-test("PINS SUSPECT BEHAVIOUR: one stray request to the callback port aborts the sign-in", async () => {
+// Any request to the callback port without the right state (a browser's /favicon.ico, another
+// local process) aborts the whole sign-in.
+test("one stray request to the callback port aborts the sign-in", async () => {
   const r = await runCli(sb, ["auth"], {
     onOpen: async (authUrl) => {
       const stray = await fetch(`${redirectUri}/favicon.ico`);
@@ -196,8 +195,7 @@ test("PINS SUSPECT BEHAVIOUR: one stray request to the callback port aborts the 
   assert.equal(sb.readSession(), null);
 });
 
-// SECURITY (was PINS SUSPECT BEHAVIOUR: the error text was put into the browser page without HTML
-// escaping). It is escaped now.
+// The error text from the login service is HTML-escaped in the browser page.
 test("SECURITY: an error from the login service is HTML-escaped in the page", async () => {
   const r = await runCli(sb, ["auth"], {
     onOpen: async (authUrl) => {
@@ -322,9 +320,9 @@ test("signing in again replaces the stored session and keeps unrelated keys", as
   assert.deepEqual(sb.readSession(), { token: FAKE.session, selectedWorkspace: "ws-fake-1", other: "kept" });
 });
 
-// PINS SUSPECT BEHAVIOUR: a corrupt session file is not replaced; sign-in fails after the
-// exchange succeeded, and the user has to run `aloma logout` first.
-test("PINS SUSPECT BEHAVIOUR: a corrupt session file makes sign-in fail after a good exchange", async () => {
+// A corrupt session file is not replaced; sign-in fails after the exchange succeeded, and
+// `aloma logout` has to be run first.
+test("a corrupt session file makes sign-in fail after a good exchange", async () => {
   sb.writeSession("{not json");
   const r = await runCli(sb, ["auth"], { onOpen: browser() });
   assert.equal(r.code, 1);

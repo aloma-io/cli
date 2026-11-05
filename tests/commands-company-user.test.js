@@ -50,8 +50,8 @@ test("company add: non-admin is refused (exit 1)", sandboxTest(async (sb) => {
 test("company add: for a company-manager it only prints success and creates nothing", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["company-manager"]));
   const r = await sb.run(["company", "add", "New Co", "-e", "a@example.invalid"]);
-  // PINS SUSPECT BEHAVIOUR: the create call is commented out in the source; the CLI claims
-  // success without sending any mutation.
+  // The create call is commented out in the source; the CLI reports success without sending any
+  // mutation.
   assert.equal(r.stdout, 'Company "New Co" created successfully!\n');
   assert.deepEqual(sb.api.ops(), ["ME_QUERY"]);
 }));
@@ -97,7 +97,7 @@ test("company switch <id>: matches by id; a name in any case", sandboxTest(async
 test("company switch: reply without an Authorization cookie keeps the session untouched", sandboxTest(async (sb) => {
   sb.api.on("ME_QUERY", me(["developer"]));
   const r = await sb.run(["company", "switch", "Beta Co"]);
-  // PINS SUSPECT BEHAVIOUR: success is printed even though no new token arrived.
+  // Success is printed although no new token arrived.
   assert.equal(r.stdout, "Successfully switched to company [Beta Co]\n");
   assert.equal(sb.readSession().token, FAKE_TOKEN);
   assert.equal(sb.readSession().selectedWorkspace, "ws-sel");
@@ -107,7 +107,7 @@ test("company switch: a token containing '=' is cut off at the first '='", sandb
   sb.api.on("ME_QUERY", me(["developer"]));
   sb.api.on("LIST_WORKSPACES_QUERY", WORKSPACES);
   await sb.run(["company", "switch", "Beta Co"], { env: { TEST_REALM_HEADERS: COOKIE("Bearer%20abc=def==") } });
-  // PINS SUSPECT BEHAVIOUR: cookie.split("=")[1] drops everything after the next '=',
+  // The cookie value is read with cookie.split("=")[1], so everything after the next '=' is dropped,
   // here leaving "abc".
   assert.equal(sb.readSession().token, "abc");
 }));
@@ -274,7 +274,7 @@ test("user remove: error text says 'updating' and non-admin is refused", sandbox
   sb.api.on("ME_QUERY", me(["admin"]));
   sb.api.on("UPDATE_COMPANY_MEMBER_MUTATION", gqlError("last owner"));
   let r = await sb.run(["user", "remove", "u-9"]);
-  // PINS SUSPECT BEHAVIOUR: the remove command reports failures as "Error updating user".
+  // The remove command reports failures as "Error updating user".
   assert.equal(r.code, 1);
   assert.equal(r.stderr, "Error updating user: last owner\n");
   sb.api.on("ME_QUERY", me([]));

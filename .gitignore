@@ -134,3 +134,7 @@ Thumbs.db
 config.json
 
 .DS_Store
+
+# Local mutation and findings records stay out of the repository
+tests/MUTATION*.md
+tests/FINDINGS*.md
