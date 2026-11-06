@@ -4,6 +4,9 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { startServer, makeSandbox, makeCert, json } from "./helpers/sandbox.js";
 import { request, postJson, graphql } from "../src/http.js";
+import { readFileSync } from "node:fs";
+
+const CLIENT = `aloma-cli/${JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version}`;
 
 process.env.ALOMA_ALLOW_HTTP_LOOPBACK = "1";
 
@@ -99,12 +102,12 @@ for (const to of ["other-host", "same-host"]) {
 }
 
 test("without auth, no Authorization header or cookie is sent", async () => {
-  await request(`${api.origin}/graphql`, { headers: { "User-Agent": "Aloma CLI" } });
+  await request(`${api.origin}/graphql`, { headers: { "User-Agent": "other" } });
   const q = api.requests[0];
   assert.equal(q.method, "GET");
   assert.equal(q.headers.authorization, undefined);
   assert.equal(q.headers.cookie, undefined);
-  assert.equal(q.headers["user-agent"], "Aloma CLI");
+  assert.equal(q.headers["user-agent"], CLIENT);
 });
 
 test("the response's cookies are readable one by one (getSetCookie)", async () => {
