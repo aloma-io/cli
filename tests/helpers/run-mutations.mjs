@@ -89,6 +89,9 @@ export const MUTATIONS = [
   ["E14", A, 'throw failure("❌ Failed to clear session data:", error);', "console.error(error.message);\n      return false;", "exit-codes", "auth: logout swallows a failed session removal"],
   ["E15", D, "      failed++;\n      reportError(error);\n", "      reportError(error);\n", "exit-codes", "deploy: failed items are not counted (success banner, exit 0)"],
   ["E16", T, 'throw new UsageError("⚠ No data provided");', 'throw new CliError("⚠ No data provided");', "exit-codes", "task: missing data is an operation failure (exit 1), not a usage error"],
+  // PLAT-81: empty-result wording of the two connector listings (tests/commands-connector.test.js).
+  ["C01", CO, 'chalk.yellow("This workspace has no connectors.")', 'chalk.yellow("No available connector types found.")', "connector", "connector list prints the available-types wording when empty"],
+  ["C02", CO, 'chalk.yellow("No available connector types found.")', 'chalk.yellow("This workspace has no connectors.")', "connector", "connector list-available prints the workspace wording when empty"],
   ["E17", U, "      throw new UsageError(error.message);\n    }\n\n    await graphQuery(UPDATE_COMPANY_MEMBER_MUTATION", "      throw new CliError(error.message);\n    }\n\n    await graphQuery(UPDATE_COMPANY_MEMBER_MUTATION", "exit-codes", "user: an invalid role exits 1, not 2"],
   // PLAT-115: one resolver for step and library names (tests/commands-names.test.js). Each mutant puts back
   // first-hit, the raw-name-as-id fall-through, or an add without the uniqueness check.
