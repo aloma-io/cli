@@ -1,8 +1,9 @@
+import { Command } from "commander";
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import { GET_SECRET_QUERY, SAVE_SECRET_MUTATION } from "./query.js";
 import { resolveWorkspaceId } from "../../context.js";
-import { CliError, failure } from "../../runtime.js";
+import { CliError, failure, UsageError } from "../../runtime.js";
 
 export const HIDDEN_VALUE = "******** (hidden, use --reveal to show)";
 
@@ -133,4 +134,60 @@ export async function deleteSecret(secretName, workspaceId) {
   } catch (error) {
     throw failure("Error deleting secret:", error);
   }
+}
+
+export function register(program) {
+  program
+    .command("secret")
+    .description("Manage secrets")
+    .addCommand(
+      new Command("list")
+        .description(
+          "List all secrets (values are hidden unless --reveal is given)",
+        )
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option("--reveal", "Show the values of non-encrypted secrets")
+        .action(async (options) => {
+          await listSecrets(options.workspace, {
+            reveal: options.reveal === true,
+          });
+        }),
+    )
+    .addCommand(
+      new Command("add")
+        .description("Add a new secret")
+        .argument("<name>", "Secret name")
+        .argument("<value>", "Secret value")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option("-d, --description <description>", "Secret description")
+        .option("-e, --encrypted", "Mark secret as encrypted")
+        .option("-o, --options <yaml>", "YAML options for the secret")
+        .action(async (name, value, options) => {
+          let secretOptions = {};
+          if (options.options) {
+            try {
+              secretOptions = yaml.load(options.options);
+            } catch (error) {
+              throw new UsageError(`Invalid JSON in options: ${error.message}`);
+            }
+          }
+          await addSecret(
+            name,
+            value,
+            options.description,
+            options.encrypted,
+            secretOptions,
+            options.workspace,
+          );
+        }),
+    )
+    .addCommand(
+      new Command("delete")
+        .description("Delete a secret")
+        .argument("<name>", "Secret name")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (name, options) => {
+          await deleteSecret(name, options.workspace);
+        }),
+    );
 }

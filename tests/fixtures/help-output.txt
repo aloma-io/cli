@@ -1,0 +1,840 @@
+=== aloma --help
+Usage: aloma [options] [command]
+
+CLI for interacting with Aloma services and utilities
+
+Options:
+  -V, --version                output the version number
+  -h, --help                   display help for command
+
+Commands:
+  auth|login                   Authenticate with Aloma via browser and store
+                               session token
+  logout                       Clear the stored Aloma session token
+  workspace                    Manage Aloma workspaces
+  company                      Manage Aloma companies
+  step                         Manage steps
+  library                      Manage automation libraries
+  task                         Manage tasks
+  webhook                      Manage webhooks
+  secret                       Manage secrets
+  connector                    Manage connectors
+  user                         Manage users
+  deploy [options] <yamlPath>  Deploy resources from a YAML configuration file
+  setup [options]              Setup Aloma CLI configuration
+  help [command]               display help for command
+=== aloma auth --help
+Usage: aloma auth|login [options]
+
+Authenticate with Aloma via browser and store session token
+
+Options:
+  -h, --help  display help for command
+=== aloma logout --help
+Usage: aloma logout [options]
+
+Clear the stored Aloma session token
+
+Options:
+  -h, --help  display help for command
+=== aloma workspace --help
+Usage: aloma workspace [options] [command]
+
+Manage Aloma workspaces
+
+Options:
+  -h, --help                     display help for command
+
+Commands:
+  list [options]                 List all automation workspaces
+  show [options]                 Show current workspace
+  switch [identifier]            Switch to a different workspace by name or ID
+  add [options] <name>           Create a new workspace
+  delete [options] [workspace]   Delete a workspace or cancel deletion
+  archive [options] [workspace]  Archive or unarchive a workspace
+  update [options] [workspace]   Update workspace settings
+  source [options]               Edit the source configuration for the
+                                 workspace
+  sync [options]                 Trigger source sync for the workspace
+  help [command]                 display help for command
+=== aloma workspace list --help
+Usage: aloma workspace list [options]
+
+List all automation workspaces
+
+Options:
+  -f, --filter-name <name>  Filter workspaces by name
+  -t, --tags <tags>         Comma-separated list of tags for the workspace
+  -a --archived             Show archived workspaces
+  -h, --help                display help for command
+=== aloma workspace show --help
+Usage: aloma workspace show [options]
+
+Show current workspace
+
+Options:
+  -s, --stats           Show workspace stats
+  -sc, --source         Show source config
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma workspace switch --help
+Usage: aloma workspace switch [options] [identifier]
+
+Switch to a different workspace by name or ID
+
+Arguments:
+  identifier  Workspace name or ID (optional - will show interactive selection
+              if not provided)
+
+Options:
+  -h, --help  display help for command
+=== aloma workspace add --help
+Usage: aloma workspace add [options] <name>
+
+Create a new workspace
+
+Arguments:
+  name               Workspace name
+
+Options:
+  -t, --tags <tags>  Comma-separated list of tags for the workspace
+  -h, --help         display help for command
+=== aloma workspace delete --help
+Usage: aloma workspace delete [options] [workspace]
+
+Delete a workspace or cancel deletion
+
+Arguments:
+  workspace            Workspace ID or name (uses current if not specified)
+
+Options:
+  -c, --cancel         Cancel workspace deletion
+  -d, --days <days>    Days until permanent deletion (default: "30")
+  --workspace-id <id>  Workspace ID (no name lookup)
+  -h, --help           display help for command
+=== aloma workspace archive --help
+Usage: aloma workspace archive [options] [workspace]
+
+Archive or unarchive a workspace
+
+Arguments:
+  workspace            Workspace ID or name (uses current if not specified)
+
+Options:
+  -u, --unarchive      Unarchive workspace
+  --workspace-id <id>  Workspace ID (no name lookup)
+  -h, --help           display help for command
+=== aloma workspace update --help
+Usage: aloma workspace update [options] [workspace]
+
+Update workspace settings
+
+Arguments:
+  workspace                           Workspace ID or name (uses current if not
+                                      specified)
+
+Options:
+  -n, --name <name>                   New workspace name
+  -t, --tags <tags>                   Comma-separated list of tags
+  -h, --health-enabled <boolean>      Enable/disable health checks (true/false)
+  -g, --notification-groups <groups>  Comma-separated list of notification
+                                      groups
+  --workspace-id <id>                 Workspace ID (no name lookup)
+  --help                              display help for command
+=== aloma workspace source --help
+Usage: aloma workspace source [options]
+
+Edit the source configuration for the workspace
+
+Options:
+  -w, --workspace <id>                   Workspace ID
+  -f, --file <path>                      Path to source config JSON file
+  --url <url>                            Source URL
+  --username <username>                  Source username
+  --apikey <apikey>                      Source API key
+  --branch <branch>                      Source branch
+  --enabled <enabled>                    Source enabled (true/false)
+  --source-automatic <source_automatic>  Source automatic (true/false)
+  --workspace-id <id>                    Workspace ID (no name lookup)
+  -h, --help                             display help for command
+=== aloma workspace sync --help
+Usage: aloma workspace sync [options]
+
+Trigger source sync for the workspace
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma company --help
+Usage: aloma company [options] [command]
+
+Manage Aloma companies
+
+Options:
+  -h, --help            display help for command
+
+Commands:
+  list                  List all available companies
+  switch [identifier]   Switch to a different company by name or ID
+  add [options] <name>  Create a new company (admin only)
+  help [command]        display help for command
+=== aloma company list --help
+Usage: aloma company list [options]
+
+List all available companies
+
+Options:
+  -h, --help  display help for command
+=== aloma company switch --help
+Usage: aloma company switch [options] [identifier]
+
+Switch to a different company by name or ID
+
+Arguments:
+  identifier  Company name or ID (optional - will show interactive selection if
+              not provided)
+
+Options:
+  -h, --help  display help for command
+=== aloma company add --help
+Usage: aloma company add [options] <name>
+
+Create a new company (admin only)
+
+Arguments:
+  name                   Company name
+
+Options:
+  -e, --emails <emails>  Comma-separated list of emails to invite
+  -h, --help             display help for command
+=== aloma step --help
+Usage: aloma step [options] [command]
+
+Manage steps
+
+Options:
+  -h, --help             display help for command
+
+Commands:
+  list [options]         List all steps
+  show [options] <id>    Show step details
+  add [options] <name>   Add a new step
+  delete [options] <id>  Delete a step
+  edit [options] <id>    Edit a step
+  clone [options] <id>   Clone a step
+  pull [options]         Pull steps from workspace to local files
+  sync [options]         Sync local step files to workspace
+  generate [options]     Generate a step interactively using AI
+  help [command]         display help for command
+=== aloma step list --help
+Usage: aloma step list [options]
+
+List all steps
+
+Options:
+  -w, --workspace <id>    Workspace ID
+  -n, --name <name>       Filter steps by name
+  -d, --include-disabled  Include disabled steps
+  --workspace-id <id>     Workspace ID (no name lookup)
+  -h, --help              display help for command
+=== aloma step show --help
+Usage: aloma step show [options] <id>
+
+Show step details
+
+Arguments:
+  id                    Step ID or name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma step add --help
+Usage: aloma step add [options] <name>
+
+Add a new step
+
+Arguments:
+  name                  Step name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -t, --type <type>     Step type
+  -f, --file <path>     Path to file containing step condition and content
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma step delete --help
+Usage: aloma step delete [options] <id>
+
+Delete a step
+
+Arguments:
+  id                    Step ID or name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma step edit --help
+Usage: aloma step edit [options] <id>
+
+Edit a step
+
+Arguments:
+  id                    Step ID or name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma step clone --help
+Usage: aloma step clone [options] <id>
+
+Clone a step
+
+Arguments:
+  id                    Step ID or name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma step pull --help
+Usage: aloma step pull [options]
+
+Pull steps from workspace to local files
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -s, --step <id>       Step ID or name (if not specified, pulls all steps)
+  -p, --path <path>     Target path (default: current directory)
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma step sync --help
+Usage: aloma step sync [options]
+
+Sync local step files to workspace
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -s, --step <id>       Step ID or name (if not specified, syncs all steps)
+  -p, --path <path>     Source path (default: current directory)
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma step generate --help
+Usage: aloma step generate [options]
+
+Generate a step interactively using AI
+
+Options:
+  -f, --file <path>     Path to the step file (e.g., filename.js or
+                        path/filename.js)
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma library --help
+Usage: aloma library [options] [command]
+
+Manage automation libraries
+
+Options:
+  -h, --help                        display help for command
+
+Commands:
+  list [options]                    List all libraries
+  show [options] <id>               Show library details
+  add [options] <name> <namespace>  Add a new library
+  update [options] <id>             Update a library
+  delete [options] <id>             Delete a library
+  pull [options]                    Pull libraries from workspace to local
+                                    files
+  sync [options]                    Sync local library files to workspace
+  help [command]                    display help for command
+=== aloma library list --help
+Usage: aloma library list [options]
+
+List all libraries
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -n, --name <name>     Filter libraries by name
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma library show --help
+Usage: aloma library show [options] <id>
+
+Show library details
+
+Arguments:
+  id                    Library ID or name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma library add --help
+Usage: aloma library add [options] <name> <namespace>
+
+Add a new library
+
+Arguments:
+  name                     Library name
+  namespace                Library namespace
+
+Options:
+  -w, --workspace <id>     Workspace ID
+  -f, --file <path>        Path to file containing library types and content
+  -t, --tags <tags>        Comma-separated list of tags
+  -e, --enabled <enabled>  Enable/disable library (true/false) (default:
+                           "true")
+  --workspace-id <id>      Workspace ID (no name lookup)
+  -h, --help               display help for command
+=== aloma library update --help
+Usage: aloma library update [options] <id>
+
+Update a library
+
+Arguments:
+  id                           Library ID or name
+
+Options:
+  -w, --workspace <id>         Workspace ID
+  -f, --file <path>            Path to file containing library types and
+                               content
+  -n, --namespace <namespace>  Library namespace
+  -t, --tags <tags>            Comma-separated list of tags
+  -e, --enabled <enabled>      Enable/disable library (true/false)
+  --workspace-id <id>          Workspace ID (no name lookup)
+  -h, --help                   display help for command
+=== aloma library delete --help
+Usage: aloma library delete [options] <id>
+
+Delete a library
+
+Arguments:
+  id                    Library ID or name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma library pull --help
+Usage: aloma library pull [options]
+
+Pull libraries from workspace to local files
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -l, --library <id>    Library ID or name (if not specified, pulls all
+                        libraries)
+  -p, --path <path>     Target path (default: current directory)
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma library sync --help
+Usage: aloma library sync [options]
+
+Sync local library files to workspace
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -l, --library <id>    Library ID or name (if not specified, syncs all
+                        libraries)
+  -p, --path <path>     Source path (default: current directory)
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma task --help
+Usage: aloma task [options] [command]
+
+Manage tasks
+
+Options:
+  -h, --help            display help for command
+
+Commands:
+  list [options]        List all tasks
+  log [options] <id>    Log task details
+  new [options] <name>  Create a new task
+  clone [options] <id>  Clone a task
+  stop <id>             Stop a task
+  resume <id>           Resume a task
+  help [command]        display help for command
+=== aloma task list --help
+Usage: aloma task list [options]
+
+List all tasks
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -s, --state <state>   Filter by state (null, done, attention, error, ignored)
+  -n, --name <name>     Filter by task name
+  -p, --page <page>     Page number
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma task log --help
+Usage: aloma task log [options] <id>
+
+Log task details
+
+Arguments:
+  id               Task ID
+
+Options:
+  --logs           Show console and audit logs for each step
+  --changes        Show diff changes for each step
+  --inspect        Show task data after each step
+  --step <number>  Show logs/changes for a specific step number
+  -h, --help       display help for command
+=== aloma task new --help
+Usage: aloma task new [options] <name>
+
+Create a new task
+
+Arguments:
+  name                  Task name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -d, --data <json>     JSON data to send with the task (e.g. '{"test":true}')
+  -f, --file <path>     Path to YAML file containing task data
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma task clone --help
+Usage: aloma task clone [options] <id>
+
+Clone a task
+
+Arguments:
+  id                   Task ID
+
+Options:
+  -s, --step <number>  Step number to clone
+  -h, --help           display help for command
+=== aloma task stop --help
+Usage: aloma task stop [options] <id>
+
+Stop a task
+
+Arguments:
+  id          Task ID
+
+Options:
+  -h, --help  display help for command
+=== aloma task resume --help
+Usage: aloma task resume [options] <id>
+
+Resume a task
+
+Arguments:
+  id          Task ID
+
+Options:
+  -h, --help  display help for command
+=== aloma webhook --help
+Usage: aloma webhook [options] [command]
+
+Manage webhooks
+
+Options:
+  -h, --help             display help for command
+
+Commands:
+  list [options]         List all webhooks
+  show [options] <id>    Show webhook details
+  add [options] <name>   Add a new webhook
+  delete [options] <id>  Delete a webhook
+  help [command]         display help for command
+=== aloma webhook list --help
+Usage: aloma webhook list [options]
+
+List all webhooks
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma webhook show --help
+Usage: aloma webhook show [options] <id>
+
+Show webhook details
+
+Arguments:
+  id                    Webhook ID
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma webhook add --help
+Usage: aloma webhook add [options] <name>
+
+Add a new webhook
+
+Arguments:
+  name                  Webhook name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma webhook delete --help
+Usage: aloma webhook delete [options] <id>
+
+Delete a webhook
+
+Arguments:
+  id                    Webhook ID
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma secret --help
+Usage: aloma secret [options] [command]
+
+Manage secrets
+
+Options:
+  -h, --help                    display help for command
+
+Commands:
+  list [options]                List all secrets (values are hidden unless
+                                --reveal is given)
+  add [options] <name> <value>  Add a new secret
+  delete [options] <name>       Delete a secret
+  help [command]                display help for command
+=== aloma secret list --help
+Usage: aloma secret list [options]
+
+List all secrets (values are hidden unless --reveal is given)
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --reveal              Show the values of non-encrypted secrets
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma secret add --help
+Usage: aloma secret add [options] <name> <value>
+
+Add a new secret
+
+Arguments:
+  name                             Secret name
+  value                            Secret value
+
+Options:
+  -w, --workspace <id>             Workspace ID
+  -d, --description <description>  Secret description
+  -e, --encrypted                  Mark secret as encrypted
+  -o, --options <yaml>             YAML options for the secret
+  --workspace-id <id>              Workspace ID (no name lookup)
+  -h, --help                       display help for command
+=== aloma secret delete --help
+Usage: aloma secret delete [options] <name>
+
+Delete a secret
+
+Arguments:
+  name                  Secret name
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma connector --help
+Usage: aloma connector [options] [command]
+
+Manage connectors
+
+Options:
+  -h, --help                   display help for command
+
+Commands:
+  list [options]               List all connectors
+  list-available [options]     List all available connector types and their
+                               configurations
+  show [options] <id>          Show connector details
+  add [options] <connectorId>  Add a new connector
+  delete [options] <id>        Delete a connector
+  update [options] <id>        Update a connector
+  logs [options] <id>          View logs for a connector
+  oauth [options] <id>         Start OAuth process for a connector
+  help [command]               display help for command
+=== aloma connector list --help
+Usage: aloma connector list [options]
+
+List all connectors
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma connector list-available --help
+Usage: aloma connector list-available [options]
+
+List all available connector types and their configurations
+
+Options:
+  -f, --filter-name <name>  Filter connectors by name
+  -h, --help                display help for command
+=== aloma connector show --help
+Usage: aloma connector show [options] <id>
+
+Show connector details
+
+Arguments:
+  id                    Connector ID
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma connector add --help
+Usage: aloma connector add [options] <connectorId>
+
+Add a new connector
+
+Arguments:
+  connectorId                   Connector ID
+
+Options:
+  -n, --name <name>             Connector name
+  -ns, --namespace <namespace>  Connector namespace
+  -t, --tags <tags>             Comma-separated list of tags
+  -s, --shared                  Share connector in realm
+  -c, --config <json>           JSON configuration for the connector
+  -f, --file <path>             Path to JSON or YAML file containing connector
+                                configuration
+  -w, --workspace <id>          Workspace ID
+  --workspace-id <id>           Workspace ID (no name lookup)
+  -h, --help                    display help for command
+=== aloma connector delete --help
+Usage: aloma connector delete [options] <id>
+
+Delete a connector
+
+Arguments:
+  id                    Connector ID
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma connector update --help
+Usage: aloma connector update [options] <id>
+
+Update a connector
+
+Arguments:
+  id                            Connector ID
+
+Options:
+  -w, --workspace <id>          Workspace ID
+  -n, --name <name>             Connector name
+  -ns, --namespace <namespace>  Connector namespace
+  -t, --tags <tags>             Comma-separated list of tags
+  -s, --shared                  Share connector in realm
+  -c, --config <json>           JSON configuration for the connector
+  -f, --file <path>             Path to JSON file containing connector
+                                configuration
+  --workspace-id <id>           Workspace ID (no name lookup)
+  -h, --help                    display help for command
+=== aloma connector logs --help
+Usage: aloma connector logs [options] <id>
+
+View logs for a connector
+
+Arguments:
+  id                    Connector ID
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma connector oauth --help
+Usage: aloma connector oauth [options] <id>
+
+Start OAuth process for a connector
+
+Arguments:
+  id                    Connector ID
+
+Options:
+  -w, --workspace <id>  Workspace ID
+  -d, --development     Start OAuth in development mode
+  --workspace-id <id>   Workspace ID (no name lookup)
+  -h, --help            display help for command
+=== aloma user --help
+Usage: aloma user [options] [command]
+
+Manage users
+
+Options:
+  -h, --help                 display help for command
+
+Commands:
+  list                       List all users in the current company
+  invite [options] <emails>  Invite a new user to the current company
+  update [options] <id>      Update a user
+  remove <id>                Remove a user from the current company
+  help [command]             display help for command
+=== aloma user list --help
+Usage: aloma user list [options]
+
+List all users in the current company
+
+Options:
+  -h, --help  display help for command
+=== aloma user invite --help
+Usage: aloma user invite [options] <emails>
+
+Invite a new user to the current company
+
+Arguments:
+  emails               Comma-separated list of user emails
+
+Options:
+  -r, --roles <roles>  Comma-separated list of roles to invite the user with
+  -h, --help           display help for command
+=== aloma user update --help
+Usage: aloma user update [options] <id>
+
+Update a user
+
+Arguments:
+  id                   User ID
+
+Options:
+  -r, --roles <roles>  Comma-separated list of roles to update the user with
+  -h, --help           display help for command
+=== aloma user remove --help
+Usage: aloma user remove [options] <id>
+
+Remove a user from the current company
+
+Arguments:
+  id          User ID
+
+Options:
+  -h, --help  display help for command
+=== aloma deploy --help
+Usage: aloma deploy [options] <yamlPath>
+
+Deploy resources from a YAML configuration file
+
+Arguments:
+  yamlPath    Path to the YAML configuration file
+
+Options:
+  --dry-run   Report what would be created or updated, without sending any
+              change
+  -h, --help  display help for command
+=== aloma setup --help
+Usage: aloma setup [options]
+
+Setup Aloma CLI configuration
+
+Options:
+  -f, --force  Force overwrite existing configuration
+  -h, --help   display help for command

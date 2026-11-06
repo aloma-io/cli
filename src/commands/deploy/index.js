@@ -16,7 +16,7 @@ import { createTask } from "../task/index.js";
 import { addWebhook } from "../webhook/index.js";
 import { addConnector } from "../connector/index.js";
 import { addSecret } from "../secret/index.js";
-import { CliError, reportError } from "../../runtime.js";
+import { CliError, reportError, failure } from "../../runtime.js";
 import { oneLine, realPathInside } from "../../pull-safety.js";
 
 // The company and the target workspace decide where everything else goes: if either fails,
@@ -332,4 +332,24 @@ export async function deployFromYaml(yamlPath, { dryRun = false } = {}) {
     return;
   }
   console.log(chalk.green("\n✅ Deployment completed successfully!"));
+}
+
+export function register(program) {
+  program
+    .command("deploy")
+    .description("Deploy resources from a YAML configuration file")
+    .argument("<yamlPath>", "Path to the YAML configuration file")
+    // .option('-f, --force', 'Force overwrite existing resources')
+    .option(
+      "--dry-run",
+      "Report what would be created or updated, without sending any change",
+    )
+    .action(async (yamlPath, options) => {
+      try {
+        await deployFromYaml(yamlPath, { dryRun: Boolean(options.dryRun) });
+        // await deployFromYaml(yamlPath, { force: options.force });
+      } catch (error) {
+        throw failure("Deployment failed:", error);
+      }
+    });
 }

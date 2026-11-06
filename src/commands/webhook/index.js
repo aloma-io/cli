@@ -1,3 +1,4 @@
+import { Command } from "commander";
 import {
   CREATE_WEBHOOK_MUTATION,
   LIST_WEBHOOKS_QUERY,
@@ -111,4 +112,45 @@ export async function deleteWebhook(webhookId, workspaceIdentifier) {
   } catch (error) {
     throw failure("Error deleting webhook:", error);
   }
+}
+
+export function register(program) {
+  program
+    .command("webhook")
+    .description("Manage webhooks")
+    .addCommand(
+      new Command("list")
+        .description("List all webhooks")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (options) => {
+          await listWebhooks(options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("show")
+        .description("Show webhook details")
+        .argument("<id>", "Webhook ID")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await showWebhook(id, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("add")
+        .description("Add a new webhook")
+        .argument("<name>", "Webhook name")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (name, options) => {
+          await addWebhook(name, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("delete")
+        .description("Delete a webhook")
+        .argument("<id>", "Webhook ID")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await deleteWebhook(id, options.workspace);
+        }),
+    );
 }

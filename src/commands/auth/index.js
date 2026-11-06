@@ -459,3 +459,27 @@ async function clearSessionData() {
 }
 
 export { initiateAuth, clearSessionData };
+
+export function register(program) {
+  program
+    .command("auth")
+    .alias("login")
+    .description("Authenticate with Aloma via browser and store session token")
+    .action(async () => {
+      console.log("Initiating authentication flow...");
+      console.log("Please follow the instructions in your browser.");
+      try {
+        await initiateAuth();
+        // Success message is printed within initiateAuth/callback handler
+      } catch (error) {
+        throw failure("\nAuthentication failed:", error);
+      }
+    });
+
+  program
+    .command("logout")
+    .description("Clear the stored Aloma session token")
+    .action(async () => {
+      await clearSessionData();
+    });
+}

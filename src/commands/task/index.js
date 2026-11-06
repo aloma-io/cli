@@ -1,3 +1,4 @@
+import { Command } from "commander";
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import {
@@ -485,4 +486,83 @@ export async function resumeTask(taskId) {
   } catch (error) {
     throw failure("Error resuming task:", error);
   }
+}
+
+export function register(program) {
+  program
+    .command("task")
+    .description("Manage tasks")
+    .addCommand(
+      new Command("list")
+        .description("List all tasks")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option(
+          "-s, --state <state>",
+          "Filter by state (null, done, attention, error, ignored)",
+        )
+        .option("-n, --name <name>", "Filter by task name")
+        .option("-p, --page <page>", "Page number")
+        .action(async (options) => {
+          await listTasks(
+            options.page,
+            options.workspace,
+            options.state,
+            options.name,
+          );
+        }),
+    )
+    .addCommand(
+      new Command("log")
+        .description("Log task details")
+        .argument("<id>", "Task ID")
+        .option("--logs", "Show console and audit logs for each step")
+        .option("--changes", "Show diff changes for each step")
+        .option("--inspect", "Show task data after each step")
+        .option(
+          "--step <number>",
+          "Show logs/changes for a specific step number",
+        )
+        .action(async (id, options) => {
+          await showTask(id, options);
+        }),
+    )
+    .addCommand(
+      new Command("new")
+        .description("Create a new task")
+        .argument("<name>", "Task name")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option(
+          "-d, --data <json>",
+          "JSON data to send with the task (e.g. '{\"test\":true}')",
+        )
+        .option("-f, --file <path>", "Path to YAML file containing task data")
+        .action(async (name, options) => {
+          await createTask(name, options.data, options.file, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("clone")
+        .description("Clone a task")
+        .argument("<id>", "Task ID")
+        .option("-s, --step <number>", "Step number to clone")
+        .action(async (id, options) => {
+          await cloneTask(id, options.step);
+        }),
+    )
+    .addCommand(
+      new Command("stop")
+        .description("Stop a task")
+        .argument("<id>", "Task ID")
+        .action(async (id) => {
+          await stopTask(id);
+        }),
+    )
+    .addCommand(
+      new Command("resume")
+        .description("Resume a task")
+        .argument("<id>", "Task ID")
+        .action(async (id) => {
+          await resumeTask(id);
+        }),
+    );
 }
