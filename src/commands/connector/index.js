@@ -33,7 +33,7 @@ export async function listAvailableConnectors(workspaceIdentifier, filterName) {
       !data.listAutomationAvailableConnectors ||
       data.listAutomationAvailableConnectors.length === 0
     ) {
-      console.log(chalk.yellow("No connectors found."));
+      console.log(chalk.yellow("No available connector types found."));
       return;
     }
 
@@ -208,7 +208,7 @@ export async function listConnectors(workspaceIdentifier) {
       !data.listAutomationConnectors ||
       data.listAutomationConnectors.length === 0
     ) {
-      console.log(chalk.yellow("No available connector types found."));
+      console.log(chalk.yellow("This workspace has no connectors."));
       return;
     }
 

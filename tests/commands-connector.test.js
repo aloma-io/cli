@@ -45,11 +45,11 @@ test("connector list: prints each connector with health", sandboxTest(async (sb)
   );
 }));
 
-test("connector list: empty says 'No available connector types found.'; API error exits 1", sandboxTest(async (sb) => {
+test("connector list: empty says the workspace has no connectors, exit 0; API error exits 1", sandboxTest(async (sb) => {
   sb.api.on("LIST_CONNECTORS_QUERY", { listAutomationConnectors: [] });
   let r = await sb.run(["connector", "list"]);
-  // The wording uses "connector types".
-  assert.equal(r.stdout, "No available connector types found.\n");
+  assert.equal(r.stdout, "This workspace has no connectors.\n");
+  assert.equal(r.code, 0);
   sb.api.on("LIST_CONNECTORS_QUERY", gqlError("denied"));
   r = await sb.run(["connector", "list"]);
   // PLAT-81: printed once (was printed, then re-thrown as an unhandled rejection with a stack trace).
@@ -71,10 +71,11 @@ test("connector list-available: uses the selected workspace, mine=false, empty n
   assert.equal(sb.api.calls.at(-1).variables.name, "mail");
 }));
 
-test("connector list-available: none found; error exits 1", sandboxTest(async (sb) => {
+test("connector list-available: none found says no available connector types; error exits 1", sandboxTest(async (sb) => {
   sb.api.on("LIST_AVAILABLE_CONNECTOR_QUERY", { listAutomationAvailableConnectors: [] });
   let r = await sb.run(["connector", "list-available"]);
-  assert.equal(r.stdout, "No connectors found.\n");
+  assert.equal(r.stdout, "No available connector types found.\n");
+  assert.equal(r.code, 0);
   sb.api.on("LIST_AVAILABLE_CONNECTOR_QUERY", gqlError("denied"));
   r = await sb.run(["connector", "list-available"]);
   assert.equal(r.code, 1);
