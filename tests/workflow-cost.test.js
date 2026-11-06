@@ -14,7 +14,8 @@ const jobs = Object.values(wf.jobs);
 const FULL = ["22", "24", "26"];
 // publish.yml is out of scope for PLAT-145; change this hash only with a deliberate publish change.
 // Re-pinned for PLAT-10's publish gate (#22: test job before publish), merged alongside #19 without this update.
-const PUBLISH_SHA256 = "7f711fa1711d8569d56b017e59b188d899dd70aff9f68ca20bfcd285c8ab0f35";
+// Re-pinned for PLAT-149: the actions in publish.yml are named by commit ID with a version comment.
+const PUBLISH_SHA256 = "80277dac0cac37874afbcbfad9c2da7119994deb466851cdc10d40ae63481985";
 
 // Evaluates the only expression shapes the workflow may use, for one event name.
 const evaluate = (value, event) => {
