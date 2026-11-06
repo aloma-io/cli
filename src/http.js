@@ -3,14 +3,29 @@
 // - the URL is checked (https only, see assertSecureUrl) before anything is sent;
 // - redirects are never followed: a 3xx answer is an error (see refuseRedirect);
 // - the session (`auth`) is attached here, to this one request only, as a bearer header and the cookie the API reads.
+// - it names itself on every request: "X-Aloma-Client: aloma-cli/<version>", and the same value as User-Agent.
 // Built on Node's own fetch. The sign-in library (openid-client) keeps its own stack.
 import { GRAPHQL_URL } from "./config.js";
 import { assertSecureUrl, refuseRedirect } from "./net-security.js";
+import { getPackageVersion } from "./package-utils.js";
 
 const authHeaders = (token) => ({
   Authorization: `Bearer ${token}`,
   Cookie: `Authorization=Bearer%20${encodeURIComponent(token)}`,
 });
+
+// The version is read from package.json when the request is made.
+// These replace any same-named header a caller passed, whatever its letter case.
+const withClientHeaders = (headers, auth) => {
+  const all = new Headers(headers);
+  for (const [name, value] of Object.entries(auth ? authHeaders(auth) : {})) {
+    all.set(name, value);
+  }
+  const client = `aloma-cli/${getPackageVersion()}`;
+  all.set("X-Aloma-Client", client);
+  all.set("User-Agent", client);
+  return all;
+};
 
 // Send one request; returns the Response (any non-redirect status). `what` names the service in errors.
 export async function request(
@@ -23,7 +38,7 @@ export async function request(
     response = await fetch(url, {
       method,
       redirect: "manual",
-      headers: auth ? { ...headers, ...authHeaders(auth) } : headers,
+      headers: withClientHeaders(headers, auth),
       body,
     });
   } catch (error) {

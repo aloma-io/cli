@@ -10,6 +10,8 @@ import { after, afterEach, before, beforeEach, test } from "node:test";
 import { makeSandbox, makeCert, runDriver, startServer, json, FAKE, leakedSecrets, REPO } from "./helpers/sandbox.js";
 import { exchangeIdTokenForSession } from "../src/commands/auth/session.js";
 
+const CLIENT = `aloma-cli/${JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version}`;
+
 const FAKE_ID_TOKEN = "FAKE-ID-TOKEN-5555-test-only";
 
 // The in-process exchange tests talk to plain-http loopback mocks: allowed only with this opt-in,
@@ -161,7 +163,7 @@ function describeExchange() {
     const q = api.requests[0];
     assert.ok(!q.url.includes(FAKE_ID_TOKEN));
     assert.equal(q.headers.authorization, undefined);
-    assert.equal(q.headers["user-agent"], "Aloma CLI");
+    assert.equal(q.headers["user-agent"], CLIENT);
     assert.equal(q.headers.accept, "application/json");
     assert.deepEqual(JSON.parse(q.body), { id_token: FAKE_ID_TOKEN });
   });
