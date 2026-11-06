@@ -1,3 +1,4 @@
+import { Command } from "commander";
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
 import {
@@ -128,4 +129,49 @@ export async function removeUser(userId) {
   } catch (error) {
     throw failure("Error updating user:", error);
   }
+}
+
+export function register(program) {
+  program
+    .command("user")
+    .description("Manage users")
+    .addCommand(
+      new Command("list")
+        .description("List all users in the current company")
+        .action(async () => {
+          await listUsers();
+        }),
+    )
+    .addCommand(
+      new Command("invite")
+        .description("Invite a new user to the current company")
+        .argument("<emails>", "Comma-separated list of user emails")
+        .option(
+          "-r, --roles <roles>",
+          "Comma-separated list of roles to invite the user with",
+        )
+        .action(async (emails, options) => {
+          await inviteUsers(emails, options.roles);
+        }),
+    )
+    .addCommand(
+      new Command("update")
+        .description("Update a user")
+        .argument("<id>", "User ID")
+        .option(
+          "-r, --roles <roles>",
+          "Comma-separated list of roles to update the user with",
+        )
+        .action(async (id, options) => {
+          await updateUser(id, options.roles);
+        }),
+    )
+    .addCommand(
+      new Command("remove")
+        .description("Remove a user from the current company")
+        .argument("<id>", "User ID")
+        .action(async (id) => {
+          await removeUser(id);
+        }),
+    );
 }

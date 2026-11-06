@@ -1,3 +1,4 @@
+import { Command } from "commander";
 import { headerText } from "../../pull-safety.js";
 import chalk from "chalk";
 import { graphQuery } from "../../utils.js";
@@ -562,4 +563,112 @@ ${step.content || ""}
   } catch (error) {
     throw failure("Error in step generation:", error);
   }
+}
+
+export function register(program) {
+  program
+    .command("step")
+    .description("Manage steps")
+    .addCommand(
+      new Command("list")
+        .description("List all steps")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option("-n, --name <name>", "Filter steps by name")
+        .option("-d, --include-disabled", "Include disabled steps")
+        .action(async (options) => {
+          await listSteps(
+            options.includeDisabled,
+            options.workspace,
+            options.name,
+          );
+        }),
+    )
+    .addCommand(
+      new Command("show")
+        .description("Show step details")
+        .argument("<id>", "Step ID or name")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await showStep(id, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("add")
+        .description("Add a new step")
+        .argument("<name>", "Step name")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option("-t, --type <type>", "Step type")
+        .option(
+          "-f, --file <path>",
+          "Path to file containing step condition and content",
+        )
+        .action(async (name, options) => {
+          await addStep(name, options.workspace, options.type, options.file);
+        }),
+    )
+    .addCommand(
+      new Command("delete")
+        .description("Delete a step")
+        .argument("<id>", "Step ID or name")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await deleteStep(id, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("edit")
+        .description("Edit a step")
+        .argument("<id>", "Step ID or name")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await editStep(id, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("clone")
+        .description("Clone a step")
+        .argument("<id>", "Step ID or name")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await cloneStep(id, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("pull")
+        .description("Pull steps from workspace to local files")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option(
+          "-s, --step <id>",
+          "Step ID or name (if not specified, pulls all steps)",
+        )
+        .option("-p, --path <path>", "Target path (default: current directory)")
+        .action(async (options) => {
+          await pullStep(options.workspace, options.step, options.path);
+        }),
+    )
+    .addCommand(
+      new Command("sync")
+        .description("Sync local step files to workspace")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option(
+          "-s, --step <id>",
+          "Step ID or name (if not specified, syncs all steps)",
+        )
+        .option("-p, --path <path>", "Source path (default: current directory)")
+        .action(async (options) => {
+          await syncStep(options.workspace, options.step, options.path);
+        }),
+    )
+    .addCommand(
+      new Command("generate")
+        .description("Generate a step interactively using AI")
+        .requiredOption(
+          "-f, --file <path>",
+          "Path to the step file (e.g., filename.js or path/filename.js)",
+        )
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (options) => {
+          await generateStep(options.file, options.workspace);
+        }),
+    );
 }

@@ -1,3 +1,4 @@
+import { Command } from "commander";
 import { getSessionData, updateSessionData } from "../../utils.js";
 import chalk from "chalk";
 import { GRAPHQL_HOST } from "../../config.js";
@@ -9,7 +10,7 @@ import {
   selectDefaultWorkspace,
 } from "../../context.js";
 import { postJson } from "../../http.js";
-import readline from "readline";
+import { selectFromList } from "../../ui/select.js";
 import { CliError, failure } from "../../runtime.js";
 
 export const addCompany = async (name, emails) => {
@@ -59,96 +60,10 @@ async function selectCompanyInteractive() {
       throw new CliError("No companies found.");
     }
 
-    let selectedIndex = 0;
-
-    // Find current company index
-    if (currentCompanyId) {
-      const currentIndex = realms.findIndex(
-        (realm) => realm.id === currentCompanyId,
-      );
-      if (currentIndex !== -1) {
-        selectedIndex = currentIndex;
-      }
-    }
-
-    console.log(chalk.blue("\nSelect a company to switch to:"));
-    console.log(
-      chalk.gray(
-        "Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n",
-      ),
-    );
-
-    // Create readline interface
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    // Set raw mode for key capture
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.setEncoding("utf8");
-
-    return new Promise((resolve, reject) => {
-      const displayCompanies = () => {
-        // Clear screen and move cursor to top
-        process.stdout.write("\x1B[2J\x1B[0f");
-        console.log(chalk.blue("Select a company to switch to:"));
-        console.log(
-          chalk.gray(
-            "Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel\n",
-          ),
-        );
-
-        realms.forEach((realm, index) => {
-          const isSelected = index === selectedIndex;
-          const isCurrent = realm.id === currentCompanyId;
-          const prefix = isSelected ? chalk.cyan("❯ ") : "  ";
-          const name = isSelected
-            ? chalk.cyan.bold(realm.name)
-            : chalk.white(realm.name);
-          const current = isCurrent ? chalk.green(" [current]") : "";
-          const id = chalk.gray(` (ID: ${realm.id})`);
-
-          console.log(`${prefix}${name}${id}${current}`);
-        });
-      };
-
-      displayCompanies();
-
-      const handleKeyPress = (key) => {
-        if (key === "\u0003") {
-          // Ctrl+C
-          process.stdin.setRawMode(false);
-          rl.close();
-          reject(new CliError("\nSelection cancelled."));
-          return;
-        }
-
-        if (key === "\r" || key === "\n") {
-          // Enter
-          process.stdin.setRawMode(false);
-          rl.close();
-          const selectedCompany = realms[selectedIndex];
-          console.log(chalk.green(`\nSelected: ${selectedCompany.name}`));
-          resolve(selectedCompany);
-          return;
-        }
-
-        if (key === "\u001b[A") {
-          // Up arrow
-          selectedIndex =
-            selectedIndex > 0 ? selectedIndex - 1 : realms.length - 1;
-          displayCompanies();
-        } else if (key === "\u001b[B") {
-          // Down arrow
-          selectedIndex =
-            selectedIndex < realms.length - 1 ? selectedIndex + 1 : 0;
-          displayCompanies();
-        }
-      };
-
-      process.stdin.on("data", handleKeyPress);
+    return await selectFromList({
+      title: "Select a company to switch to:",
+      items: realms,
+      currentId: currentCompanyId,
     });
   } catch (error) {
     throw failure("Error fetching companies:", error);
@@ -207,3 +122,39 @@ export const switchCompany = async (identifier) => {
     throw failure("Error switching company:", error);
   }
 };
+
+export function register(program) {
+  program
+    .command("company")
+    .description("Manage Aloma companies")
+    .addCommand(
+      new Command("list")
+        .description("List all available companies")
+        .action(async () => {
+          await listCompanies();
+        }),
+    )
+    .addCommand(
+      new Command("switch")
+        .argument(
+          "[identifier]",
+          "Company name or ID (optional - will show interactive selection if not provided)",
+        )
+        .description("Switch to a different company by name or ID")
+        .action(async (identifier) => {
+          await switchCompany(identifier);
+        }),
+    )
+    .addCommand(
+      new Command("add")
+        .argument("<name>", "Company name")
+        .description("Create a new company (admin only)")
+        .option(
+          "-e, --emails <emails>",
+          "Comma-separated list of emails to invite",
+        )
+        .action(async (name, options) => {
+          await addCompany(name, options.emails);
+        }),
+    );
+}

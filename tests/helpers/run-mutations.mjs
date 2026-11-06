@@ -25,7 +25,7 @@ const UU = "src/commands/user/utils.js";
 const C = "src/commands/company/index.js";
 const CO = "src/commands/connector/index.js";
 const D = "src/commands/deploy/index.js";
-const CLI = "src/cli.js";
+const SEL = "src/ui/select.js";
 const UT = "src/utils.js";
 const RT = "src/runtime.js";
 const A = "src/commands/auth/index.js";
@@ -40,8 +40,8 @@ export const MUTATIONS = [
   ["M05", W, "          : ws.tags || [],", "          : [],", "workspace", "workspace update drops existing tags"],
   ["M06", W, "      source_do_sync: true,", "      source_do_sync: false,", "workspace", "workspace sync no longer sets source_do_sync"],
   ["M07", W, "    selectedWorkspaceId = selectedWorkspace;\n    return selectedWorkspace;", "    selectedWorkspaceId = selectedWorkspace;\n    return null;", "workspace", "selected workspace is never read back from the session"],
-  ["M08", CLI, 'options.healthEnabled.toLowerCase() === "true"', 'options.healthEnabled.toLowerCase() !== "true"', "workspace", "workspace update --health-enabled inverted"],
-  ["M09", CLI, "const deletionDays = options.days ? parseInt(options.days) : undefined;", "const deletionDays = options.days ? options.days : undefined;", "workspace", "workspace delete --days sent as a string"],
+  ["M08", W, 'options.healthEnabled.toLowerCase() === "true"', 'options.healthEnabled.toLowerCase() !== "true"', "workspace", "workspace update --health-enabled inverted"],
+  ["M09", W, "? parseInt(options.days)\n            : undefined;", "? options.days\n            : undefined;", "workspace", "workspace delete --days sent as a string"],
   ["M10", S, "          nocode_content: null,\n          config_content: null,\n        });\n\n        if (updateData.saveAutomationStep) {", "          nocode_content: null,\n          config_content: null,\n          enabled: false,\n        });\n\n        if (updateData.saveAutomationStep) {", "step", "step add -f saves the step disabled"],
   ["M11", S, "      environment_id: workspaceId, // TODO: remove this", "      environment_id: stepId, // TODO: remove this", "step", "step delete sends the step id as the workspace"],
   ["M12", S, "      if (!confirmed) {\n        throw new CliError(\"Sync cancelled by user.\");\n      }\n      try {\n        await updateStepFromFile", "      if (confirmed) {\n        throw new CliError(\"Sync cancelled by user.\");\n      }\n      try {\n        await updateStepFromFile", "step", "step sync -s: confirmation inverted"],
@@ -70,7 +70,7 @@ export const MUTATIONS = [
   ["M35", D, "syncStep(workspaceId, null, step.syncPath, true),", "syncStep(workspaceId, null, step.syncPath, false),", "deploy", "deploy syncPath asks for confirmation"],
   ["M36", UT, "headers.Authorization = `Bearer ${tokenData}`;", "headers.Authorization = `Token ${tokenData}`;", "cli", "requests send the wrong Authorization scheme"],
   ["M37", UT, "    if (data.errors) {", "    if (data.errors && false) {", "workspace", "GraphQL errors are ignored"],
-  ["M38", CLI, 'const enabled = options.enabled === "true";\n        const tags', 'const enabled = options.enabled !== "true";\n        const tags', "library", "library add --enabled inverted"],
+  ["M38", L, 'const enabled = options.enabled === "true";\n          const tags', 'const enabled = options.enabled !== "true";\n          const tags', "library", "library add --enabled inverted"],
   // PLAT-81: the exit-code rule (tests/commands-exit-codes.test.js). Each mutant removes the wrapper's
   // non-zero exit, prints twice, or lets one command group swallow its error again.
   ["E01", RT, "process.exitCode =\n      error instanceof CliError ? error.exitCode : EXIT_FAILURE;", "process.exitCode = 0;", "exit-codes", "runtime: a failed command exits 0"],
@@ -107,6 +107,9 @@ export const MUTATIONS = [
   ["N10", L, '          library = uniqueByName(libraries, libraryName, "library");', "          library = libraries.find((l) => l.name === libraryName) ?? null;", "names", "library sync (all): first name match wins"],
   ["N11", S, '          uniqueByName(steps, stepSummary.name, "step");', "", "names", "step pull (all): same-named steps overwrite each other again"],
   ["N12", L, '          uniqueByName(libraries, librarySummary.name, "library");', "", "names", "library pull (all): same-named libraries overwrite each other again"],
+  // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
+  // mutant lets a cancel leave raw mode on and the input running.
+  ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
 ];
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -124,7 +127,7 @@ for (const [id, file, find, replace, group, desc] of MUTATIONS) {
   }
   try {
     fs.writeFileSync(abs, original.replace(find, () => replace));
-    const files = fs.readdirSync(path.join(REPO, "tests")).filter((f) => f.startsWith(`commands-${group}`) && f.endsWith(".test.js")).map((f) => `tests/${f}`);
+    const files = group === "ui-select" ? ["tests/ui-select.test.js"] : fs.readdirSync(path.join(REPO, "tests")).filter((f) => f.startsWith(`commands-${group}`) && f.endsWith(".test.js")).map((f) => `tests/${f}`);
     const run = spawnSync(process.execPath, ["--test", "--test-reporter=spec", ...files], { cwd: REPO, encoding: "utf8", timeout: 240000 });
     const failed = [...run.stdout.matchAll(/^✖ (.+?) \(\d+(?:\.\d+)?ms\)$/gm)].map((m) => m[1]);
     const status = run.status === 0 ? "SURVIVED" : "killed";

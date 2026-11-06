@@ -98,7 +98,7 @@ const MUTANTS = [
     "<pre>${escapeHtml(err.message)}</pre>", "<pre>${err.message}</pre>", AUTH],
   ["S34", 7, "src/commands/secret/index.js", "plain values shown without --reveal",
     "          : reveal\n            ? secret.value\n            : HIDDEN_VALUE;", "          : secret.value;", ["tests/commands-webhook-secret.test.js"]],
-  ["S35", 7, "src/cli.js", "--reveal ignored",
+  ["S35", 7, "src/commands/secret/index.js", "--reveal ignored",
     "reveal: options.reveal === true,", "reveal: false,", ["tests/commands-webhook-secret.test.js"]],
   ["S36", 8, "package.json", "postinstall script restored",
     '"audit": "npm audit --audit-level=low"', '"audit": "npm audit --audit-level=low",\n    "postinstall": "node src/cli.js setup || true"', PKG],

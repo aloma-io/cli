@@ -1,3 +1,4 @@
+import { Command } from "commander";
 import { graphQuery } from "../../utils.js";
 import {
   LIST_AVAILABLE_CONNECTOR_QUERY,
@@ -428,4 +429,145 @@ export async function startConnectorOAuth(
   } catch (error) {
     throw failure("Error starting OAuth process:", error);
   }
+}
+
+export function register(program) {
+  program
+    .command("connector")
+    .description("Manage connectors")
+    .addCommand(
+      new Command("list")
+        .description("List all connectors")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (options) => {
+          await listConnectors(options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("list-available")
+        .description(
+          "List all available connector types and their configurations",
+        )
+        .option("-f, --filter-name <name>", "Filter connectors by name")
+        .action(async (options) => {
+          await listAvailableConnectors(null, options.filterName);
+        }),
+    )
+    .addCommand(
+      new Command("show")
+        .description("Show connector details")
+        .argument("<id>", "Connector ID")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await getConnector(id, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("add")
+        .description("Add a new connector")
+        .argument("<connectorId>", "Connector ID")
+        .option("-n, --name <name>", "Connector name")
+        .option("-ns, --namespace <namespace>", "Connector namespace")
+        .option("-t, --tags <tags>", "Comma-separated list of tags")
+        .option("-s, --shared", "Share connector in realm")
+        .option("-c, --config <json>", "JSON configuration for the connector")
+        .option(
+          "-f, --file <path>",
+          "Path to JSON or YAML file containing connector configuration",
+        )
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (connectorId, options) => {
+          // Parse tags from comma-separated string
+          const tags = options.tags ? options.tags.split(",") : undefined;
+          // Parse config from JSON string
+          let config;
+          if (options.config) {
+            try {
+              config = JSON.parse(options.config);
+            } catch (e) {
+              throw new UsageError(
+                `Error: -c/--config must be a valid JSON string: ${e.message}`,
+              );
+            }
+          }
+
+          await addConnector(
+            connectorId,
+            options.workspace,
+            options.name,
+            options.namespace,
+            tags,
+            options.shared,
+            config,
+            options.file,
+          );
+        }),
+    )
+    .addCommand(
+      new Command("delete")
+        .description("Delete a connector")
+        .argument("<id>", "Connector ID")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await removeConnector(id, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("update")
+        .description("Update a connector")
+        .argument("<id>", "Connector ID")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option("-n, --name <name>", "Connector name")
+        .option("-ns, --namespace <namespace>", "Connector namespace")
+        .option("-t, --tags <tags>", "Comma-separated list of tags")
+        .option("-s, --shared", "Share connector in realm")
+        .option("-c, --config <json>", "JSON configuration for the connector")
+        .option(
+          "-f, --file <path>",
+          "Path to JSON file containing connector configuration",
+        )
+        .action(async (id, options) => {
+          // Parse config from JSON string
+          let config;
+          if (options.config) {
+            try {
+              config = JSON.parse(options.config);
+            } catch (e) {
+              throw new UsageError(
+                `Error: -c/--config must be a valid JSON string: ${e.message}`,
+              );
+            }
+          }
+
+          await updateConnector(
+            id,
+            options.workspace,
+            options.name,
+            options.namespace,
+            options.tags,
+            options.shared,
+            config,
+            options.file,
+          );
+        }),
+    )
+    .addCommand(
+      new Command("logs")
+        .description("View logs for a connector")
+        .argument("<id>", "Connector ID")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .action(async (id, options) => {
+          await getConnectorLogs(id, options.workspace);
+        }),
+    )
+    .addCommand(
+      new Command("oauth")
+        .description("Start OAuth process for a connector")
+        .argument("<id>", "Connector ID")
+        .option("-w, --workspace <id>", "Workspace ID")
+        .option("-d, --development", "Start OAuth in development mode")
+        .action(async (id, options) => {
+          await startConnectorOAuth(id, options.workspace, options.development);
+        }),
+    );
 }
