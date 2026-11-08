@@ -66,7 +66,7 @@ test("ALOMA_* environment variables override the configuration file", async () =
   assert.equal(c2.SESSION_URL, "http://127.0.0.1:6/s");
 });
 
-// No install-time setup any more (finding 8): the bundled template is the normal default, so it is
+// No install-time setup any more: the bundled template is the normal default, so it is
 // used without a warning.
 test("missing configuration: the bundled production template is used, quietly", async () => {
   const { c, r } = await loadConfig(undefined);
@@ -105,7 +105,7 @@ test("no configuration and no template: built-in defaults; no API or session URL
   assert.equal(c.JWKS_URL, "https://accounts.aloma.io/realms/master/protocol/openid-connect/certs");
 });
 
-// SECURITY: the configuration is never read from the current directory (finding 1).
+// SECURITY: the configuration is never read from the current directory.
 test("SECURITY: a config.json in the cwd's node_modules/@aloma.io/aloma/.config is ignored", async () => {
   sb = makeSandbox({ config: { graphqlUrl: "https://own.example.test/graphql" } });
   sb.plant({ config: { graphqlUrl: "http://127.0.0.1:9/planted/graphql", sessionUrl: "http://127.0.0.1:9/s", keycloakRealmUrl: "http://127.0.0.1:9/r" } });

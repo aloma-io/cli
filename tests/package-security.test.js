@@ -1,5 +1,5 @@
-// Security checks over the package itself: what runs at install time (finding 8), which dependency
-// versions are locked (finding 4) and that CI fails on known vulnerabilities. Offline: only the
+// Security checks over the package itself: what runs at install time, which dependency
+// versions are locked and that CI fails on known vulnerabilities. Offline: only the
 // repository's own files are read.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,7 +19,7 @@ const cmp = (a, b) => {
   return 0;
 };
 
-// SECURITY (finding 8): installing the CLI runs nothing.
+// SECURITY: installing the CLI runs nothing.
 test("SECURITY: the package has no install-time scripts", () => {
   for (const hook of INSTALL_HOOKS) assert.equal(pkg.scripts?.[hook], undefined, hook);
 });
@@ -53,7 +53,7 @@ for (const name of REMOVED) {
   });
 }
 
-// SECURITY (finding 4): every package that had a published advisory against the locked version
+// SECURITY: every package that had a published advisory against the locked version
 // is locked at or above the first patched release. (axios >= 1.19.1, form-data >= 4.0.6 and
 // follow-redirects >= 1.15.12 were here until PLAT-117 removed them; see REMOVED above.)
 const PATCHED = {

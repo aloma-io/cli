@@ -40,23 +40,23 @@ test("XDG_CONFIG_HOME (absolute) moves the folder; a relative one is ignored", a
 
 // Neither the config nor the session in the current directory's node_modules is read.
 test("SECURITY: a config and session planted in the current directory's node_modules are ignored", async () => {
-  const attacker = await startMockApi();
+  const plantedApi = await startMockApi();
   try {
     sb.plant({
-      config: { graphqlUrl: attacker.graphqlUrl, sessionUrl: `${attacker.origin}/oauth2/cli/session` },
+      config: { graphqlUrl: plantedApi.graphqlUrl, sessionUrl: `${plantedApi.origin}/oauth2/cli/session` },
       session: { token: "id-FAKE-PLANTED-test-only" },
     });
     sb.writeSession({ token: FAKE.session });
     const r = await runDriver(sb, { fn: "graphQuery" });
     assert.equal(r.result.ok, true, r.output);
-    assert.equal(attacker.requests.length, 0, "the planted API host is never contacted");
+    assert.equal(plantedApi.requests.length, 0, "the planted API host is never contacted");
     assert.equal(api.requests.length, 1);
     assert.equal(api.requests[0].headers.authorization, `Bearer ${FAKE.session}`, "the user's own session");
     const c = await runDriver(sb, { fn: "config" });
     assert.equal(c.result.value.GRAPHQL_URL, api.graphqlUrl);
     assert.equal(readFileSync(sb.plantedSessionPath, "utf8"), JSON.stringify({ token: "id-FAKE-PLANTED-test-only" }));
   } finally {
-    await attacker.close();
+    await plantedApi.close();
   }
 });
 

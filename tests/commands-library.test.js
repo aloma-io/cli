@@ -281,7 +281,7 @@ test("library pull -l <id>: one library; unknown id; empty workspace", sandboxTe
   assert.equal(r.stdout, "No libraries found in workspace.\n");
 }));
 
-// SECURITY: library pull never writes outside the target folder (finding 3; same code shape as
+// SECURITY: library pull never writes outside the target folder (same code shape as
 // step pull).
 test("SECURITY: library pull never writes outside the target folder", sandboxTest(async (sb) => {
   mockLibs(sb, [
