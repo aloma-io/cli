@@ -112,3 +112,67 @@ test("PLAT-81 workspace: success exits 0", sandboxTest(async (sb) => {
   assert.equal(r.code, 0);
   assert.equal(r.stderr, "");
 }));
+
+// ---------------------------------------------------------------- list/show/oauth errors, permission, usage
+
+test("PLAT-81 step, library, task: list API errors exit 1, printed once on stderr", sandboxTest(async (sb) => {
+  sb.api.on("LIST_STEPS_QUERY", gqlError("denied"));
+  let r = await sb.run(["step", "list"]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error fetching steps: denied\n");
+  assert.equal(r.stdout, "");
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", gqlError("denied"));
+  r = await sb.run(["library", "list"]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error fetching libraries: denied\n");
+  assert.equal(r.stdout, "");
+  sb.api.on("LIST_TASKS_QUERY", gqlError("denied"));
+  r = await sb.run(["task", "list"]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error listing tasks: denied\n");
+  assert.equal(r.stdout, "");
+}));
+
+test("PLAT-81 webhook show, secret list, connector oauth: API errors exit 1, printed once on stderr", sandboxTest(async (sb) => {
+  sb.api.on("LIST_WEBHOOKS_QUERY", gqlError("denied"));
+  let r = await sb.run(["webhook", "show", "wh-1"]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error showing webhook: denied\n");
+  assert.equal(r.stdout, "");
+  sb.api.on("GET_SECRET_QUERY", gqlError("denied"));
+  r = await sb.run(["secret", "list"]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error fetching secrets: denied\n");
+  assert.equal(r.stdout, "");
+  sb.api.on("START_CONNECTOR_OAUTH_MUTATION", gqlError("denied"));
+  r = await sb.run(["connector", "oauth", "c-1"]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "Error starting OAuth process: denied\n");
+  assert.equal(r.stdout, "");
+}));
+
+test("PLAT-81 user: list, update and remove need the admin or owner group; otherwise exit 1 and no change request", sandboxTest(async (sb) => {
+  sb.api.on("ME_QUERY", { me: { id: "u-1", groups: ["developer"], realm: { id: "r-1", name: "Alpha Co" } } });
+  for (const [args, action] of [[["list"], "list users"], [["update", "u-2", "-r", "admin"], "update users"], [["remove", "u-2"], "remove users"]]) {
+    const r = await sb.run(["user", ...args]);
+    assert.equal(r.code, 1, args.join(" "));
+    assert.equal(r.stderr, `Error: Only administrators or owners can ${action}\n`, args.join(" "));
+    assert.equal(r.stdout, "", args.join(" "));
+  }
+  assert.deepEqual([...new Set(sb.api.ops())], ["ME_QUERY"]);
+}));
+
+test("PLAT-81 user: an unknown role is a usage error (exit 2) and no change request is sent", sandboxTest(async (sb) => {
+  sb.api.on("ME_QUERY", { me: { id: "u-1", groups: ["admin"], realm: { id: "r-1", name: "Alpha Co" } } });
+  const r = await sb.run(["user", "update", "u-2", "-r", "nope"]);
+  assert.equal(r.code, 2);
+  assert.equal(r.stderr, "Invalid roles: nope. Allowed roles are: developer, admin, business\n");
+  assert.deepEqual([...new Set(sb.api.ops())], ["ME_QUERY"]);
+}));
+
+test("PLAT-81 task: a new task without data is a usage error (exit 2) with its own message", sandboxTest(async (sb) => {
+  const r = await sb.run(["task", "new", "nightly"]);
+  assert.equal(r.code, 2);
+  assert.equal(r.stderr, "⚠ No data provided\n");
+  assert.deepEqual(sb.api.calls, []);
+}));

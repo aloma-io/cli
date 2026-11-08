@@ -1,6 +1,7 @@
 // Mutation check for the security fixes: each mutant undoes one fix (or one layer of it), applied
 // alone; the listed test files are run; the file is restored before the next mutant.
-// A mutant is killed when at least one test fails.
+// A mutant is killed when at least one test fails. A mutant that no test can notice because it changes no
+// output is listed in EQUIVALENT with the reason, and is reported as "equivalent".
 //
 //   node tests/helpers/run-security-mutations.mjs [--md] [IDs...]
 import { readFileSync, writeFileSync } from "node:fs";
@@ -14,6 +15,11 @@ const AUTH = ["tests/auth-storage.test.js", "tests/auth-config.test.js", "tests/
 const PKG = ["tests/package-security.test.js"];
 // PLAT-117: the HTTP client's own tests, the auth suites, and the company switch through the commands harness
 const HTTP = ["tests/http.test.js", ...AUTH, "tests/commands-company-user.test.js"];
+
+// Step and library pull / sync live in src/resources/ (engine.js, step.js, library.js).
+const EQUIVALENT = {
+  S13: "the segment checks above it already refuse every name the resolved-path check would; with both in place the check never decides a result",
+};
 
 // [id, finding, file, description, from, to, tests]
 const MUTANTS = [
@@ -54,14 +60,14 @@ const MUTANTS = [
     '    .replace(/\\*\\//g, "* /")\n', "", ["tests/commands-step.test.js", "tests/commands-library.test.js"]],
   ["S15", 3, "src/pull-safety.js", "line breaks no longer stripped from header text",
     '    .replace(/[\\r\\n\\u2028\\u2029]+/g, " ");', ";", ["tests/commands-step.test.js", "tests/commands-library.test.js"]],
-  ["S16", 3, "src/commands/step/index.js", "step pull header uses the raw name and id",
-    '  await fs.mkdir(path.dirname(filePath), { recursive: true });\n\n  const fileContent = `/**\n * Step: ${headerText(step.name)}\n * ID: ${headerText(step.id)}',
-    '  await fs.mkdir(path.dirname(filePath), { recursive: true });\n\n  const fileContent = `/**\n * Step: ${step.name}\n * ID: ${step.id}',
+  ["S16", 3, "src/resources/step.js", "step pull header uses the raw name and id",
+    " * Step: ${headerText(step.name)}\n * ID: ${headerText(step.id)}",
+    " * Step: ${step.name}\n * ID: ${step.id}",
     ["tests/commands-step.test.js"]],
-  ["S17", 3, "src/commands/library/index.js", "library header uses the raw name and id",
+  ["S17", 3, "src/resources/library.js", "library header uses the raw name and id",
     " * Library: ${headerText(library.name)}\n * ID: ${headerText(library.id)}", " * Library: ${library.name}\n * ID: ${library.id}", ["tests/commands-library.test.js"]],
-  ["S18", 3, "src/commands/step/index.js", "an unsafe name aborts the whole pull instead of being skipped",
-    "if (!(error instanceof UnsafeNameError)) throw error;", "throw error;", ["tests/commands-step.test.js"]],
+  ["S18", 3, "src/resources/engine.js", "an unsafe name aborts the whole pull instead of being skipped",
+    "if (!(error instanceof UnsafeNameError)) throw error;", "throw error;", ["tests/commands-step.test.js", "tests/commands-library.test.js"]],
   ["S19", 4, "package-lock.json", "js-yaml locked back at 4.1.0",
     '"node_modules/js-yaml": {\n      "version": "4.3.2"', '"node_modules/js-yaml": {\n      "version": "4.1.0"', PKG],
   ["S20", 4, ".github/workflows/test.yml", "audit step removed from CI",
@@ -131,8 +137,9 @@ for (const [id, finding, file, desc, from, to, tests] of MUTANTS) {
   const out = `${r.stdout}${r.stderr}`;
   const failed = [...out.matchAll(/^not ok \d+ - (.*)$/gm)].map((m) => m[1]);
   const killed = r.status !== 0;
-  rows.push({ id, finding, file, desc, result: killed ? "killed" : "SURVIVED", first: failed[0] ?? "", count: failed.length });
-  if (!md) console.log(`${id} ${killed ? "killed" : "SURVIVED"} ${desc}${failed[0] ? ` -> ${failed[0]}` : ""}`);
+  const result = killed ? "killed" : EQUIVALENT[id] ? "equivalent" : "SURVIVED";
+  rows.push({ id, finding, file, desc, result, first: failed[0] ?? "", count: failed.length });
+  if (!md) console.log(`${id} ${result} ${desc}${failed[0] ? ` -> ${failed[0]}` : ""}${result === "equivalent" ? ` (${EQUIVALENT[id]})` : ""}`);
 }
 if (md) {
   console.log("| ID | Finding | File | Mutant (reverts the change) | Result | Failing tests | First failing test |");
@@ -140,4 +147,6 @@ if (md) {
   for (const r of rows) console.log(`| ${r.id} | ${r.finding} | \`${r.file}\` | ${r.desc} | ${r.result} | ${r.count ?? ""} | ${r.first} |`);
 }
 const killed = rows.filter((r) => r.result === "killed").length;
-console.log(`\n${killed} of ${rows.length} mutants killed`);
+const equivalent = rows.filter((r) => r.result === "equivalent").length;
+console.log(`\n${killed} of ${rows.length} mutants killed${equivalent ? `, ${equivalent} equivalent` : ""}`);
+if (rows.some((r) => r.result !== "killed" && r.result !== "equivalent")) process.exitCode = 1;
