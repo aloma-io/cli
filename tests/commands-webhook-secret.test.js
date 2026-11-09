@@ -210,12 +210,21 @@ test("secret add: an existing secret with the same name is overwritten without a
   assert.equal(sb.api.calls.at(-1).variables.values.API_URL.value, "new");
 }));
 
-test("secret add --options <yaml> always fails: cli.js never imports js-yaml", sandboxTest(async (sb) => {
-  const r = await sb.run(["secret", "add", "A", "1", "-o", "k: v"]);
-  // The ReferenceError is caught and shown as "Invalid JSON in options"; nothing is sent.
-  // The refused option exits 2; the missing import is left for a later slice.
+test("secret add --options parses the YAML and sends it in the save mutation", sandboxTest(async (sb) => {
+  sb.api.on("GET_SECRET_QUERY", { getAutomationEnvironmentConfig: null });
+  sb.api.on("SAVE_SECRET_MUTATION", { saveAutomationEnvironmentConfig: true });
+  const r = await sb.run(["secret", "add", "NAME", "VALUE", "--options", "a: 1"]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(sb.api.calls.at(-1).variables.values, {
+    NAME: { encrypted: false, value: "VALUE", description: "", options: { a: 1 }, hasValue: true },
+  });
+}));
+
+test("secret add --options with invalid YAML exits with the usage code and names YAML", sandboxTest(async (sb) => {
+  const r = await sb.run(["secret", "add", "NAME", "VALUE", "--options", "a: [1"]);
   assert.equal(r.code, 2);
-  assert.equal(r.stderr, "Invalid JSON in options: yaml is not defined\n");
+  assert.match(r.stderr, /^Invalid YAML in options: /);
+  assert.doesNotMatch(r.stderr, /JSON/);
   assert.deepEqual(sb.api.calls, []);
 }));
 

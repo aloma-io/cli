@@ -72,6 +72,7 @@ export const MUTATIONS = [
   ["M24", WH, "console.log(`URL: ${webhookUrl + webhook.key}`);\n    });", "console.log(`URL: ${webhookUrl}`);\n    });", "webhook-secret", "webhook list prints the URL without the key"],
   ["M25", SE, "    delete config[secretName];", "    // delete config[secretName];", "webhook-secret", "secret delete keeps the secret"],
   ["M26", SE, "      encrypted: encrypted,", "      encrypted: false,", "webhook-secret", "secret add ignores --encrypted"],
+  ["M39", SE, 'import yaml from "js-yaml";\n', "", "webhook", "secret add --options: the YAML parser import is removed"],
   ["M27", UU, '  admin: ["admin"],', "  admin: [],", "company-user", "admin role no longer adds the admin group"],
   ["M28", U, 'g === "admin" || g === "owner"', 'g === "admin"', "company-user", "owners can no longer manage users"],
   ["M29", C, "currentCompany === realm.id", "currentCompany !== realm.id", "company-user", "company list marks the wrong company"],
