@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import yaml from "js-yaml";
 import { graphQuery } from "../../utils.js";
 import { GET_SECRET_QUERY, SAVE_SECRET_MUTATION } from "./query.js";
 import { resolveWorkspaceId } from "../../context.js";
@@ -168,7 +169,7 @@ export function register(program) {
             try {
               secretOptions = yaml.load(options.options);
             } catch (error) {
-              throw new UsageError(`Invalid JSON in options: ${error.message}`);
+              throw new UsageError(`Invalid YAML in options: ${error.message}`);
             }
           }
           await addSecret(
