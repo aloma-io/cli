@@ -5,7 +5,7 @@
 // in a temporary HOME; no real sign-in takes place.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { writeFileSync, rmSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { makeSandbox, runCli, freePort, startServer, json, FAKE, REPO } from "./helpers/sandbox.js";
@@ -64,36 +64,37 @@ afterEach(async () => {
   sb.cleanup();
 });
 
-test("a callback whose state value does not match is rejected: saved session unchanged, no code exchanged", async () => {
+test("a callback whose state value does not match is refused: saved session unchanged, no code exchanged, the sign-in keeps waiting", async () => {
   sb.writeSession(OLD_SESSION);
   const r = await runCli(sb, ["auth"], {
+    env: { ALOMA_TEST_SHORT_AUTH_TIMEOUT: "1500" },
     onOpen: async (authUrl) => {
       const res = await fetch(forged(idp.authorize(authUrl)));
       return { status: res.status, body: await res.text() };
     },
   });
-  assert.equal(r.code, 1);
-  assert.equal(r.browser[0].status, 500);
-  assert.match(r.browser[0].body, /Authentication Failed/);
-  assert.match(r.browser[0].body, /<pre>Invalid state parameter<\/pre>/);
-  assert.match(r.stderr, /Authentication failed: Invalid state parameter/);
+  assert.equal(r.browser[0].status, 400);
+  assert.match(r.browser[0].body, /not the reply to the sign-in in progress/);
   assert.equal(tokenCalls().length, 0);
   assert.equal(sessionCalls().length, 0);
   assert.deepEqual(sb.readSession(), OLD_SESSION);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /Authentication failed: Authentication timed out after 5 minutes\./);
 });
 
-test("a callback without any state value is rejected the same way", async () => {
+test("a callback without any state value is refused the same way", async () => {
   const r = await runCli(sb, ["auth"], {
+    env: { ALOMA_TEST_SHORT_AUTH_TIMEOUT: "1500" },
     onOpen: async () => {
       const res = await fetch(`${redirectUri}/?code=${FAKE.code}`);
       return { status: res.status, body: await res.text() };
     },
   });
-  assert.equal(r.code, 1);
-  assert.equal(r.browser[0].status, 500);
-  assert.match(r.stderr, /Invalid state parameter/);
+  assert.equal(r.browser[0].status, 400);
   assert.equal(tokenCalls().length, 0);
   assert.equal(sb.readSession(), null);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /timed out/);
 });
 
 test("a second callback while sign-in is finishing gets the 'already complete' page and leaves the saved session unchanged", async () => {
@@ -150,7 +151,7 @@ test("a second callback while sign-in is finishing gets the 'already complete' p
   assert.deepEqual(sb.readSession(), { selectedWorkspace: "ws-fake-1", token: FAKE.session });
 });
 
-test("a request with a non-matching state after the state is five minutes old gets the 'expired' response and no session is written", async () => {
+test("a request with a non-matching state gets the same refusal however old the sign-in is, and no session is written", async () => {
   sb.writeSession(OLD_SESSION);
   const r = await runCli(sb, ["auth"], {
     env: {
@@ -166,30 +167,21 @@ test("a request with a non-matching state after the state is five minutes old ge
     },
   });
   assert.equal(r.browser[0].status, 400);
-  assert.match(r.browser[0].body, /Authentication expired/);
-  assert.match(r.browser[0].body, /Please try the authentication process again\./);
-  assert.match(r.stdout, /State parameter expired, this might be a duplicate or delayed request/);
+  assert.match(r.browser[0].body, /not the reply to the sign-in in progress/);
+  assert.ok(!/expired/i.test(r.browser[0].body));
   assert.equal(tokenCalls().length, 0);
   assert.equal(sessionCalls().length, 0);
   assert.deepEqual(sb.readSession(), OLD_SESSION);
-  // The expired response does not end the sign-in; it ends at the timeout.
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Authentication failed: Authentication timed out after 5 minutes\./);
 });
 
-test("after an 'expired' response, a callback with the matching state still completes the sign-in", async () => {
+test("after a refused request, a callback with the matching state still completes the sign-in", async () => {
   const r = await runCli(sb, ["auth"], {
-    env: {
-      NODE_OPTIONS: `--import=${CLOCK_SHIFT}`,
-      ALOMA_TEST_CLOCK_SHIFT_MS: String(6 * 60 * 1000),
-      ALOMA_TEST_CLOCK_FLAG: clockFlag(),
-    },
     onOpen: async (authUrl) => {
-      // The clock runs six minutes ahead for the first request only.
-      writeFileSync(clockFlag(), "");
-      const early = await fetch(forged(idp.authorize(authUrl)));
-      rmSync(clockFlag());
-      const late = await fetch(idp.authorize(authUrl));
+      const cb = idp.authorize(authUrl);
+      const early = await fetch(forged(cb));
+      const late = await fetch(cb);
       return { early: early.status, late: late.status, lateBody: await late.text() };
     },
   });

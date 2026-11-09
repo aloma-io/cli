@@ -156,43 +156,61 @@ test("SECURITY: a redirect URI that is not loopback http is refused before anyth
   }
 });
 
-test("a callback with the wrong state is refused: no token request, no session, exit 1", async () => {
+test("a callback with the wrong state is refused without ending the sign-in: no token request, no session", async () => {
   const r = await runCli(sb, ["auth"], {
+    env: { ALOMA_TEST_SHORT_AUTH_TIMEOUT: "1500" },
     onOpen: browser((cb) => {
       const u = new URL(cb);
       u.searchParams.set("state", "forged-state");
       return u.toString();
     }),
   });
-  assert.equal(r.code, 1);
-  // PLAT-81: printed once (was also printed as "Callback handling failed: ...").
-  assert.equal(r.stderr.match(/Invalid state parameter/g).length, 1);
-  assert.match(r.stderr, /Authentication failed: Invalid state parameter/);
-  assert.equal(r.browser[0].status, 500);
+  assert.equal(r.browser[0].status, 400);
+  assert.match(r.browser[0].body, /not the reply to the sign-in in progress/);
   assert.equal(tokenCalls().length, 0);
   assert.equal(sessionCalls().length, 0);
   assert.equal(sb.readSession(), null);
+  // The sign-in kept waiting for the real reply and ended only at the timeout.
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /Authentication failed: Authentication timed out after 5 minutes\./);
+  assert.ok(!/Invalid state parameter/.test(r.output));
 });
 
-// Any request to the callback port without the right state (a browser's /favicon.ico, another
-// local process) aborts the whole sign-in.
-test("one stray request to the callback port aborts the sign-in", async () => {
+test("a callback with the wrong state, then the right one: the sign-in completes", async () => {
+  const r = await runCli(sb, ["auth"], {
+    onOpen: async (authUrl) => {
+      const cb = idp.authorize(authUrl);
+      const u = new URL(cb);
+      u.searchParams.set("state", "forged-state");
+      const wrong = await fetch(u.toString());
+      const right = await fetch(cb);
+      return { wrong: wrong.status, right: right.status, rightBody: await right.text() };
+    },
+  });
+  assert.equal(r.code, 0, r.output);
+  assert.equal(r.browser[0].wrong, 400);
+  assert.equal(r.browser[0].right, 200);
+  assert.match(r.browser[0].rightBody, /Authentication successful!/);
+  assert.equal(tokenCalls().length, 1);
+  assert.equal(sessionCalls().length, 1);
+  assert.equal(sb.readSession().token, FAKE.session);
+});
+
+// A request to the callback port that is not the sign-in reply (a browser's /favicon.ico, another
+// local process) is answered 404 and the sign-in keeps waiting for the real reply.
+test("a stray request to the callback port is refused and the sign-in still completes", async () => {
   const r = await runCli(sb, ["auth"], {
     onOpen: async (authUrl) => {
       const stray = await fetch(`${redirectUri}/favicon.ico`);
-      let later;
-      try {
-        later = (await fetch(idp.authorize(authUrl))).status;
-      } catch (e) {
-        later = "connection failed";
-      }
-      return { stray: stray.status, later };
+      const later = await fetch(idp.authorize(authUrl));
+      return { stray: stray.status, later: later.status };
     },
   });
-  assert.equal(r.code, 1);
-  assert.equal(r.browser[0].stray, 500);
-  assert.match(r.stderr, /Invalid state parameter/);
-  assert.equal(sb.readSession(), null);
+  assert.equal(r.code, 0, r.output);
+  assert.equal(r.browser[0].stray, 404);
+  assert.equal(r.browser[0].later, 200);
+  assert.equal(tokenCalls().length, 1);
+  assert.equal(sb.readSession().token, FAKE.session);
 });
 
 // The error text from the login service is HTML-escaped in the browser page.

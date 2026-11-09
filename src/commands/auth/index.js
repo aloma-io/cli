@@ -28,7 +28,6 @@ let servers = []; // the callback server listens on 127.0.0.1 and, if available,
 let codeVerifier; // For PKCE
 let authTimeout; // Store the timeout ID
 let authCompleted = false; // Flag to prevent duplicate processing
-let stateGeneratedAt; // Track when state was generated
 
 const escapeHtml = (text) =>
   String(text).replace(
@@ -105,6 +104,7 @@ async function initiateAuth() {
   return new Promise(async (resolve, reject) => {
     try {
       const { port: callbackPort } = callbackAddress();
+      const callbackPath = new URL(REDIRECT_URI).pathname || "/";
       const client = await getClient();
 
       // Generate PKCE parameters
@@ -112,7 +112,6 @@ async function initiateAuth() {
       const codeChallenge = generators.codeChallenge(codeVerifier);
       const state = generators.state();
       const nonce = generators.nonce();
-      stateGeneratedAt = Date.now(); // Track when state was generated
       const authUrl = client.authorizationUrl({
         scope: SCOPE,
         response_mode: "query",
@@ -146,47 +145,35 @@ async function initiateAuth() {
             return;
           }
 
+          // Only the reply to this sign-in counts. Anything else (a browser's /favicon.ico, another
+          // local process, a stale or forged reply) is refused and the sign-in keeps waiting for the
+          // real reply or the 5-minute timeout. The state check itself is unchanged.
+          const reqPath = new URL(req.url, "http://localhost").pathname;
+          if (reqPath !== callbackPath) {
+            res.writeHead(404, { "Content-Type": "text/plain" });
+            res.end("Not found");
+            return;
+          }
+
           const params = client.callbackParams(req);
 
-          // Verify state parameter
           if (params.state !== state) {
-            // If authentication already completed, this might be a duplicate request
-            if (authCompleted) {
-              res.writeHead(200, { "Content-Type": "text/html" });
-              res.end(`
-                  <!DOCTYPE html>
-                  <html>
-                  <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                    <h1 style="color: #28a745;">Authentication already completed!</h1>
-                    <p>You can close this browser tab and return to the CLI.</p>
-                  </body>
-                  </html>
-                `);
-              return;
-            }
-
-            // Check if state has expired (5 minutes)
-            const stateAge = Date.now() - stateGeneratedAt;
-            if (stateAge > 5 * 60 * 1000) {
-              console.log(
-                chalk.yellow(
-                  "⚠️  State parameter expired, this might be a duplicate or delayed request",
-                ),
-              );
-              res.writeHead(400, { "Content-Type": "text/html" });
-              res.end(`
-                  <!DOCTYPE html>
-                  <html>
-                  <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                    <h1 style="color: #dc3545;">Authentication expired</h1>
-                    <p>Please try the authentication process again.</p>
-                  </body>
-                  </html>
-                `);
-              return;
-            }
-
-            throw new Error("Invalid state parameter");
+            console.log(
+              chalk.yellow(
+                "⚠️  Refused a request that is not the reply to this sign-in; still waiting.",
+              ),
+            );
+            res.writeHead(400, { "Content-Type": "text/html" });
+            res.end(`
+                <!DOCTYPE html>
+                <html>
+                <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                  <h1 style="color: #dc3545;">Not accepted</h1>
+                  <p>This request is not the reply to the sign-in in progress.</p>
+                </body>
+                </html>
+              `);
+            return;
           }
 
           if (params.error) {
@@ -382,9 +369,8 @@ function shutdownServer() {
       if (s === server) server = null;
     });
   }
-  // Reset auth completed flag and state tracking for next authentication attempt
+  // Reset the auth completed flag for the next authentication attempt
   authCompleted = false;
-  stateGeneratedAt = null;
 }
 
 async function endKeycloakSession() {

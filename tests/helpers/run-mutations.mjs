@@ -123,6 +123,11 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-81: the sign-in refuses requests that are not the reply to the sign-in in progress and keeps
+  // waiting (tests/auth-callback.test.js, tests/auth-signin.test.js).
+  ["R01", A, "          if (reqPath !== callbackPath) {", "          if (false) {", "tests/auth-callback.test.js,tests/auth-signin.test.js", "auth: a request to another path is treated as the reply"],
+  ["R02", A, "              `);\n            return;\n          }\n\n          if (params.error) {", "              `);\n          }\n\n          if (params.error) {", "tests/auth-callback.test.js,tests/auth-signin.test.js", "auth: a refused reply goes on to the code exchange"],
+  ["R03", A, "          if (params.state !== state) {\n            console.log(", "          if (params.state !== state) {\n            throw new Error(\"Invalid state parameter\");\n            console.log(", "tests/auth-callback.test.js,tests/auth-signin.test.js", "auth: a reply that is not for this sign-in ends the sign-in"],
 ];
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
