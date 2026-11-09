@@ -208,8 +208,8 @@ test("when the browser cannot be opened, a notice is printed and the sign-in com
   assert.match(r.stdout, /Authentication completed successfully!/);
   assert.equal(r.browser[0].status, 200);
   assert.deepEqual(sb.readSession(), { selectedWorkspace: "ws-fake-1", token: FAKE.session });
-  // The notice is a single line and does not include the authorization URL.
-  assert.ok(!r.output.includes(r.opened[0]), "authorization URL printed");
+  // The notice is printed once and gives the authorization URL, so sign-in can be finished by hand.
+  assert.ok(r.stdout.includes(r.opened[0]), "authorization URL not printed");
   assert.equal(r.stdout.match(/Could not open browser/g).length, 1);
 });
 
@@ -220,6 +220,7 @@ test("when the browser cannot be opened and no callback arrives, the sign-in tim
   });
   assert.equal(r.code, 1);
   assert.match(r.stdout, /Could not open browser automatically\./);
+  assert.ok(r.stdout.includes(r.opened[0]), "authorization URL not printed");
   assert.match(r.stderr, /Authentication timed out after 5 minutes\./);
   assert.equal(sb.readSession(), null);
 });

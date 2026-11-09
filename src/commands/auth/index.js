@@ -347,6 +347,8 @@ async function initiateAuth() {
         await open(authUrl);
       } catch (openError) {
         console.log(chalk.yellow("⚠️  Could not open browser automatically."));
+        console.log(chalk.white("Open this URL in a browser to sign in:"));
+        console.log(authUrl);
       }
 
       // Timeout for the auth flow
