@@ -440,6 +440,26 @@ test("step sync: answering anything but y/yes cancels without a request", sandbo
   assert.deepEqual(sb.api.ops(), ["LIST_STEPS_QUERY", "LIST_STEPS_QUERY", "LIST_STEPS_QUERY"]);
 }));
 
+// PLAT-308: with no answer (input closed) the sync is cancelled, not silently ended with exit 0.
+test("step sync: input closed with no answer cancels (exit 1), saves nothing", sandboxTest(async (sb) => {
+  sb.write("src/alpha.js", stepFile("{ a: 1 }", "data.a = 2;"));
+  sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: [] });
+  const r = await sb.run(["step", "sync", "-p", "src"]);
+  assert.equal(r.stderr, "Sync cancelled by user.\n");
+  assert.equal(r.code, 1);
+  assert.deepEqual(sb.api.ops(), ["LIST_STEPS_QUERY"]);
+}));
+
+test("step sync -s: input closed with no answer cancels (exit 1), saves nothing", sandboxTest(async (sb) => {
+  sb.write("src/beta.js", stepFile("{ b: 1 }", "data.b = 2;"));
+  sb.api.on("LIST_STEPS_QUERY", LISTED(["s-2", "beta"]));
+  sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-2", name: "beta", enabled: true, version: 5 } });
+  const r = await sb.run(["step", "sync", "-s", "s-2", "-p", "src"]);
+  assert.equal(r.stderr, "Sync cancelled by user.\n");
+  assert.equal(r.code, 1);
+  assert.ok(!sb.api.ops().includes("SAVE_STEP_MUTATION"));
+}));
+
 test("step sync: 'yes' (any case) is accepted", sandboxTest(async (sb) => {
   sb.write("src/alpha.js", stepFile("{ a: 1 }", "data.a = 2;"));
   sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: [] });
