@@ -13,6 +13,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 
 const AUTH = ["tests/auth-storage.test.js", "tests/auth-config.test.js", "tests/auth-signin.test.js", "tests/auth-security.test.js", "tests/auth-company.test.js", "tests/auth-logout.test.js", "tests/session-exchange.test.js"];
 const PKG = ["tests/package-security.test.js"];
+const PUBV = ["tests/publish-version.test.js"];
 // PLAT-117: the HTTP client's own tests, the auth suites, and the company switch through the commands harness
 const HTTP = ["tests/http.test.js", ...AUTH, "tests/commands-company-user.test.js"];
 
@@ -113,6 +114,20 @@ const MUTANTS = [
     '  const location = response.headers.get("location");\n  if (location) {\n    return fetch(new URL(location, url), {\n      method,\n      redirect: "manual",\n      headers: auth ? { ...headers, ...authHeaders(auth) } : headers,\n      body,\n    });\n  }\n  refuseRedirect(response.status, what);\n  return response;', HTTP],
   ["S38", 8, "package.json", "tests/ added to the published files",
     '"config/",\n    "README.md"\n  ],', '"config/",\n    "README.md",\n    "tests/"\n  ],', ["tests/package-files.test.js"]],
+  // PLAT-459: the publish workflow sets the package version from the tag; S39-S44 are the deliberate breaks.
+  ["S39", 4, ".github/workflows/publish.yml", "leading v of the tag not stripped",
+    'VERSION="${TAG_NAME#v}"', 'VERSION="${TAG_NAME}"', PUBV],
+  ["S40", 4, ".github/workflows/publish.yml", "version step moved after Publish",
+    '          npm version "$VERSION" --no-git-tag-version --allow-same-version\n\n      - name: Publish\n        run: npm publish --access public --provenance\n',
+    '          true\n\n      - name: Publish\n        run: npm publish --access public --provenance\n\n      - name: Late\n        run: npm version "$VERSION" --no-git-tag-version --allow-same-version\n', PUBV],
+  ["S41", 4, ".github/workflows/publish.yml", "tag shape not validated",
+    "grep -Eq '^[0-9]+\\.[0-9]+\\.[0-9]+$'", "grep -Eq '.*'", PUBV],
+  ["S42", 4, ".github/workflows/publish.yml", "--no-git-tag-version dropped",
+    '"$VERSION" --no-git-tag-version --allow-same-version', '"$VERSION" --allow-same-version', PUBV],
+  ["S43", 4, ".github/workflows/publish.yml", "lower-than check removed",
+    "process.exit(t[i] > c[i] ? 0 : 1);", "process.exit(0);", PUBV],
+  ["S44", 4, ".github/workflows/publish.yml", "versions compared as text, not numbers",
+    '.split(".").map(Number)', '.split(".")', PUBV],
 ];
 
 const md = process.argv.includes("--md");

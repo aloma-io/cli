@@ -16,7 +16,8 @@ const FULL = ["22", "24", "26"];
 // Re-pinned for PLAT-10's publish gate (#22: test job before publish), merged alongside #19 without this update.
 // Re-pinned for PLAT-149: the actions in publish.yml are named by commit ID with a version comment.
 // Re-pinned for PLAT-140: publish runs-on is named ubuntu-26.04, never ubuntu-latest.
-const PUBLISH_SHA256 = "3a411f82cecf5320eb0c182bcc5c94f568f5f3b70d76a6a0985af81e6360188b";
+// Re-pinned for PLAT-459: publish sets the package version from the tag.
+const PUBLISH_SHA256 = "db4c21cb7197bbeaa691800f220c6ad1dfe4a4c001354b10cfafad1b35d47f6d";
 
 // Evaluates the only expression shapes the workflow may use, for one event name.
 const evaluate = (value, event) => {
