@@ -5,14 +5,14 @@
 //
 //   node tests/helpers/run-security-mutations.mjs [--md] [IDs...]
 //   node tests/helpers/run-security-mutations.mjs --check-apply   # every break must still apply; writes nothing, runs no test
-//   ... --root <dir> (or the REPO variable) reads from another copy of the repo; --check-apply --list prints the id/file/old-text entries
+//   ... --root <dir> reads from another copy of the repo; --check-apply --list prints the id/file/old-text entries
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyBreak, parseArgs, repoRoot, selectIds } from "./apply-check.mjs";
+import { applyBreak, checkBreak, parseArgsOrExit, repoRoot, selectIds } from "./apply-check.mjs";
 
-const args = parseArgs(process.argv.slice(2), process.env);
+const args = parseArgsOrExit(process.argv.slice(2));
 const REPO = repoRoot(args.root, path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 
 const AUTH = ["tests/auth-storage.test.js", "tests/auth-config.test.js", "tests/auth-signin.test.js", "tests/auth-security.test.js", "tests/auth-company.test.js", "tests/auth-logout.test.js", "tests/session-exchange.test.js"];
@@ -129,13 +129,10 @@ if (args.flags.includes("--check-apply")) {
   const list = MUTANTS.filter(([id]) => selected.includes(id));
   for (const id of unknown) console.log(`unknown id ${id}`);
   for (const [id, , file, , from, to] of list) {
-    let applied = null;
-    try {
-      applied = applyBreak(readFileSync(path.join(REPO, file), "utf8"), from, to);
-    } catch {}
-    if (applied === null) {
+    const problem = checkBreak(REPO, { id, file, find: from, replace: to });
+    if (problem) {
       bad++;
-      console.log(`${id} does not apply to ${file}`);
+      console.log(problem);
     }
   }
   console.log(`checked ${list.length} mutants, ${bad} do not apply`);

@@ -5,29 +5,34 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, statSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { applyBreak, parseArgs, selectIds } from "./helpers/apply-check.mjs";
+import { pathToFileURL } from "node:url";
+import { applyBreak, checkBreak, parseArgs, selectIds } from "./helpers/apply-check.mjs";
 
 const RUNNERS = ["tests/helpers/run-mutations.mjs", "tests/helpers/run-security-mutations.mjs"];
 const root = new URL("../", import.meta.url);
 
 // One hash over src/, .github, package.json, package-lock.json and every file in the file column of both lists:
 // --check-apply must leave all of them as they were.
-function treeHash(extraFiles) {
+function treeHash(extraFiles, base = root) {
   const h = createHash("sha256");
   const walk = (rel) => {
-    const url = new URL(rel, root);
-    let entries;
+    const url = new URL(rel, base);
+    let st;
     try {
-      entries = readdirSync(url, { withFileTypes: true });
-    } catch {
+      st = statSync(url);
+    } catch (err) {
+      if (err.code === "ENOENT") return; // an absent file or folder contributes nothing
+      throw err;
+    }
+    if (!st.isDirectory()) {
       h.update(rel).update(readFileSync(url));
       return;
     }
-    for (const e of entries) walk(`${rel}/${e.name}`);
+    for (const e of readdirSync(url, { withFileTypes: true })) walk(`${rel}/${e.name}`);
   };
   for (const rel of new Set(["src", ".github", "package.json", "package-lock.json", ...extraFiles])) walk(rel);
   return h.digest("hex");
@@ -138,16 +143,6 @@ for (const runner of RUNNERS) {
     });
   });
 
-  test(`${runner} --check-apply takes the root from the REPO variable`, () => {
-    const entries = listOf(runner);
-    const e = loneEntry(entries);
-    withCopy(entries, (dir) => edit(dir, e.file, (t) => t.replace(e.find, "")), (dir) => {
-      const r = spawnSync(process.execPath, [runner, "--check-apply"], { cwd: root, encoding: "utf8", env: { REPO: dir } });
-      assert.equal(r.status, 1, `${r.stdout}${r.stderr}`);
-      assert.ok(lines(r.stdout).includes(`${e.id} does not apply to ${e.file}`), r.stdout);
-    });
-  });
-
   test(`${runner} --check-apply lists an unknown id and exits 1`, () => {
     const r = run(runner, listOf(runner)[0].id, "M3O");
     assert.ok(lines(r.out).includes("unknown id M3O"), r.out);
@@ -187,13 +182,165 @@ test("selectIds keeps the known ids in list order and names the unknown ones", (
   assert.deepEqual(selectIds([], []), { selected: [], unknown: [] });
 });
 
-test("parseArgs separates ids, flags and the root (--root wins over REPO)", () => {
-  assert.deepEqual(parseArgs(["--check-apply", "M01", "--root", "/d", "M02"], { REPO: "/e" }), {
+test("parseArgs separates ids, flags and the root", () => {
+  assert.deepEqual(parseArgs(["--check-apply", "M01", "--root", "/d", "M02"]), {
     ids: ["M01", "M02"],
     flags: ["--check-apply"],
     root: "/d",
   });
-  assert.equal(parseArgs([], { REPO: "/e" }).root, "/e");
-  assert.equal(parseArgs([], {}).root, null);
-  assert.throws(() => parseArgs(["--root"], {}), /--root needs a directory/);
+  assert.equal(parseArgs([]).root, null);
 });
+
+test("parseArgs accepts --root=/dir", () => {
+  assert.deepEqual(parseArgs(["--root=/d", "--md"]), { ids: [], flags: ["--md"], root: "/d" });
+});
+
+test("parseArgs ignores any REPO variable (it has no environment parameter)", () => {
+  assert.equal(parseArgs.length, 1);
+  assert.equal(parseArgs(["M01"], { REPO: "/e" }).root, null);
+});
+
+test("parseArgs refuses --root without a directory, never taking a flag as the directory", () => {
+  assert.throws(() => parseArgs(["--root"]), /--root needs a directory/);
+  assert.throws(() => parseArgs(["--root", "--md"]), /--root needs a directory/);
+  assert.throws(() => parseArgs(["--root", "--check-apply"]), /--root needs a directory/);
+  assert.throws(() => parseArgs(["--root="]), /--root needs a directory/);
+});
+
+test("parseArgs refuses an unknown flag and names it", () => {
+  assert.throws(() => parseArgs(["--chek-apply"]), /unknown flag --chek-apply/);
+  assert.throws(() => parseArgs(["M01", "--rot=/d"]), /unknown flag --rot=\/d/);
+});
+
+for (const runner of RUNNERS) {
+  test(`${runner} exits 1 and names a bad argument`, () => {
+    const unknown = run(runner, "--bogus");
+    assert.equal(unknown.status, 1, unknown.out);
+    assert.match(unknown.out, /unknown flag --bogus/);
+    const noDir = run(runner, "--root", "--md");
+    assert.equal(noDir.status, 1, noDir.out);
+    assert.match(noDir.out, /--root needs a directory/);
+  });
+
+  test(`${runner} --check-apply accepts --root=<dir>`, () => {
+    const entries = listOf(runner);
+    withCopy(entries, () => {}, (dir) => {
+      const r = run(runner, `--root=${dir}`);
+      assert.equal(lastLine(r.out), `checked ${entries.length} mutants, 0 do not apply`, r.out);
+      assert.equal(r.status, 0, r.out);
+    });
+  });
+}
+
+test("checkBreak: a missing file does not apply; a stale text does not apply; a good entry gives null", () => {
+  const read = (text) => () => text;
+  const entry = { id: "X1", file: "a.js", find: "-", replace: "+" };
+  assert.equal(checkBreak("/r", entry, read("a-b")), null);
+  assert.equal(checkBreak("/r", entry, read("ab")), "X1 does not apply to a.js");
+  const gone = Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" });
+  assert.equal(checkBreak("/r", entry, () => { throw gone; }), "X1 does not apply to a.js");
+});
+
+test("checkBreak: any other read error is reported with its own message", () => {
+  const entry = { id: "X1", file: "a.js", find: "-", replace: "+" };
+  const denied = Object.assign(new Error("EACCES: permission denied, open 'a.js'"), { code: "EACCES" });
+  assert.equal(checkBreak("/r", entry, () => { throw denied; }), "X1 cannot read a.js: EACCES: permission denied, open 'a.js'");
+});
+
+for (const runner of RUNNERS) {
+  test(`${runner} --check-apply reports a target that is a directory as a read error and exits 1`, () => {
+    const entries = listOf(runner);
+    const e = entries[0];
+    const hit = entries.filter((o) => o.file === e.file);
+    withCopy(entries, (dir) => {
+      rmSync(path.join(dir, e.file));
+      mkdirSync(path.join(dir, e.file));
+    }, (dir) => {
+      const r = run(runner, "--root", dir);
+      for (const o of hit) {
+        assert.ok(lines(r.out).some((l) => l.startsWith(`${o.id} cannot read ${o.file}: EISDIR`)), r.out);
+        assert.ok(!lines(r.out).includes(`${o.id} does not apply to ${o.file}`), r.out);
+      }
+      assert.equal(lastLine(r.out), `checked ${entries.length} mutants, ${hit.length} do not apply`, r.out);
+      assert.equal(r.status, 1, r.out);
+    });
+  });
+}
+
+test("treeHash hashes what exists when a hashed folder is absent", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mutants-hash-"));
+  try {
+    mkdirSync(path.join(dir, "src"));
+    writeFileSync(path.join(dir, "src", "a.js"), "a");
+    writeFileSync(path.join(dir, "package.json"), "{}");
+    const base = pathToFileURL(`${dir}/`);
+    const first = treeHash([], base); // no .github, no package-lock.json
+    assert.equal(first, treeHash([], base));
+    writeFileSync(path.join(dir, "src", "a.js"), "b");
+    assert.notEqual(treeHash([], base), first);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A copy of one runner (with apply-check.mjs) inside a temp tree laid out like the repo, so "the real repo" for that
+// copy is the temp tree and a normal run can change files without touching this checkout. The tests it runs are
+// stubs that fail, so the break is "killed". A decoy tree, where the entry's old text is absent, stands for the
+// tree an ambient REPO variable would point at.
+function runnerTree(runner, file, extra) {
+  const dir = mkdtempSync(path.join(tmpdir(), "mutants-tree-"));
+  const put = (rel, data) => {
+    mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    writeFileSync(path.join(dir, rel), data);
+  };
+  for (const f of [runner, "tests/helpers/apply-check.mjs"]) put(f, readFileSync(new URL(f, root)));
+  put(file, readFileSync(new URL(file, root)));
+  for (const f of extra) put(f, "process.exit(1);\n");
+  return dir;
+}
+
+const NORMAL_RUNS = [
+  { runner: RUNNERS[0], id: "P01", file: "src/ui/select.js", stubs: ["tests/ui-select.test.js"] },
+  { runner: RUNNERS[1], id: "S38", file: "package.json", stubs: ["tests/package-files.test.js"] },
+];
+
+for (const { runner, id, file, stubs } of NORMAL_RUNS) {
+  test(`${runner}: REPO is ignored; a normal run and --check-apply read the real repo, or the --root tree`, () => {
+    const real = runnerTree(runner, file, stubs);
+    const decoy = runnerTree(runner, file, stubs);
+    try {
+      const entry = listOf(runner).find((e) => e.id === id);
+      const decoyText = readFileSync(path.join(decoy, file), "utf8").replace(entry.find, "");
+      writeFileSync(path.join(decoy, file), decoyText);
+      const realText = readFileSync(path.join(real, file), "utf8");
+      const go = (args, treeRunner = real) =>
+        spawnSync(process.execPath, [path.join(treeRunner, runner), ...args], { cwd: root, encoding: "utf8", env: { REPO: decoy } });
+      const KILLED = /killed 1 \/ 1|1 of 1 mutants killed/;
+      const out = (r) => `${r.stdout}${r.stderr}`;
+
+      // no --root: the tree the runner sits in, not the REPO tree
+      const check = go(["--check-apply", id]);
+      assert.equal(check.status, 0, out(check));
+      assert.match(out(check), /checked 1 mutants, 0 do not apply/);
+      const normal = go([id]);
+      assert.match(out(normal), KILLED, out(normal));
+      assert.equal(readFileSync(path.join(real, file), "utf8"), realText, "the file was not restored");
+      assert.equal(readFileSync(path.join(decoy, file), "utf8"), decoyText, "the REPO tree was touched");
+
+      // --root: the given tree
+      const checkRoot = go(["--check-apply", id, "--root", decoy]);
+      assert.equal(checkRoot.status, 1, out(checkRoot));
+      assert.ok(lines(out(checkRoot)).includes(`${id} does not apply to ${file}`), out(checkRoot));
+      const normalRoot = go([id, "--root", decoy]);
+      assert.doesNotMatch(out(normalRoot), KILLED, out(normalRoot));
+      assert.equal(readFileSync(path.join(decoy, file), "utf8"), decoyText);
+
+      // --root on the tree that does apply runs the stub tests there and kills the break
+      const normalGood = go([id, "--root", real]);
+      assert.match(out(normalGood), KILLED, out(normalGood));
+    } finally {
+      rmSync(real, { recursive: true, force: true });
+      rmSync(decoy, { recursive: true, force: true });
+    }
+  });
+}

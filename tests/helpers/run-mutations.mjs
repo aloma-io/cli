@@ -9,7 +9,7 @@
 //   node tests/helpers/run-mutations.mjs --md       # ... and print it as markdown
 //   node tests/helpers/run-mutations.mjs M03 M07    # only these ids
 //   node tests/helpers/run-mutations.mjs --check-apply   # every break must still apply; writes nothing, runs no test
-//   ... --root <dir> (or the REPO variable) reads from another copy of the repo; --check-apply --list prints the id/file/old-text entries
+//   ... --root <dir> reads from another copy of the repo; --check-apply --list prints the id/file/old-text entries
 //
 // Notes (PLAT-236): every pattern below matches today's code, and a run reports every mutant as killed.
 // - Step and library pull / sync / ensure live in src/resources/ (engine.js, step.js, library.js); the
@@ -22,9 +22,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { applyBreak, parseArgs, repoRoot, selectIds } from "./apply-check.mjs";
+import { applyBreak, checkBreak, parseArgsOrExit, repoRoot, selectIds } from "./apply-check.mjs";
 
-const args = parseArgs(process.argv.slice(2), process.env);
+const args = parseArgsOrExit(process.argv.slice(2));
 const REPO = repoRoot(args.root, path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 const W = "src/commands/workspace/index.js";
 const S = "src/commands/step/index.js";
@@ -140,13 +140,10 @@ if (args.flags.includes("--check-apply")) {
   const list = MUTATIONS.filter(([id]) => selected.includes(id));
   for (const id of unknown) console.log(`unknown id ${id}`);
   for (const [id, file, find, replace] of list) {
-    let applied = null;
-    try {
-      applied = applyBreak(fs.readFileSync(path.join(REPO, file), "utf8"), find, replace);
-    } catch {}
-    if (applied === null) {
+    const problem = checkBreak(REPO, { id, file, find, replace });
+    if (problem) {
       bad++;
-      console.log(`${id} does not apply to ${file}`);
+      console.log(problem);
     }
   }
   console.log(`checked ${list.length} mutants, ${bad} do not apply`);
