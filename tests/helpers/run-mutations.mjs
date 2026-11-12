@@ -8,6 +8,7 @@
 //   node tests/helpers/run-mutations.mjs            # run all, print a table
 //   node tests/helpers/run-mutations.mjs --md       # ... and print it as markdown
 //   node tests/helpers/run-mutations.mjs M03 M07    # only these ids
+//   node tests/helpers/run-mutations.mjs --check-apply   # every break must still apply; writes nothing, runs no test
 //
 // Notes (PLAT-236): every pattern below matches today's code, and a run reports every mutant as killed.
 // - Step and library pull / sync / ensure live in src/resources/ (engine.js, step.js, library.js); the
@@ -126,6 +127,29 @@ export const MUTATIONS = [
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
 ];
 
+// A break applies only when its pattern is in the file exactly once; returns the changed text, or null.
+function applyBreak(original, find, replace) {
+  return original.split(find).length - 1 === 1 ? original.replace(find, () => replace) : null;
+}
+
+if (process.argv.includes("--check-apply")) {
+  let bad = 0;
+  const wanted = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const list = MUTATIONS.filter(([id]) => !wanted.length || wanted.includes(id));
+  for (const [id, file, find, replace] of list) {
+    let applied = null;
+    try {
+      applied = applyBreak(fs.readFileSync(path.join(REPO, file), "utf8"), find, replace);
+    } catch {}
+    if (applied === null) {
+      bad++;
+      console.log(`${id} does not apply to ${file}`);
+    }
+  }
+  console.log(`checked ${list.length} mutants, ${bad} do not apply`);
+  process.exit(bad > 0 || list.length === 0 ? 1 : 0);
+}
+
 const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const wantMd = process.argv.includes("--md");
 const results = [];
@@ -140,7 +164,7 @@ for (const [id, file, find, replace, group, desc] of MUTATIONS) {
     continue;
   }
   try {
-    fs.writeFileSync(abs, original.replace(find, () => replace));
+    fs.writeFileSync(abs, applyBreak(original, find, replace));
     const files = group === "ui-select" ? ["tests/ui-select.test.js"] : group.startsWith("tests/") ? group.split(",") : fs.readdirSync(path.join(REPO, "tests")).filter((f) => f.startsWith(`commands-${group}`) && f.endsWith(".test.js")).map((f) => `tests/${f}`);
     const run = spawnSync(process.execPath, ["--test", "--test-reporter=spec", ...files], { cwd: REPO, encoding: "utf8", timeout: 240000 });
     const failed = [...run.stdout.matchAll(/^✖ (.+?) \(\d+(?:\.\d+)?ms\)$/gm)].map((m) => m[1]);

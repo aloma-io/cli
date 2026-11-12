@@ -4,6 +4,7 @@
 // output is listed in EQUIVALENT with the reason, and is reported as "equivalent".
 //
 //   node tests/helpers/run-security-mutations.mjs [--md] [IDs...]
+//   node tests/helpers/run-security-mutations.mjs --check-apply   # every break must still apply; writes nothing, runs no test
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -115,6 +116,29 @@ const MUTANTS = [
     '"config/",\n    "README.md"\n  ],', '"config/",\n    "README.md",\n    "tests/"\n  ],', ["tests/package-files.test.js"]],
 ];
 
+// A break applies only when its old text is in the file exactly once; returns the changed text, or null.
+function applyBreak(orig, from, to) {
+  return orig.split(from).length - 1 === 1 ? orig.replace(from, to) : null;
+}
+
+if (process.argv.includes("--check-apply")) {
+  let bad = 0;
+  const wanted = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const list = MUTANTS.filter(([id]) => !wanted.length || wanted.includes(id));
+  for (const [id, , file, , from, to] of list) {
+    let applied = null;
+    try {
+      applied = applyBreak(readFileSync(path.join(REPO, file), "utf8"), from, to);
+    } catch {}
+    if (applied === null) {
+      bad++;
+      console.log(`${id} does not apply to ${file}`);
+    }
+  }
+  console.log(`checked ${list.length} mutants, ${bad} do not apply`);
+  process.exit(bad > 0 || list.length === 0 ? 1 : 0);
+}
+
 const md = process.argv.includes("--md");
 const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const rows = [];
@@ -122,12 +146,13 @@ for (const [id, finding, file, desc, from, to, tests] of MUTANTS) {
   if (only.length && !only.includes(id)) continue;
   const abs = path.join(REPO, file);
   const orig = readFileSync(abs, "utf8");
-  const n = orig.split(from).length - 1;
-  if (n !== 1) {
+  const applied = applyBreak(orig, from, to);
+  if (applied === null) {
+    const n = orig.split(from).length - 1;
     rows.push({ id, finding, file, desc, result: `NOT APPLIED (${n} matches)`, first: "" });
     continue;
   }
-  writeFileSync(abs, orig.replace(from, to));
+  writeFileSync(abs, applied);
   let r;
   try {
     r = spawnSync(process.execPath, ["--test", ...tests], { cwd: REPO, encoding: "utf8", maxBuffer: 64 << 20 });
