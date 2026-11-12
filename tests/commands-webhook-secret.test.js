@@ -129,7 +129,7 @@ const CONFIG = {
   },
 };
 
-// SECURITY (finding 7): values are masked unless --reveal is given.
+// SECURITY: values are masked unless --reveal is given.
 test("SECURITY: secret list masks plain values by default, hides encrypted ones", sandboxTest(async (sb) => {
   sb.api.on("GET_SECRET_QUERY", CONFIG);
   const r = await sb.run(["secret", "list"]);
