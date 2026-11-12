@@ -8,6 +8,8 @@
 //   node tests/helpers/run-mutations.mjs            # run all, print a table
 //   node tests/helpers/run-mutations.mjs --md       # ... and print it as markdown
 //   node tests/helpers/run-mutations.mjs M03 M07    # only these ids
+//   node tests/helpers/run-mutations.mjs --check-apply   # every break must still apply; writes nothing, runs no test
+//   ... --root <dir> reads from another copy of the repo; --check-apply --list prints the id/file/old-text entries
 //
 // Notes (PLAT-236): every pattern below matches today's code, and a run reports every mutant as killed.
 // - Step and library pull / sync / ensure live in src/resources/ (engine.js, step.js, library.js); the
@@ -20,8 +22,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { applyBreak, checkBreak, parseArgsOrExit, repoRoot, selectIds } from "./apply-check.mjs";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const args = parseArgsOrExit(process.argv.slice(2));
+const REPO = repoRoot(args.root, path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 const W = "src/commands/workspace/index.js";
 const S = "src/commands/step/index.js";
 const L = "src/commands/library/index.js";
@@ -126,8 +130,28 @@ export const MUTATIONS = [
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
 ];
 
-const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-const wantMd = process.argv.includes("--md");
+if (args.flags.includes("--check-apply")) {
+  if (args.flags.includes("--list")) {
+    console.log(JSON.stringify(MUTATIONS.map(([id, file, find]) => ({ id, file, find }))));
+    process.exit(0);
+  }
+  let bad = 0;
+  const { selected, unknown } = selectIds(args.ids, MUTATIONS.map(([id]) => id));
+  const list = MUTATIONS.filter(([id]) => selected.includes(id));
+  for (const id of unknown) console.log(`unknown id ${id}`);
+  for (const [id, file, find, replace] of list) {
+    const problem = checkBreak(REPO, { id, file, find, replace });
+    if (problem) {
+      bad++;
+      console.log(problem);
+    }
+  }
+  console.log(`checked ${list.length} mutants, ${bad} do not apply`);
+  process.exit(bad > 0 || unknown.length > 0 || list.length === 0 ? 1 : 0);
+}
+
+const only = args.ids;
+const wantMd = args.flags.includes("--md");
 const results = [];
 
 for (const [id, file, find, replace, group, desc] of MUTATIONS) {
@@ -140,7 +164,7 @@ for (const [id, file, find, replace, group, desc] of MUTATIONS) {
     continue;
   }
   try {
-    fs.writeFileSync(abs, original.replace(find, () => replace));
+    fs.writeFileSync(abs, applyBreak(original, find, replace));
     const files = group === "ui-select" ? ["tests/ui-select.test.js"] : group.startsWith("tests/") ? group.split(",") : fs.readdirSync(path.join(REPO, "tests")).filter((f) => f.startsWith(`commands-${group}`) && f.endsWith(".test.js")).map((f) => `tests/${f}`);
     const run = spawnSync(process.execPath, ["--test", "--test-reporter=spec", ...files], { cwd: REPO, encoding: "utf8", timeout: 240000 });
     const failed = [...run.stdout.matchAll(/^✖ (.+?) \(\d+(?:\.\d+)?ms\)$/gm)].map((m) => m[1]);

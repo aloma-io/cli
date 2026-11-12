@@ -4,12 +4,16 @@
 // output is listed in EQUIVALENT with the reason, and is reported as "equivalent".
 //
 //   node tests/helpers/run-security-mutations.mjs [--md] [IDs...]
+//   node tests/helpers/run-security-mutations.mjs --check-apply   # every break must still apply; writes nothing, runs no test
+//   ... --root <dir> reads from another copy of the repo; --check-apply --list prints the id/file/old-text entries
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyBreak, checkBreak, parseArgsOrExit, repoRoot, selectIds } from "./apply-check.mjs";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const args = parseArgsOrExit(process.argv.slice(2));
+const REPO = repoRoot(args.root, path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 
 const AUTH = ["tests/auth-storage.test.js", "tests/auth-config.test.js", "tests/auth-signin.test.js", "tests/auth-security.test.js", "tests/auth-company.test.js", "tests/auth-logout.test.js", "tests/session-exchange.test.js"];
 const PKG = ["tests/package-security.test.js"];
@@ -130,19 +134,40 @@ const MUTANTS = [
     '.split(".").map(Number)', '.split(".")', PUBV],
 ];
 
-const md = process.argv.includes("--md");
-const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+if (args.flags.includes("--check-apply")) {
+  if (args.flags.includes("--list")) {
+    console.log(JSON.stringify(MUTANTS.map(([id, , file, , from]) => ({ id, file, find: from }))));
+    process.exit(0);
+  }
+  let bad = 0;
+  const { selected, unknown } = selectIds(args.ids, MUTANTS.map(([id]) => id));
+  const list = MUTANTS.filter(([id]) => selected.includes(id));
+  for (const id of unknown) console.log(`unknown id ${id}`);
+  for (const [id, , file, , from, to] of list) {
+    const problem = checkBreak(REPO, { id, file, find: from, replace: to });
+    if (problem) {
+      bad++;
+      console.log(problem);
+    }
+  }
+  console.log(`checked ${list.length} mutants, ${bad} do not apply`);
+  process.exit(bad > 0 || unknown.length > 0 || list.length === 0 ? 1 : 0);
+}
+
+const md = args.flags.includes("--md");
+const only = args.ids;
 const rows = [];
 for (const [id, finding, file, desc, from, to, tests] of MUTANTS) {
   if (only.length && !only.includes(id)) continue;
   const abs = path.join(REPO, file);
   const orig = readFileSync(abs, "utf8");
-  const n = orig.split(from).length - 1;
-  if (n !== 1) {
+  const applied = applyBreak(orig, from, to);
+  if (applied === null) {
+    const n = orig.split(from).length - 1;
     rows.push({ id, finding, file, desc, result: `NOT APPLIED (${n} matches)`, first: "" });
     continue;
   }
-  writeFileSync(abs, orig.replace(from, to));
+  writeFileSync(abs, applied);
   let r;
   try {
     r = spawnSync(process.execPath, ["--test", ...tests], { cwd: REPO, encoding: "utf8", maxBuffer: 64 << 20 });
