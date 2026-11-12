@@ -5,12 +5,15 @@
 //
 //   node tests/helpers/run-security-mutations.mjs [--md] [IDs...]
 //   node tests/helpers/run-security-mutations.mjs --check-apply   # every break must still apply; writes nothing, runs no test
+//   ... --root <dir> (or the REPO variable) reads from another copy of the repo; --check-apply --list prints the id/file/old-text entries
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyBreak, parseArgs, repoRoot, selectIds } from "./apply-check.mjs";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const args = parseArgs(process.argv.slice(2), process.env);
+const REPO = repoRoot(args.root, path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 
 const AUTH = ["tests/auth-storage.test.js", "tests/auth-config.test.js", "tests/auth-signin.test.js", "tests/auth-security.test.js", "tests/auth-company.test.js", "tests/auth-logout.test.js", "tests/session-exchange.test.js"];
 const PKG = ["tests/package-security.test.js"];
@@ -116,15 +119,15 @@ const MUTANTS = [
     '"config/",\n    "README.md"\n  ],', '"config/",\n    "README.md",\n    "tests/"\n  ],', ["tests/package-files.test.js"]],
 ];
 
-// A break applies only when its old text is in the file exactly once; returns the changed text, or null.
-function applyBreak(orig, from, to) {
-  return orig.split(from).length - 1 === 1 ? orig.replace(from, to) : null;
-}
-
-if (process.argv.includes("--check-apply")) {
+if (args.flags.includes("--check-apply")) {
+  if (args.flags.includes("--list")) {
+    console.log(JSON.stringify(MUTANTS.map(([id, , file, , from]) => ({ id, file, find: from }))));
+    process.exit(0);
+  }
   let bad = 0;
-  const wanted = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-  const list = MUTANTS.filter(([id]) => !wanted.length || wanted.includes(id));
+  const { selected, unknown } = selectIds(args.ids, MUTANTS.map(([id]) => id));
+  const list = MUTANTS.filter(([id]) => selected.includes(id));
+  for (const id of unknown) console.log(`unknown id ${id}`);
   for (const [id, , file, , from, to] of list) {
     let applied = null;
     try {
@@ -136,11 +139,11 @@ if (process.argv.includes("--check-apply")) {
     }
   }
   console.log(`checked ${list.length} mutants, ${bad} do not apply`);
-  process.exit(bad > 0 || list.length === 0 ? 1 : 0);
+  process.exit(bad > 0 || unknown.length > 0 || list.length === 0 ? 1 : 0);
 }
 
-const md = process.argv.includes("--md");
-const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const md = args.flags.includes("--md");
+const only = args.ids;
 const rows = [];
 for (const [id, finding, file, desc, from, to, tests] of MUTANTS) {
   if (only.length && !only.includes(id)) continue;

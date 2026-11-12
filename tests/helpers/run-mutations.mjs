@@ -9,6 +9,7 @@
 //   node tests/helpers/run-mutations.mjs --md       # ... and print it as markdown
 //   node tests/helpers/run-mutations.mjs M03 M07    # only these ids
 //   node tests/helpers/run-mutations.mjs --check-apply   # every break must still apply; writes nothing, runs no test
+//   ... --root <dir> (or the REPO variable) reads from another copy of the repo; --check-apply --list prints the id/file/old-text entries
 //
 // Notes (PLAT-236): every pattern below matches today's code, and a run reports every mutant as killed.
 // - Step and library pull / sync / ensure live in src/resources/ (engine.js, step.js, library.js); the
@@ -21,8 +22,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { applyBreak, parseArgs, repoRoot, selectIds } from "./apply-check.mjs";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const args = parseArgs(process.argv.slice(2), process.env);
+const REPO = repoRoot(args.root, path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 const W = "src/commands/workspace/index.js";
 const S = "src/commands/step/index.js";
 const L = "src/commands/library/index.js";
@@ -127,15 +130,15 @@ export const MUTATIONS = [
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
 ];
 
-// A break applies only when its pattern is in the file exactly once; returns the changed text, or null.
-function applyBreak(original, find, replace) {
-  return original.split(find).length - 1 === 1 ? original.replace(find, () => replace) : null;
-}
-
-if (process.argv.includes("--check-apply")) {
+if (args.flags.includes("--check-apply")) {
+  if (args.flags.includes("--list")) {
+    console.log(JSON.stringify(MUTATIONS.map(([id, file, find]) => ({ id, file, find }))));
+    process.exit(0);
+  }
   let bad = 0;
-  const wanted = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-  const list = MUTATIONS.filter(([id]) => !wanted.length || wanted.includes(id));
+  const { selected, unknown } = selectIds(args.ids, MUTATIONS.map(([id]) => id));
+  const list = MUTATIONS.filter(([id]) => selected.includes(id));
+  for (const id of unknown) console.log(`unknown id ${id}`);
   for (const [id, file, find, replace] of list) {
     let applied = null;
     try {
@@ -147,11 +150,11 @@ if (process.argv.includes("--check-apply")) {
     }
   }
   console.log(`checked ${list.length} mutants, ${bad} do not apply`);
-  process.exit(bad > 0 || list.length === 0 ? 1 : 0);
+  process.exit(bad > 0 || unknown.length > 0 || list.length === 0 ? 1 : 0);
 }
 
-const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-const wantMd = process.argv.includes("--md");
+const only = args.ids;
+const wantMd = args.flags.includes("--md");
 const results = [];
 
 for (const [id, file, find, replace, group, desc] of MUTATIONS) {
