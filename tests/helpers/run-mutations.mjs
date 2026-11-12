@@ -125,6 +125,11 @@ export const MUTATIONS = [
   ["N10", ENG, "existing = uniqueByName(all, desc.key(desired), desc.kind);", "existing = all.find((i) => i.name === desc.key(desired)) ?? null;", "names", "library sync (all): first name match wins"],
   ["N11", ENG, "        uniqueByName(items, summary.name, desc.kind);\n", "", "names", "step pull (all): same-named steps overwrite each other again"],
   ["N12", ENG, "        uniqueByName(items, summary.name, desc.kind);\n", "", "names", "library pull (all): same-named libraries overwrite each other again"],
+  // PLAT-298: connector add without --name takes the name from the catalogue (tests/commands-connector.test.js).
+  ["A01", CO, "const catalogue = await graphQuery(LIST_AVAILABLE_CONNECTOR_QUERY, {", "const catalogue = await graphQuery(GET_CONNECTOR_QUERY, {", "connector", "connector add without --name looks the id up in the workspace again"],
+  ["A02", CO, "list.find((entry) => entry?.id === connectorId)", "list.find((entry) => entry?.name === connectorId)", "connector", "catalogue lookup matches by name instead of id"],
+  ["A03", CO, '      if (!entry) {\n        throw new CliError("Error: Connector not found");\n      }\n\n      connectorName = entry.name;', '      connectorName = entry?.name ?? connectorId;', "connector", "connector add: an id not in the catalogue is still added"],
+  ["A04", CO, "      name: connectorName,\n      namespace,\n    });", "      name: connectorName,\n    });", "connector", "connector add drops the --namespace value"],
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],

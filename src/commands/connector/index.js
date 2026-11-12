@@ -107,6 +107,11 @@ function printConnectorSchema(schema) {
   }
 }
 
+export function findCatalogueConnector(list, connectorId) {
+  if (!Array.isArray(list)) return null;
+  return list.find((entry) => entry?.id === connectorId) ?? null;
+}
+
 export async function addConnector(
   connectorId,
   workspaceIdentifier,
@@ -125,28 +130,32 @@ export async function addConnector(
     }
 
     let connectorName = name;
-    let connectorNamespace = namespace;
 
-    // If name is not provided, fetch it from the connector details
+    // If name is not provided, take it from the connector catalogue
     if (!connectorName) {
-      const connectorData = await graphQuery(GET_CONNECTOR_QUERY, {
+      const catalogue = await graphQuery(LIST_AVAILABLE_CONNECTOR_QUERY, {
         id: workspaceId,
-        connectorId: connectorId,
+        mine: false,
+        name: "",
       });
 
-      if (!connectorData.getAutomationConnector) {
+      const entry = findCatalogueConnector(
+        catalogue.listAutomationAvailableConnectors,
+        connectorId,
+      );
+
+      if (!entry) {
         throw new CliError("Error: Connector not found");
       }
 
-      connectorName = connectorData.getAutomationConnector.name;
-      connectorNamespace = connectorData.getAutomationConnector.namespace;
+      connectorName = entry.name;
     }
 
     const response = await graphQuery(ADD_CONNECTOR_MUTATION, {
       id: connectorId,
       environmentId: workspaceId,
       name: connectorName,
-      namespace: connectorNamespace,
+      namespace,
     });
 
     if (response.addAutomationMarketConnectorToEnvironment) {

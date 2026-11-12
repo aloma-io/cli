@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import * as jose from "jose";
 import { sandboxTest, gqlError, canFakeOpen } from "./helpers/cli-harness.js";
+import { findCatalogueConnector } from "../src/commands/connector/index.js";
 
 const ops = (sb) => sb.api.calls.map((c) => [c.op, c.variables]);
 
@@ -113,30 +114,75 @@ test("connector add <id> --name: sends the add mutation", sandboxTest(async (sb)
   assert.deepEqual(ops(sb), [["ADD_CONNECTOR_MUTATION", { id: "m-1", environmentId: "ws-sel", name: "Mailer", namespace: "mail" }]]);
 }));
 
-test("connector add <id> without --name: name and namespace are taken from the connector details", sandboxTest(async (sb) => {
-  sb.api.on("GET_CONNECTOR_QUERY", DETAIL());
+const CATALOGUE = {
+  listAutomationAvailableConnectors: [
+    { id: "m-2", name: "Chat" },
+    { id: "m-1", name: "Mailer" },
+  ],
+};
+
+test("findCatalogueConnector: exact id match, otherwise null", () => {
+  const list = CATALOGUE.listAutomationAvailableConnectors;
+  assert.deepEqual(findCatalogueConnector(list, "m-1"), { id: "m-1", name: "Mailer" });
+  assert.equal(findCatalogueConnector(list, "Mailer"), null);
+  assert.equal(findCatalogueConnector(list, "m-"), null);
+  assert.equal(findCatalogueConnector(list, "M-1"), null);
+  assert.equal(findCatalogueConnector([], "m-1"), null);
+  assert.equal(findCatalogueConnector(undefined, "m-1"), null);
+  assert.equal(findCatalogueConnector(null, "m-1"), null);
+  assert.equal(findCatalogueConnector({ id: "m-1" }, "m-1"), null);
+});
+
+test("connector add <id> without --name: name comes from the catalogue", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AVAILABLE_CONNECTOR_QUERY", CATALOGUE);
   sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: true });
-  // A --namespace given without --name is not sent.
-  await sb.run(["connector", "add", "m-1", "-ns", "mine"]);
+  const r = await sb.run(["connector", "add", "m-1"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.stdout, "\nConnector added successfully!\n");
   assert.deepEqual(ops(sb), [
-    ["GET_CONNECTOR_QUERY", { id: "ws-sel", connectorId: "m-1" }],
-    ["ADD_CONNECTOR_MUTATION", { id: "m-1", environmentId: "ws-sel", name: "Mailer", namespace: "mail" }],
+    ["LIST_AVAILABLE_CONNECTOR_QUERY", { id: "ws-sel", mine: false, name: "" }],
+    ["ADD_CONNECTOR_MUTATION", { id: "m-1", environmentId: "ws-sel", name: "Mailer" }],
   ]);
 }));
 
-test("connector add: unknown connector, refused by API, API error", sandboxTest(async (sb) => {
-  sb.api.on("GET_CONNECTOR_QUERY", { getAutomationConnector: null });
-  let r = await sb.run(["connector", "add", "m-9"]);
+test("connector add <id> without --name, with --namespace: the namespace is sent", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AVAILABLE_CONNECTOR_QUERY", CATALOGUE);
+  sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: true });
+  const r = await sb.run(["connector", "add", "m-1", "-ns", "mine"]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(ops(sb), [
+    ["LIST_AVAILABLE_CONNECTOR_QUERY", { id: "ws-sel", mine: false, name: "" }],
+    ["ADD_CONNECTOR_MUTATION", { id: "m-1", environmentId: "ws-sel", name: "Mailer", namespace: "mine" }],
+  ]);
+}));
+
+test("connector add <id> without --name: not in the catalogue, nothing is added", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AVAILABLE_CONNECTOR_QUERY", CATALOGUE);
+  sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: true });
+  const r = await sb.run(["connector", "add", "m-9"]);
   assert.equal(r.stderr, "Error: Connector not found\n");
   assert.equal(r.code, 1);
+  assert.deepEqual(ops(sb).map((o) => o[0]), ["LIST_AVAILABLE_CONNECTOR_QUERY"]);
+}));
+
+test("connector add <id> without --name: API error on the catalogue lookup", sandboxTest(async (sb) => {
+  sb.api.on("LIST_AVAILABLE_CONNECTOR_QUERY", gqlError("denied"));
+  const r = await sb.run(["connector", "add", "m-1"]);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /^Error creating connector: /);
+  assert.deepEqual(ops(sb).map((o) => o[0]), ["LIST_AVAILABLE_CONNECTOR_QUERY"]);
+}));
+
+test("connector add: refused by API, API error", sandboxTest(async (sb) => {
   sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: false });
-  r = await sb.run(["connector", "add", "m-1", "-n", "x"]);
+  let r = await sb.run(["connector", "add", "m-1", "-n", "x"]);
   assert.equal(r.stderr, "Error: Failed to add connector\n");
   assert.equal(r.code, 1);
   sb.api.on("ADD_CONNECTOR_MUTATION", gqlError("limit"));
   r = await sb.run(["connector", "add", "m-1", "-n", "x"]);
   assert.equal(r.code, 1);
   assert.equal(r.stderr, "Error creating connector: limit\n");
+  assert.ok(!ops(sb).some(([op]) => op === "LIST_AVAILABLE_CONNECTOR_QUERY" || op === "GET_CONNECTOR_QUERY"));
 }));
 
 test("connector add --config with invalid JSON: nothing is sent", sandboxTest(async (sb) => {
