@@ -66,5 +66,24 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=low
 
+      # The release bot tags N+1 without writing it into package.json: the package version comes from the tag.
+      # The tag reaches the script through the environment, never interpolated into it. Nothing is committed or pushed.
+      - name: Set package version from tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -e
+          VERSION="${TAG_NAME#v}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag $TAG_NAME is not three dot-separated numbers (optional leading v)" >&2
+            exit 1
+          fi
+          CURRENT=$(node -p "require('./package.json').version")
+          if ! node -e 'const p = (s) => s.split(".").map(Number); const [t, c] = [p(process.argv[1]), p(process.argv[2])]; for (let i = 0; i < 3; i++) { if (t[i] !== c[i]) process.exit(t[i] > c[i] ? 0 : 1); }' "$VERSION" "$CURRENT"; then
+            echo "Tag version $VERSION is lower than the package.json version $CURRENT" >&2
+            exit 1
+          fi
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
       - name: Publish
         run: npm publish --access public --provenance
