@@ -128,6 +128,12 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-81: workspace show / stats / update / source branches (tests/regression-workspace-output.test.js).
+  ["X01", W, 'typeof ws.autoclean === "boolean"', "ws.autoclean !== undefined", "tests/regression-workspace-output.test.js", "workspace show prints an autoclean line for a non-boolean value"],
+  ["X02", W, 'ws.connectorIssues > 1 ? "s" : ""', 'ws.connectorIssues >= 1 ? "s" : ""', "tests/regression-workspace-output.test.js", "workspace show --stats: 1 connector is printed in the plural"],
+  ["X03", W, "typeof ws.testPercentage7 === \"number\" ? ws.testPercentage7 : 0", "ws.testPercentage7", "tests/regression-workspace-output.test.js", "workspace show --stats: a missing 7-day percentage is not 0"],
+  ["X04", W, "url: options.url || ws.source.url || null,", "url: ws.source.url || options.url || null,", "tests/regression-workspace-output.test.js", "workspace source: the stored url beats --url"],
+  ["X05", W, "enabled: options.enabled || ws.source.enabled || false,", "enabled: options.enabled || ws.source.enabled || true,", "tests/regression-workspace-output.test.js", "workspace source: enabled defaults to true"],
 ];
 
 if (args.flags.includes("--check-apply")) {
