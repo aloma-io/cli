@@ -128,6 +128,12 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-81: the transport checks, the confirm prompt and the file walker (tests/regression-net-confirm-walk.test.js).
+  ["S01", "src/net-security.js", 'h === "::1" ||', "false ||", "tests/regression-net-confirm-walk.test.js", "loopback check: ::1 is no longer loopback"],
+  ["S02", "src/net-security.js", 'process.env.ALOMA_ALLOW_HTTP_LOOPBACK === "1"', "!!process.env.ALOMA_ALLOW_HTTP_LOOPBACK", "tests/regression-net-confirm-walk.test.js", "http opt-in: any non-empty value turns it on"],
+  ["S03", "src/net-security.js", "status < 400", "status < 308", "tests/regression-net-confirm-walk.test.js", "redirect check: 308 is no longer refused"],
+  ["S04", "src/confirm.js", 'reply === "y" || reply === "yes"', 'reply.startsWith("y")', "tests/regression-net-confirm-walk.test.js", "confirm: any answer starting with y is a yes"],
+  ["S05", "src/walk.js", 'file.name.endsWith(".js")', 'file.name.includes(".js")', "tests/regression-net-confirm-walk.test.js", "walk: .js.map files are listed as .js files"],
 ];
 
 if (args.flags.includes("--check-apply")) {
