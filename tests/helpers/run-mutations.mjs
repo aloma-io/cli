@@ -133,6 +133,12 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // Deploy results table, path refusal and workspace creation (tests/regression-deploy-table.test.js).
+  ["J01", D, "Math.max(4, ...cells", "Math.max(0, ...cells", "tests/regression-deploy-table.test.js", "deploy table: columns have no minimum width"],
+  ["J02", D, 'if (dryRun && status === "updated") return "would update";', "", "tests/regression-deploy-table.test.js", "deploy table: a dry-run update reads updated"],
+  ["J03", D, "oneLine(row.name)", "row.name", "tests/regression-deploy-table.test.js", "deploy table: a name with a control character is not made one line"],
+  ["J04", D, "if (real === null) {", "if (false) {", "tests/regression-deploy-table.test.js", "deploy: a path outside the YAML folder is not refused"],
+  ["J05", D, 'workspace.tags.join(",")', 'workspace.tags.join(";")', "tests/regression-deploy-table.test.js", "deploy: workspace tags are joined with another separator"],
 ];
 
 if (args.flags.includes("--check-apply")) {
