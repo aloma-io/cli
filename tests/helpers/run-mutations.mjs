@@ -128,6 +128,12 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-81: library parser, library resource defaults and the deploy entry checks (tests/regression-library-deploy.test.js).
+  ["Z01", RL, "contentStr = body.value;", "contentStr = null;", "tests/regression-library-deploy.test.js", "library parser: an implicit string return is no longer taken as the content"],
+  ["Z02", RL, "namespace: desired.namespace ?? library.namespace,", "namespace: library.namespace,", "tests/regression-library-deploy.test.js", "library save: the desired namespace is ignored"],
+  ["Z03", RL, "return data.listAutomationLibs || [];", "return data.listAutomationLibs;", "tests/regression-library-deploy.test.js", "library list: an answer without a list is no longer an empty list"],
+  ["Z04", D, "must have 'name' or 'syncPath'.", "must have 'name'.", "tests/regression-library-deploy.test.js", "deploy: the entry check no longer names syncPath"],
+  ["Z05", D, 'connector.connectorName || connector.connectorId || "(unnamed)"', 'connector.connectorName || "(unnamed)"', "tests/regression-library-deploy.test.js", "deploy: a connector without a name is not shown by its id"],
 ];
 
 if (args.flags.includes("--check-apply")) {
