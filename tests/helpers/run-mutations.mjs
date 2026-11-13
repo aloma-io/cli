@@ -133,6 +133,13 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-81 (row 1.01, slice 8): the shared helpers' remaining branches (tests/regression-shared-helpers.test.js).
+  ["G01", "src/pull-safety.js", "process.platform === \"win32\" && /[:<>\"|?*]/.test(seg)", "/[:<>\"|?*]/.test(seg)", "tests/regression-shared-helpers.test.js", "a name part with characters Windows refuses is refused on every platform"],
+  ["G02", "src/pull-safety.js", ".replace(/[\\r\\n\\u2028\\u2029]+/g, \" \");", ".replace(/[\\r\\n]+/g, \" \");", "tests/regression-shared-helpers.test.js", "headerText leaves U+2028 and U+2029 in the header"],
+  ["G03", "src/runtime.js", "console.error(error.cause?.stack ?? error.stack);", "console.error(error.stack);", "tests/regression-shared-helpers.test.js", "reportError prints the error's own stack and not the cause's"],
+  ["G04", "src/http.js", "error.cause?.message ?? error.message", "error.message", "tests/regression-shared-helpers.test.js", "a failed fetch reports the error's message, not the cause's"],
+  ["G05", "src/paths.js", "if ((st.mode & 0o077) !== 0) await fs.chmod(file, mode);", "await fs.chmod(file, mode);", "tests/regression-shared-helpers.test.js", "tighten changes the mode even when no group or other bits are set"],
+  ["G06", "src/context.js", "    data?.listAutomationEnvironmentWithStats ?? [],\n    name,", "    data.listAutomationEnvironmentWithStats,\n    name,", "tests/regression-shared-helpers.test.js", "findWorkspaceByName throws when the answer has no list"],
 ];
 
 if (args.flags.includes("--check-apply")) {
