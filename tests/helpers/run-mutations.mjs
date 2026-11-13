@@ -47,6 +47,7 @@ const HT = "src/http.js";
 const ENG = "src/resources/engine.js";
 const RS = "src/resources/step.js";
 const RL = "src/resources/library.js";
+const RG = "tests/regression-connector-gaps.test.js";
 
 // [id, file, find (must occur exactly once), replace, tests expected to catch it, description]
 export const MUTATIONS = [
@@ -128,6 +129,13 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // Regression row 1.01 (tests/regression-connector-gaps.test.js): the connector command's argument guards and show/update details.
+  ["Q01", CO, 'if (!connectorId) {\n      throw new UsageError("⚠ Connector ID is required");\n    }\n\n    let connectorName = name;', "    let connectorName = name;", RG, "connector add: the empty-ID guard is gone"],
+  ["Q02", CO, 'if (!connectorId) {\n      throw new UsageError("⚠ Connector ID is required");\n    }\n\n    if (file) {', "    if (file) {", RG, "connector update: the empty-ID guard is gone"],
+  ["Q03", CO, 'if (!id) {\n      throw new UsageError("⚠ Connector ID is required");\n    }\n\n    const data = await graphQuery(GET_CONNECTOR_LOGS_QUERY', "    const data = await graphQuery(GET_CONNECTOR_LOGS_QUERY", RG, "connector logs: the empty-ID guard is gone"],
+  ["Q04", CO, 'if (!id) {\n      throw new UsageError("⚠ Connector ID is required");\n    }\n\n    const response = await graphQuery(START_CONNECTOR_OAUTH_MUTATION', "    const response = await graphQuery(START_CONNECTOR_OAUTH_MUTATION", RG, "connector oauth: the empty-ID guard is gone"],
+  ["Q05", CO, 'connector.health[0]?.healthy ? "Healthy" : "Unhealthy"}`', 'connector.health.some((h) => h.healthy) ? "Healthy" : "Unhealthy"}`', RG, "connector show: any healthy entry counts, not only the first"],
+  ["Q06", CO, 'ext === ".yaml" || ext === ".yml"', 'ext === ".yaml"', RG, "connector update --file: .yml is read as JSON"],
 ];
 
 if (args.flags.includes("--check-apply")) {
