@@ -386,6 +386,16 @@ test("library sync: always asks for confirmation; n cancels", sandboxTest(async 
   assert.deepEqual(sb.api.ops(), ["LIST_AUTOMATION_LIBS_QUERY"]);
 }));
 
+// PLAT-308: with no answer (input closed) the sync is cancelled, not silently ended with exit 0.
+test("library sync: input closed with no answer cancels (exit 1), saves nothing", sandboxTest(async (sb) => {
+  sb.write("src/a.js", libFile("T", "  a();"));
+  sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: [] });
+  const r = await sb.run(["library", "sync", "-p", "src"]);
+  assert.equal(r.stderr, "Sync cancelled by user.\n");
+  assert.equal(r.code, 1);
+  assert.deepEqual(sb.api.ops(), ["LIST_AUTOMATION_LIBS_QUERY"]);
+}));
+
 test("library sync: missing folder, no .js files, unparsable file", sandboxTest(async (sb) => {
   sb.api.on("LIST_AUTOMATION_LIBS_QUERY", { listAutomationLibs: [] });
   let r = await sb.run(["library", "sync", "-p", "nowhere"]);

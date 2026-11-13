@@ -44,6 +44,7 @@ const A = "src/commands/auth/index.js";
 const N = "src/names.js";
 const CTX = "src/context.js";
 const HT = "src/http.js";
+const CF = "src/confirm.js";
 const ENG = "src/resources/engine.js";
 const RS = "src/resources/step.js";
 const RL = "src/resources/library.js";
@@ -133,6 +134,9 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-308: a y/N question that gets no answer (input closed) is a no, so the sync exits 1.
+  ["Q01", CF, '    rl.on("close", () => settle(false));\n', "", "step", "confirm: input ending with no answer never settles (sync exits 0, writes nothing)"],
+  ["Q02", CF, 'rl.on("close", () => settle(false));', 'rl.on("close", () => settle(true));', "library", "confirm: input ending with no answer counts as yes"],
 ];
 
 if (args.flags.includes("--check-apply")) {
