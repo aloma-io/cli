@@ -133,6 +133,12 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // Regression row 1.01, connector output shapes and update fallbacks (tests/regression-connector-shapes.test.js).
+  ["K01", CO, "fileContent.shared_in_realm ??", "fileContent.shared_in_realm ||", "tests/regression-connector-shapes.test.js", "connector update --file: a false shared flag in the file falls back to the flag"],
+  ["K02", CO, "if (schema.fields[key]?.plain) {", "if (!schema.fields[key]?.plain) {", "tests/regression-connector-shapes.test.js", "connector update --config: plain and encrypted fields swapped"],
+  ["K03", CO, 'connector.health[0]?.healthy ? chalk.green', 'connector.health.some((h) => h?.healthy) ? chalk.green', "tests/regression-connector-shapes.test.js", "connector list: any healthy entry, not only the first, counts as Healthy"],
+  ["K04", CO, "audience: marketId,", "audience: connectorId,", "tests/regression-connector-shapes.test.js", "connector update --config: encrypted for the connector id, not the market id"],
+  ["K05", CO, "Object.keys(schema.fields).length > 0", "Object.keys(schema.fields).length >= 0", "tests/regression-connector-shapes.test.js", "connector show: an empty fields object prints a Fields heading"],
 ];
 
 if (args.flags.includes("--check-apply")) {
