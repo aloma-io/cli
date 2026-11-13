@@ -129,9 +129,9 @@ test("step add -f: parses the file, validates the condition, saves content as ve
   assert.deepEqual(ops(sb), [
     LIST,
     ["CREATE_STEP_MUTATION", { name: "s", environment_id: "ws-sel", nocode_type: null }],
-    ["VALIDATE_IF_QUERY", { content: "{\n  status: 'new'\n}" }],
+    ["VALIDATE_IF_QUERY", { content: "{ status: 'new', }" }],
     ["SAVE_STEP_MUTATION", {
-      id: "s-new", name: "s", if: "{\n  status: 'new'\n}", do: "data.x = 1;\n  data.y = 2;",
+      id: "s-new", name: "s", if: "{ status: 'new', }", do: "  data.x = 1;\n  data.y = 2;",
       enabled: true, version: 0, nocode_content: null, config_content: null,
     }],
   ]);
@@ -257,7 +257,7 @@ test("step edit: writes a temp file, waits for the editor, saves the edit, remov
   assert.equal(sb.exists(tmpFile), false);
   assert.equal(sb.exists(path.dirname(tmpFile)), false);
   assert.deepEqual(sb.api.calls.at(-1).variables, {
-    id: "s-1", name: "group/orig", if: "{\n  a: 1\n}", do: "data.edited = 2;", enabled: true, version: 3,
+    id: "s-1", name: "group/orig", if: "{ a: 1 }", do: "data.edited = 2;", enabled: true, version: 3,
     nocode_content: null, config_content: { k: 1 },
   });
 }));
@@ -423,8 +423,8 @@ test("step sync (all): updates matching names, creates the rest, after one y/N p
   const saves = sb.api.calls.filter((c) => c.op === "SAVE_STEP_MUTATION").map((c) => c.variables);
   // readdir order is not guaranteed, so look the saves up by id
   assert.equal(saves.length, 2);
-  assert.deepEqual(saves.find((s) => s.id === "s-1"), { id: "s-1", name: "alpha", if: "{\n  a: 1\n}", do: "data.a = 2;", enabled: false, version: 9, nocode_content: { n: 1 }, config_content: null });
-  assert.deepEqual(saves.find((s) => s.id === "s-new"), { id: "s-new", name: "group/beta", if: "{\n  b: 1\n}", do: "data.b = 2;", enabled: true, version: 0, nocode_content: null, config_content: null });
+  assert.deepEqual(saves.find((s) => s.id === "s-1"), { id: "s-1", name: "alpha", if: "{ a: 1 }", do: "data.a = 2;", enabled: false, version: 9, nocode_content: { n: 1 }, config_content: null });
+  assert.deepEqual(saves.find((s) => s.id === "s-new"), { id: "s-new", name: "group/beta", if: "{ b: 1 }", do: "data.b = 2;", enabled: true, version: 0, nocode_content: null, config_content: null });
   assert.deepEqual(sb.api.calls.find((c) => c.op === "CREATE_STEP_MUTATION").variables, { name: "group/beta", environment_id: "ws-sel", nocode_type: null });
 }));
 
@@ -497,8 +497,8 @@ test("step sync: an unchanged file sends no save and is counted as unchanged", s
   sb.write("src/beta.js", stepFile("{ b: 1 }", "data.b = 3;"));
   sb.api.on("LIST_STEPS_QUERY", { listAutomationSteps: [{ id: "s-1", name: "ALPHA" }, { id: "s-2", name: "beta" }] });
   sb.api.on("GET_STEP_QUERY", (v) => ({ getAutomationStep: v.id === "s-1"
-    ? { id: "s-1", name: "ALPHA", enabled: true, version: 4, content: { if: "{\n  a: 1\n}", do: "data.a = 2;" } }
-    : { id: "s-2", name: "beta", enabled: true, version: 1, content: { if: "{\n  b: 1\n}", do: "data.b = 2;" } } }));
+    ? { id: "s-1", name: "ALPHA", enabled: true, version: 4, content: { if: "{ a: 1 }", do: "data.a = 2;" } }
+    : { id: "s-2", name: "beta", enabled: true, version: 1, content: { if: "{ b: 1 }", do: "data.b = 2;" } } }));
   sb.api.on("VALIDATE_IF_QUERY", ok);
   sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
   const r = await sb.run(["step", "sync", "-p", "src"], { answers: [{ when: /\(y\/N\): /, send: "y\n" }] });
@@ -526,7 +526,7 @@ test("step sync: a create whose save is refused counts as failed", sandboxTest(a
 test("step sync -s: an unchanged step is reported and not saved", sandboxTest(async (sb) => {
   sb.write("src/alpha.js", stepFile("{ a: 1 }", "data.a = 2;"));
   sb.api.on("LIST_STEPS_QUERY", LISTED(["s-1", "alpha"]));
-  sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-1", name: "alpha", enabled: true, version: 4, content: { if: "{\n  a: 1\n}", do: "data.a = 2;" } } });
+  sb.api.on("GET_STEP_QUERY", { getAutomationStep: { id: "s-1", name: "alpha", enabled: true, version: 4, content: { if: "{ a: 1 }", do: "data.a = 2;" } } });
   sb.api.on("VALIDATE_IF_QUERY", ok);
   const r = await sb.run(["step", "sync", "-s", "alpha", "-p", "src"], { answers: [{ when: /\(y\/N\): /, send: "y\n" }] });
   assert.equal(r.code, 0, r.stderr);
@@ -550,7 +550,7 @@ test("step sync -s <id>: syncs one step from <path>/<last name segment>.js", san
   assert.match(r.stdout, /Successfully synced step: group\/beta\n$/);
   assert.equal(r.code, 0);
   assert.deepEqual(sb.api.calls.at(-1).variables, {
-    id: "s-2", name: "group/beta", if: "{\n  b: 1\n}", do: "data.b = 3;", enabled: true, version: 5,
+    id: "s-2", name: "group/beta", if: "{ b: 1 }", do: "data.b = 3;", enabled: true, version: 5,
   });
 }));
 
@@ -579,16 +579,14 @@ test("step sync -s: unknown id", sandboxTest(async (sb) => {
   assert.equal(r.code, 1);
 }));
 
-test("step pull then sync round-trips: the pulled file is accepted and normalised", sandboxTest(async (sb) => {
+test("step pull then sync round-trips: the pulled file is accepted and nothing is saved", sandboxTest(async (sb) => {
   mockSteps(sb, [FULL("s-1", "alpha", "{ a: 1, }", "  data.a = 2;")]);
   sb.api.on("VALIDATE_IF_QUERY", ok);
   sb.api.on("SAVE_STEP_MUTATION", { saveAutomationStep: true });
   await sb.run(["step", "pull", "-p", "rt"]);
   const r = await sb.run(["step", "sync", "-p", "rt"], { answers: [{ when: /\(y\/N\): /, send: "y\n" }] });
-  assert.match(r.stdout, /Updated: 1, Created: 0/);
-  const v = sb.api.calls.at(-1).variables;
-  assert.equal(v.if, "{\n  a: 1\n}");
-  assert.equal(v.do, "data.a = 2;");
+  assert.match(r.stdout, /Updated: 0, Created: 0, Unchanged: 1/);
+  assert.ok(!sb.api.ops().includes("SAVE_STEP_MUTATION"));
 }));
 
 // ---------------------------------------------------------------- generate
