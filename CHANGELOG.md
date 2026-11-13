@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Step files are sent exactly as written (PLAT-78)
+
+- `step sync`, `step edit`, `step add -f` and `deploy` no longer re-print a step's condition and content: the
+  text between the markers of the file is sent byte for byte, and `step pull` followed by `step sync` changes nothing.
+- `step sync` skips a step whose `content_hash` equals the hash of the file (and, as before, one whose stored text
+  is equal): no save, no version bump, no refresh.
+- A condition with a `$` operator is named per step before `step sync` writes anything; nothing is half synced.
+
 ### File access stays inside the working folder
 
 - `aloma deploy <file.yaml>`: every file the YAML names (`file:` and `syncPath:` of steps and libraries,

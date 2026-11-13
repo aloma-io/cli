@@ -24,6 +24,7 @@ async function saveOrFail(desc, vars) {
 
 // Bring a stored item to the desired fields: saved only when that changes what would be sent.
 async function apply(desc, current, desired, dryRun) {
+  if (desc.unchanged?.(current, desired)) return "unchanged";
   const next = desc.saveVars(current, desired);
   if (isDeepStrictEqual(next, desc.saveVars(current))) return "unchanged";
   if (!dryRun) await saveOrFail(desc, next);
@@ -230,6 +231,21 @@ export async function sync(desc, workspaceId, ref, sourcePath, noPrompt) {
       ))
     ) {
       throw new CliError("Sync cancelled by user.");
+    }
+
+    // Files the save would refuse are all reported before anything is written (PLAT-78)
+    if (desc.check) {
+      const problems = [];
+      for (const entry of entries) {
+        const problem = await desc.check(entry.file);
+        if (problem) problems.push(`${entry.name}: ${problem}`);
+      }
+      if (problems.length > 0) {
+        for (const line of problems) console.error(chalk.red(line));
+        throw new CliError(
+          `${desc.title} sync from ${folder} refused: ${problems.length} file(s) cannot be saved, nothing was written`,
+        );
+      }
     }
 
     const results = [];

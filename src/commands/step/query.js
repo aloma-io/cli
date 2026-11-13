@@ -27,6 +27,7 @@ export const GET_STEP_QUERY = `
       valid
       enabled
       content
+      content_hash
       version
       nocode_type
       nocode_content
