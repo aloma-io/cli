@@ -128,6 +128,12 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-81: the task history fallbacks and the per-entry duration (tests/regression-task-history-shapes.test.js).
+  ["H01", T, "(r) => r.id === ruleId,", "(r) => true,", "tests/regression-task-history-shapes.test.js", "task log: the duration comes from the first applied rule, not the one with the entry's rule id"],
+  ["H02", T, "            item.context?.consoleLog ||\n", "", "tests/regression-task-history-shapes.test.js", "task log: the legacy consoleLog is no longer used"],
+  ["H03", T, " || item.context?.auditLog", "", "tests/regression-task-history-shapes.test.js", "task log: the legacy auditLog is no longer used"],
+  ["H04", T, "error: item.error || context?.error,", "error: context?.error || item.error,", "tests/regression-task-history-shapes.test.js", "task log: context.error wins over item.error"],
+  ["H05", T, "data: task.content?.data || {},", "data: {},", "tests/regression-task-history-shapes.test.js", "task log: the added created entry loses the task's data"],
 ];
 
 if (args.flags.includes("--check-apply")) {
