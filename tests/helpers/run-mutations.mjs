@@ -128,6 +128,11 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  ["V01", "src/commands/company/index.js", "currentCompany === realm.id", "currentCompany !== realm.id", "tests/regression-small-commands.test.js", "company list: the [*] mark moves to every other company"],
+  ["V02", WH, "if (!name) {", "if (name === undefined) {", "tests/regression-small-commands.test.js", "webhook add: an empty name is sent to the API"],
+  ["V03", "src/commands/user/index.js", "data.findCompanyMembers || []", "data.findCompanyMembers", "tests/regression-small-commands.test.js", "user list: no member list in the answer crashes"],
+  ["V04", SE, 'description: description || "",', "description: description,", "tests/regression-small-commands.test.js", "add (SE file): no description sends nothing for the field"],
+  ["V05", L, "enabled !== null ? enabled : currentLibrary.enabled", "enabled !== null ? enabled : true", "tests/regression-small-commands.test.js", "library update: no --enabled turns the library on"],
 ];
 
 if (args.flags.includes("--check-apply")) {
