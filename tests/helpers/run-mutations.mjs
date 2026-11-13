@@ -133,6 +133,11 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  ["Y01", UT, 'flag: "wx",', 'flag: "w",', "tests/regression-legacy-session.test.js", "old session move: overwrites an existing per-user session"],
+  ["Y02", UT, 'mode: PRIVATE_FILE_MODE,\n      flag: "wx",', 'mode: 0o666,\n      flag: "wx",', "tests/regression-legacy-session.test.js", "old session move: moved file is not owner-only"],
+  ["Y03", UT, "JSON.parse(legacy);", "", "tests/regression-legacy-session.test.js", "old session move: imports a file that is not JSON"],
+  ["Y04", UT, "await fs.rmdir(path.dirname(legacyPath));", "await fs.rm(path.dirname(legacyPath), { recursive: true });", "tests/regression-legacy-session.test.js", "old session move: removes a non-empty old folder"],
+  ["Y05", UT, 'path.join(OWN_PACKAGE_ROOT, ".cache", SESSION_FILE)', 'path.join(process.cwd(), ".cache", SESSION_FILE)', "tests/regression-legacy-session.test.js", "old session move: reads the current directory"],
 ];
 
 if (args.flags.includes("--check-apply")) {
