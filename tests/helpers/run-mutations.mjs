@@ -128,6 +128,13 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-81: the step command's failure and edge paths (tests/regression-step-paths.test.js).
+  ["R01", S, "      throw new CliError(`Step with ID ${stepId} not found.`);\n    }\n\n    // The temp file lives", "      return;\n    }\n\n    // The temp file lives", "tests/regression-step-paths.test.js", "step edit: an id the API does not know ends quietly with exit 0"],
+  ["R02", S, "editError = new CliError(`Failed to update step: ${step.name}`);", "editError = null;", "tests/regression-step-paths.test.js", "step edit: an update refused by the API is not reported"],
+  ["R03", S, "await fs.rm(tempDir, { recursive: true, force: true });", "await fs.rm(`${tempDir}-none`, { recursive: true, force: true });", "tests/regression-step-paths.test.js", "step edit: the temporary folder is left behind"],
+  ["R04", S, 'export const condition = ${step.content?.if || "{}"};', "export const condition = ${step.content?.if};", "tests/regression-step-paths.test.js", "step edit: a step without a condition starts from undefined, not {}"],
+  ["R05", S, 'step.enabled ? chalk.green("Enabled") : chalk.red("Disabled")', 'step.enabled ? chalk.red("Disabled") : chalk.green("Enabled")', "tests/regression-step-paths.test.js", "step show: Enabled and Disabled swapped"],
+  ["R06", S, '"I\'ve generated a step based on your request."', '"Done."', "tests/regression-step-paths.test.js", "step generate: default assistant message in the history changed"],
 ];
 
 if (args.flags.includes("--check-apply")) {
