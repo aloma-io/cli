@@ -128,6 +128,12 @@ export const MUTATIONS = [
   // PLAT-119: the shared picker puts the terminal back on every way out (tests/ui-select.test.js). This
   // mutant lets a cancel leave raw mode on and the input running.
   ["P01", SEL, 'finish(reject, new CliError("\\nSelection cancelled."));', 'finished = true;\n          reject(new CliError("\\nSelection cancelled."));', "ui-select", "picker: a cancel leaves raw mode on"],
+  // PLAT-81 row 1.01 slice 3: task log rendering and normalising (tests/regression-task-render.test.js only).
+  ["U01", T, "if (item.isApplying && !item.isCurrentlyRunning) return false;", "if (item.isApplying && !item.isCurrentlyRunning) return true;", "tests/regression-task-render.test.js", "task log: an applying entry that is not running is kept"],
+  ["U02", T, "context?.snapshot?.timestamp || context?.timestamp || item.updatedAt,", "context?.timestamp || context?.snapshot?.timestamp || item.updatedAt,", "tests/regression-task-render.test.js", "task log: the context timestamp beats the snapshot timestamp"],
+  ["U03", T, "if (item.audit.length) return true;", "if (item.audit.length) return false;", "tests/regression-task-render.test.js", "task log: an entry with audit items is dropped"],
+  ["U04", T, "if (part.added) color = chalk.green;", "if (part.added) color = chalk.gray;", "tests/regression-task-render.test.js", "task log --changes: an added part is not coloured green"],
+  ["U05", T, "`Reference: ${audit.name || audit.role} - ${audit.url}`", "`Reference: ${audit.role || audit.name} - ${audit.url}`", "tests/regression-task-render.test.js", "task log --logs: reference line prefers the role over the name"],
 ];
 
 if (args.flags.includes("--check-apply")) {
