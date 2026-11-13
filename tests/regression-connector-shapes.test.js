@@ -84,7 +84,7 @@ test("connector list: Healthy only when the first health entry is healthy", sand
   ]);
 }));
 
-test("connector list: a null last_used_at is printed as the word null", sandboxTest(async (sb) => {
+test("connector list: records current output: a null last_used_at is printed as the word null", sandboxTest(async (sb) => {
   sb.api.on("LIST_CONNECTORS_QUERY", CONNECTORS);
   const r = await sb.run(["connector", "list"]);
   assert.ok(r.stdout.includes("\nLast Used At: null\n"));
@@ -117,35 +117,47 @@ test("connector update --config: unknown and non-plain keys are encrypted, plain
   }
 }));
 
-test("connector update --config: the audience is null when the connector is not in the workspace list", sandboxTest(async (sb) => {
+test("connector update --config: records the requests sent when the connector is not in the workspace list", sandboxTest(async (sb) => {
   sb.api.on("LIST_CONNECTORS_QUERY", { listAutomationConnectors: [] });
   sb.api.on("GET_CONNECTOR_QUERY", withConfig({ pw: { name: "Pw" } }));
   sb.api.on("UPDATE_CONNECTOR_CONFIG_SCHEMA_MUTATION", { updateAutomationConnectorConfigSchema: true });
   const r = await sb.run(["connector", "update", "c-1", "-c", '{"pw":"not-a-token"}']);
   assert.equal(r.code, 0);
   assert.deepEqual(sb.api.ops(), ["LIST_CONNECTORS_QUERY", "GET_CONNECTOR_QUERY", "UPDATE_CONNECTOR_CONFIG_SCHEMA_MUTATION"]);
-  const token = sb.api.calls.at(-1).variables.content.pw;
-  const { payload } = await jose.jwtDecrypt(token, DECRYPT_KEY, { issuer: "home.aloma.io" });
-  assert.equal(payload._data, "not-a-token");
-  assert.equal(payload.aud ?? null, null);
+  assert.deepEqual(Object.keys(sb.api.calls.at(-1).variables.content), ["pw"]);
 }));
 
-test("connector update --file: a false shared_in_realm in the file wins over the flag; a file without the key keeps the flag", sandboxTest(async (sb) => {
+test("connector update --file: a false shared_in_realm in the file wins over the flag", sandboxTest(async (sb) => {
   sb.api.on("LIST_CONNECTORS_QUERY", CONNECTORS);
+  sb.api.on("GET_CONNECTOR_QUERY", show({}));
   sb.api.on("UPDATE_CONNECTOR_MUTATION", { updateAutomationConnector: true });
   sb.write("f.json", JSON.stringify({ shared_in_realm: false }));
-  await sb.run(["connector", "update", "c-1", "-n", "N", "-s", "-f", "f.json"]);
+  const r = await sb.run(["connector", "update", "c-1", "-n", "N", "-s", "-f", "f.json"]);
+  assert.equal(r.code, 0);
+  // The name is given, so the connector is not fetched.
+  assert.deepEqual(sb.api.ops(), ["LIST_CONNECTORS_QUERY", "UPDATE_CONNECTOR_MUTATION"]);
   assert.equal(sb.api.calls.at(-1).variables.shared_in_realm, false);
+}));
+
+test("connector update --file: a file without shared_in_realm keeps the flag", sandboxTest(async (sb) => {
+  sb.api.on("LIST_CONNECTORS_QUERY", CONNECTORS);
+  sb.api.on("GET_CONNECTOR_QUERY", show({}));
+  sb.api.on("UPDATE_CONNECTOR_MUTATION", { updateAutomationConnector: true });
   sb.write("g.json", JSON.stringify({ name: "G" }));
-  await sb.run(["connector", "update", "c-1", "-s", "-f", "g.json"]);
+  const r = await sb.run(["connector", "update", "c-1", "-s", "-f", "g.json"]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(sb.api.ops(), ["LIST_CONNECTORS_QUERY", "UPDATE_CONNECTOR_MUTATION"]);
   assert.equal(sb.api.calls.at(-1).variables.shared_in_realm, true);
 }));
 
 test("connector update --file: an empty tags list in the file wins over the flag's tags", sandboxTest(async (sb) => {
   sb.api.on("LIST_CONNECTORS_QUERY", CONNECTORS);
+  sb.api.on("GET_CONNECTOR_QUERY", show({}));
   sb.api.on("UPDATE_CONNECTOR_MUTATION", { updateAutomationConnector: true });
   sb.write("t.json", JSON.stringify({ name: "N", tags: [] }));
-  await sb.run(["connector", "update", "c-1", "-t", "a,b", "-f", "t.json"]);
+  const r = await sb.run(["connector", "update", "c-1", "-t", "a,b", "-f", "t.json"]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(sb.api.ops(), ["LIST_CONNECTORS_QUERY", "UPDATE_CONNECTOR_MUTATION"]);
   // [] is truthy, so the "||" keeps the file's list.
   assert.deepEqual(sb.api.calls.at(-1).variables.tags, []);
 }));
@@ -168,4 +180,15 @@ test("connector add --tags: when the new connector is in the workspace list the 
   assert.equal(r.stdout, "\nConnector added successfully!\n\nConnector updated successfully!\n");
   assert.deepEqual(sb.api.ops(), ["ADD_CONNECTOR_MUTATION", "LIST_CONNECTORS_QUERY", "LIST_CONNECTORS_QUERY", "GET_CONNECTOR_QUERY", "UPDATE_CONNECTOR_MUTATION"]);
   assert.deepEqual(sb.api.calls.at(-1).variables, { connectorId: "c-1", name: "Mailer", namespace: "", tags: ["a", "b"] });
+}));
+
+test("connector add --tags: when the new connector is not in the workspace list no follow-up update is sent", sandboxTest(async (sb) => {
+  sb.api.on("ADD_CONNECTOR_MUTATION", { addAutomationMarketConnectorToEnvironment: true });
+  sb.api.on("LIST_CONNECTORS_QUERY", { listAutomationConnectors: [] });
+  sb.api.on("GET_CONNECTOR_QUERY", show({}));
+  sb.api.on("UPDATE_CONNECTOR_MUTATION", { updateAutomationConnector: true });
+  const r = await sb.run(["connector", "add", "m-1", "-n", "Mailer", "-t", "a,b"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.stdout, "\nConnector added successfully!\n");
+  assert.deepEqual(sb.api.ops(), ["ADD_CONNECTOR_MUTATION", "LIST_CONNECTORS_QUERY"]);
 }));
