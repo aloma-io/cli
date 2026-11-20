@@ -55,3 +55,40 @@ test("stepContentHash: stable sha256 hex of the exact condition and content, sen
   assert.notEqual(h, stepContentHash("{ a: 1 }", "x(); "));
   assert.notEqual(stepContentHash("ab", "c"), stepContentHash("a", "bc"));
 });
+
+test("findDollarOperator: a $ key after a // or /* */ comment is still found", () => {
+  assert.equal(findDollarOperator("{ a: 1, // note\n  $gt: 2 }"), "$gt");
+  assert.equal(findDollarOperator("{ /* ops */ $or: [] }"), "$or");
+  assert.equal(findDollarOperator("{ a: 1, /* x */ \"$in\": [] }"), "$in");
+});
+
+test("findDollarOperator: a $ key named only inside a comment is not a key", () => {
+  assert.equal(findDollarOperator("{ a: 1, // $gt: 2\n  b: 2 }"), null);
+  assert.equal(findDollarOperator("{ /* , $or: [] */ a: 1 }"), null);
+});
+
+test("findDollarOperator: a $ inside a quoted string value is not refused", () => {
+  assert.equal(findDollarOperator('{ msg: "total, $amount: due" }'), null);
+  assert.equal(findDollarOperator("{ msg: 'a, $b: c' }"), null);
+  assert.equal(findDollarOperator("{ msg: `x { $y: 1 }` }"), null);
+  assert.equal(findDollarOperator('{ msg: "say \\", $q: 1" }'), null);
+});
+
+test("readStepFile: a condition without a trailing ; is accepted", () => {
+  const text = "export const condition = { a: 1 }\n\nexport const content = async () => {\nx();\n};\n";
+  assert.deepEqual(readStepFile(text), { condition: "{ a: 1 }", content: "x();" });
+});
+
+test("readStepFile: a one-line body is accepted", () => {
+  const text = "export const condition = { a: 1 };\n\nexport const content = async () => { x(); };\n";
+  assert.deepEqual(readStepFile(text), { condition: "{ a: 1 }", content: "x();" });
+  const bare = "export const condition = { a: 1 };\nexport const content = async () => { x() }";
+  assert.equal(readStepFile(bare).content, "x()");
+});
+
+test("readStepFile: an unreadable layout names the required layout", () => {
+  assert.throws(
+    () => readStepFile("export const condition = {};\n\nexport const content = async function () {\n};\n"),
+    /export const content = async \(\) => \{/,
+  );
+});

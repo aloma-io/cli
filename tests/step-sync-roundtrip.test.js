@@ -99,3 +99,25 @@ test("step sync -s: a $ condition is refused by name, nothing saved", sandboxTes
   assert.match(r.stderr, /bad: .*\$gt/);
   assert.equal(saves(sb).length, 0);
 }));
+
+test("step sync: a $ key after a comment is named before any write", sandboxTest(async (sb) => {
+  mock(sb, [STEP("s-1", "good", "{}", ""), STEP("s-2", "line", "{}", ""), STEP("s-3", "block", "{}", "")]);
+  sb.write("src/a-good.js", stepFile("{ msg: \"total, $amount: due\" }", "x();"));
+  sb.write("src/line.js", stepFile("{ a: 1, // note\n  $gt: 2 }", "x();"));
+  sb.write("src/block.js", stepFile("{ /* ops */ $or: [] }", "x();"));
+  const r = await sb.run(["step", "sync", "-p", "src"], yes);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /line: .*\$gt/);
+  assert.match(r.stderr, /block: .*\$or/);
+  assert.doesNotMatch(r.stderr, /good: /);
+  assert.equal(saves(sb).length, 0);
+}));
+
+test("step sync: hand-written layouts (no ; after the condition, one-line body) are sent as read", sandboxTest(async (sb) => {
+  mock(sb, [STEP("s-1", "hand", "{}", "")]);
+  sb.write("src/hand.js", "export const condition = { a: 1 }\n\nexport const content = async () => { x(); };\n");
+  const r = await sb.run(["step", "sync", "-p", "src"], yes);
+  assert.equal(r.code, 0);
+  assert.equal(saves(sb)[0].if, "{ a: 1 }");
+  assert.equal(saves(sb)[0].do, "x();");
+}));

@@ -9,6 +9,7 @@
 - `step sync` skips a step whose `content_hash` equals the hash of the file (and, as before, one whose stored text
   is equal): no save, no version bump, no refresh.
 - A condition with a `$` operator is named per step before `step sync` writes anything; nothing is half synced.
+- Step files written by hand still read: the `;` after the condition is optional and the content may be a one-line body. Comments and quoted strings in a condition are skipped when looking for a `$` operator key.
 
 ### File access stays inside the working folder
 
