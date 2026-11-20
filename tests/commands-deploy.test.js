@@ -202,7 +202,7 @@ test("deploy: a re-run of the same YAML updates, never duplicates (M16)", sandbo
   assert.ok(!sb.api.ops().includes("CREATE_STEP_MUTATION"));
   assert.ok(!sb.api.ops().includes("ADD_AUTOMATION_LIB_MUTATION"));
   assert.deepEqual(sb.api.calls.find((c) => c.op === "SAVE_STEP_MUTATION").variables,
-    { id: "s-1", name: "Single-Step", if: "{\n  s: 1\n}", do: "data.s = 2;", enabled: true, version: 3 });
+    { id: "s-1", name: "Single-Step", if: "{ s: 1 }", do: "data.s = 2;", enabled: true, version: 3 });
   assert.deepEqual(sb.api.calls.find((c) => c.op === "UPDATE_AUTOMATION_LIB_MUTATION").variables,
     { id: "l-1", name: "UTIL/strings", namespace: "util", content: "l();", types: "T", version: 4, tags: ["t1"], enabled: true });
   assert.match(r.stdout, /\n {2}step +single-step +updated\n/);
@@ -212,7 +212,7 @@ test("deploy: a re-run of the same YAML updates, never duplicates (M16)", sandbo
 
 test("deploy: an item equal to the stored one is not saved (unchanged)", sandboxTest(async (sb) => {
   rerun(sb, {
-    steps: [storedStep("s-1", "single-step", "{\n  s: 1\n}", "data.s = 2;")],
+    steps: [storedStep("s-1", "single-step", "{ s: 1 }", "data.s = 2;")],
     libs: [storedLib("l-1", "util/strings", "T", "l();")],
   });
   const r = await sb.run(["deploy", "d.yaml"]);

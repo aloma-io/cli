@@ -1,9 +1,12 @@
 // The step descriptor (PLAT-118): how the one pull / sync / ensure engine lists, reads, creates, saves,
 // writes and parses steps. A step is keyed by its name (unique per workspace, PLAT-115/116).
 import fs from "fs/promises";
-import parser from "@babel/parser";
-import generate from "@babel/generator";
 import { graphQuery } from "../utils.js";
+import {
+  readStepFile,
+  findDollarOperator,
+  stepContentHash,
+} from "./step-file.js";
 import { pullTargetFile, headerText } from "../pull-safety.js";
 import {
   LIST_STEPS_QUERY,
@@ -14,66 +17,42 @@ import {
 } from "../commands/step/query.js";
 
 // Parse a step file: `export const condition = {...}` and `export const content = async () => {...}`.
-// The condition is checked by the backend (a read).
+// Both are taken from the file as written (PLAT-78). A condition with a `$` operator is refused here, as the
+// save would; the condition is also checked by the backend (a read).
 export async function parseStepFile(filePath) {
   try {
-    const fileContent = await fs.readFile(filePath, "utf8");
-    const ast = parser.parse(fileContent, {
-      sourceType: "module",
-      plugins: [
-        "jsx",
-        "asyncGenerators",
-        "classProperties",
-        "dynamicImport",
-        "objectRestSpread",
-      ],
-    });
-
-    let conditionStr = null;
-    let contentStr = null;
-
-    for (const node of ast.program.body) {
-      // Extract export const condition = ...
-      if (
-        node.type === "ExportNamedDeclaration" &&
-        node.declaration &&
-        node.declaration.type === "VariableDeclaration"
-      ) {
-        for (const decl of node.declaration.declarations) {
-          if (decl.id.name === "condition") {
-            conditionStr = generate.default(decl.init).code;
-          }
-          if (
-            decl.id.name === "content" &&
-            decl.init.type === "ArrowFunctionExpression"
-          ) {
-            contentStr = generate.default(decl.init.body).code;
-            // Remove wrapping braces if present
-            if (contentStr.startsWith("{") && contentStr.endsWith("}")) {
-              contentStr = contentStr.slice(1, -1).trim();
-            }
-          }
-        }
-      }
-    }
-
-    if (!conditionStr) throw new Error("Could not parse condition from file");
-    if (!contentStr) throw new Error("Could not parse content from file");
+    const { condition, content } = readStepFile(
+      await fs.readFile(filePath, "utf8"),
+    );
+    const operator = findDollarOperator(condition);
+    if (operator) throw new Error(dollarMessage(operator));
 
     // Validate the condition using the backend
     const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
-      content: conditionStr,
+      content: condition,
     });
     if (!validateRes.validateAutomationIf) {
       throw new Error("Condition is invalid, not a valid JSON object");
     }
-    return {
-      condition: conditionStr,
-      content: contentStr,
-    };
+    return { condition, content };
   } catch (error) {
     throw new Error(`Error parsing step file. ${error.message}`);
   }
+}
+
+const dollarMessage = (operator) =>
+  `the condition uses the ${operator} operator, which cannot be saved`;
+
+// Read a step file without the backend: the problem with its condition (a `$` operator) as one line, else null.
+async function checkStepFile(filePath) {
+  let condition;
+  try {
+    ({ condition } = readStepFile(await fs.readFile(filePath, "utf8")));
+  } catch (error) {
+    return null; // not readable as a step: reported by the parse of that file, as before
+  }
+  const operator = findDollarOperator(condition);
+  return operator ? dollarMessage(operator) : null;
 }
 
 function renderStepFile(step) {
@@ -142,6 +121,15 @@ export const stepResource = {
   filePath: (name, folder) => pullTargetFile(name, folder, "step"),
   render: renderStepFile,
   parse: parseStepFile,
+  check: checkStepFile,
+
+  // The API's content_hash of the stored step equals the hash of the desired condition and content (PLAT-78).
+  unchanged: (current, desired) =>
+    Boolean(current.content_hash) &&
+    desired.condition !== undefined &&
+    desired.content !== undefined &&
+    current.content_hash ===
+      stepContentHash(desired.condition, desired.content),
   key: (desired) => desired.name,
 
   // A step just created: enabled, version 0, no nocode or config content.
