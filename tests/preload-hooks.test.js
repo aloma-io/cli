@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -74,4 +74,31 @@ test("preload: falls back to module.register() and still maps open when register
   assert.equal(r.registerCalls, 1);
   assert.equal(r.opened, "http://127.0.0.1/signin\n");
   assert.equal(r.stdout.trim(), "ERR_MODULE_NOT_FOUND");
+});
+
+test("editor-open-hook: maps open to the editor stand-in with and without module.registerHooks()", () => {
+  const EDITOR_HOOK = pathToFileURL(path.join(HERE, "helpers", "editor-open-hook.mjs")).href;
+  const dir = mkdtempSync(path.join(tmpdir(), "editor-hook-"));
+  try {
+    const editor = path.join(dir, "editor.mjs");
+    writeFileSync(editor, 'import fs from "node:fs"; fs.writeFileSync(process.argv[2] + ".seen", "yes");');
+    const target = path.join(dir, "target.js");
+    const code = 'import open from "open"; await open(globalThis.process.argv[1]);';
+    for (const extraEnv of [{}, { ALOMA_TEST_NO_REGISTER_HOOKS: "1" }]) {
+      rmSync(target + ".seen", { force: true });
+      const r = spawnSync(
+        process.execPath,
+        ["--import", SPY, "--import", EDITOR_HOOK, "--input-type=module", "-e", code, target],
+        {
+          cwd: dir,
+          encoding: "utf8",
+          env: { ...process.env, TEST_EDITOR_SCRIPT: editor, ALOMA_TEST_REGISTER_LOG: path.join(dir, "r.log"), ...extraEnv },
+        },
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(readFileSync(target + ".seen", "utf8"), "yes", JSON.stringify(extraEnv));
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
