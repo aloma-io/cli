@@ -1,9 +1,8 @@
 // The step descriptor (PLAT-118): how the one pull / sync / ensure engine lists, reads, creates, saves,
 // writes and parses steps. A step is keyed by its name (unique per workspace, PLAT-115/116).
 import fs from "fs/promises";
-import parser from "@babel/parser";
-import generate from "@babel/generator";
 import { graphQuery } from "../utils.js";
+import { splitStepSource } from "../step-source.js";
 import { pullTargetFile, headerText } from "../pull-safety.js";
 import {
   LIST_STEPS_QUERY,
@@ -18,47 +17,9 @@ import {
 export async function parseStepFile(filePath) {
   try {
     const fileContent = await fs.readFile(filePath, "utf8");
-    const ast = parser.parse(fileContent, {
-      sourceType: "module",
-      plugins: [
-        "jsx",
-        "asyncGenerators",
-        "classProperties",
-        "dynamicImport",
-        "objectRestSpread",
-      ],
-    });
-
-    let conditionStr = null;
-    let contentStr = null;
-
-    for (const node of ast.program.body) {
-      // Extract export const condition = ...
-      if (
-        node.type === "ExportNamedDeclaration" &&
-        node.declaration &&
-        node.declaration.type === "VariableDeclaration"
-      ) {
-        for (const decl of node.declaration.declarations) {
-          if (decl.id.name === "condition") {
-            conditionStr = generate.default(decl.init).code;
-          }
-          if (
-            decl.id.name === "content" &&
-            decl.init.type === "ArrowFunctionExpression"
-          ) {
-            contentStr = generate.default(decl.init.body).code;
-            // Remove wrapping braces if present
-            if (contentStr.startsWith("{") && contentStr.endsWith("}")) {
-              contentStr = contentStr.slice(1, -1).trim();
-            }
-          }
-        }
-      }
-    }
-
-    if (!conditionStr) throw new Error("Could not parse condition from file");
-    if (!contentStr) throw new Error("Could not parse content from file");
+    // The text as written: what is validated below is what the caller pushes (PLAT-287)
+    const { condition: conditionStr, content: contentStr } =
+      splitStepSource(fileContent);
 
     // Validate the condition using the backend
     const validateRes = await graphQuery(VALIDATE_IF_QUERY, {
