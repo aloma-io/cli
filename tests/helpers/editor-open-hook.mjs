@@ -12,9 +12,16 @@ export default async function open(target) {
 }
 `)}`;
 
-nodeModule.registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "open") return { url: FAKE, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-});
+function resolve(specifier, context, nextResolve) {
+  if (specifier === "open") return { url: FAKE, shortCircuit: true };
+  return nextResolve(specifier, context);
+}
+
+// module.registerHooks() exists from Node 22.15 / 23.5; before that the same resolve function is
+// handed to module.register() as a hooks module.
+if (typeof nodeModule.registerHooks === "function") {
+  nodeModule.registerHooks({ resolve });
+} else {
+  const hooks = `const FAKE = ${JSON.stringify(FAKE)};\nexport ${resolve.toString()}`;
+  nodeModule.register(`data:text/javascript,${encodeURIComponent(hooks)}`);
+}
